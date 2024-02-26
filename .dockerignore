@@ -1,0 +1,4 @@
+# flyctl launch added from .gitignore
+fly.toml
+/target/
+!/target/x86_64-unknown-linux-musl/release/icp-off-chain-agent
