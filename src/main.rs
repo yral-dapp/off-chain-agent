@@ -4,7 +4,6 @@ use axum_auth::AuthBearer;
 use candid::encode_args;
 use futures::prelude::*;
 use ic_agent::{export::Principal, Agent};
-use indicatif::{ProgressBar, ProgressStyle};
 use s3::creds::Credentials;
 use s3::{Bucket, Region};
 use std::env;
