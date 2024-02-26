@@ -9,6 +9,7 @@ use s3::creds::Credentials;
 use s3::{Bucket, Region};
 use std::env;
 use std::net::SocketAddr;
+use std::time::Instant;
 
 #[tokio::main]
 async fn main() {
@@ -153,14 +154,14 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
             for canister_id in canister_ids {
                 canister_ids_list.push(canister_id);
 
-                if canister_ids_list.len() == 1500 {
-                    break;
-                }
+                // if canister_ids_list.len() == 1500 {
+                //     break;
+                // }
             }
 
-            if canister_ids_list.len() == 1500 {
-                break;
-            }
+            // if canister_ids_list.len() == 1500 {
+            //     break;
+            // }
         }
 
         // Debug point
@@ -178,8 +179,10 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
 
         const PARALLEL_REQUESTS: usize = 100;
 
-        let pb = ProgressBar::new(canister_ids_list.len() as u64);
-        pb.set_style(ProgressStyle::with_template("({pos}/{len}, ETA {eta})").unwrap());
+        // let pb = ProgressBar::new(canister_ids_list.len() as u64);
+        // pb.set_style(ProgressStyle::with_template("({pos}/{len}, ETA {eta})").unwrap());
+
+        let now = Instant::now();
 
         let futures = canister_ids_list.iter().map(|canister_id| async {
             let agent_c = agent.clone();
@@ -191,9 +194,9 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
             .boxed()
             .buffer_unordered(PARALLEL_REQUESTS);
 
-        let pb_stream = pb.wrap_stream(stream);
+        // let pb_stream = pb.wrap_stream(stream);
 
-        let results = pb_stream.collect::<Vec<Option<String>>>().await;
+        let results = stream.collect::<Vec<Option<String>>>().await;
 
         // find the failed canister ids
         let failed_canister_ids = results
@@ -202,13 +205,15 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
             .map(|x| x.as_ref().unwrap().to_string())
             .collect::<Vec<String>>();
 
-        pb.finish();
+        // pb.finish();
+
+        let elapsed = now.elapsed();
 
         println!(
             "final success {:?}/{:?} in {:?}",
             canister_ids_list.len() - failed_canister_ids.len(),
             canister_ids_list.len(),
-            pb.elapsed()
+            elapsed
         );
 
         println!("failed_canister_ids -  {:?}", failed_canister_ids);
