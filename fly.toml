@@ -1,3 +1,8 @@
+# fly.toml app configuration file generated for icp-off-chain-agent on 2024-02-27T01:43:06+05:30
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
 app = 'icp-off-chain-agent'
 primary_region = 'cdg'
 kill_signal = 'SIGINT'
@@ -6,41 +11,41 @@ kill_timeout = '5s'
 [build]
 
 [env]
-PORT = '8080'
+  PORT = '8080'
 
 [http_service]
-internal_port = 8080
-force_https = true
-auto_stop_machines = true
-auto_start_machines = true
-min_machines_running = 1
-processes = ['app']
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
 
 [[services]]
-protocol = 'tcp'
-internal_port = 8080
+  protocol = 'tcp'
+  internal_port = 8080
 
 [[services.ports]]
-port = 80
-handlers = ['http']
+    port = 80
+    handlers = ['http']
 
 [[services.ports]]
-port = 443
-handlers = ['tls', 'http']
+    port = 443
+    handlers = ['tls', 'http']
 
-[services.concurrency]
-hard_limit = 25
-soft_limit = 20
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
 
 [[services.tcp_checks]]
-interval = '15s'
-timeout = '2s'
-grace_period = '1s'
+    interval = '15s'
+    timeout = '2s'
+    grace_period = '1s'
 
 [[services.http_checks]]
-path = '/healthz'
+    path = '/healthz'
 
 [[vm]]
-memory = '1gb'
-cpu_kind = 'shared'
-cpus = 1
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
