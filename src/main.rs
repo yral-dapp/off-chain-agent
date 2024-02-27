@@ -152,15 +152,7 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
             // Iterate over the canister ids and download the snapshot
             for canister_id in canister_ids {
                 canister_ids_list.push(canister_id);
-
-                // if canister_ids_list.len() == 1500 {
-                //     break;
-                // }
             }
-
-            // if canister_ids_list.len() == 1500 {
-            //     break;
-            // }
         }
 
         // Debug point
@@ -175,6 +167,8 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
         //     .iter()
         //     .map(|x| Principal::from_text(x).unwrap())
         //     .collect();
+
+        // canister_ids_list = canister_ids_list[3000..4500].to_vec();
 
         const PARALLEL_REQUESTS: usize = 100;
 
@@ -272,9 +266,9 @@ async fn download_snapshot(agent: &Agent, canister_id: &Principal) -> Option<Str
         }
 
         let response = match agent
-            .query(canister_id, "download_snapshot")
+            .update(canister_id, "download_snapshot")
             .with_arg(encode_args((start as u64, (end - start) as u64)).unwrap())
-            .call()
+            .call_and_wait()
             .await
         {
             Ok(response) => response,
