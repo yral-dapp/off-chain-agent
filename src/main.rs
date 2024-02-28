@@ -168,7 +168,7 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
         //     .map(|x| Principal::from_text(x).unwrap())
         //     .collect();
 
-        // canister_ids_list = canister_ids_list[3000..4500].to_vec();
+        // canister_ids_list = canister_ids_list[5000..6500].to_vec();
 
         const PARALLEL_REQUESTS: usize = 100;
 
@@ -187,8 +187,6 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
             .boxed()
             .buffer_unordered(PARALLEL_REQUESTS);
 
-        // let pb_stream = pb.wrap_stream(stream);
-
         let results = stream.collect::<Vec<Option<String>>>().await;
 
         // find the failed canister ids
@@ -197,8 +195,6 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
             .filter(|x| x.is_some())
             .map(|x| x.as_ref().unwrap().to_string())
             .collect::<Vec<String>>();
-
-        // pb.finish();
 
         let elapsed = now.elapsed();
 
@@ -210,6 +206,44 @@ async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
         );
 
         println!("failed_canister_ids -  {:?}", failed_canister_ids);
+
+        // Run retry for failed canister ids
+        let failed_canister_principals = failed_canister_ids
+            .iter()
+            .map(|x| Principal::from_text(x).unwrap())
+            .collect::<Vec<Principal>>();
+
+        let now = Instant::now();
+
+        let futures = failed_canister_principals.iter().map(|canister_id| async {
+            let agent_c = agent.clone();
+            let canister_id_c = *canister_id;
+            download_snapshot(&agent_c, &canister_id_c).await
+        });
+
+        let stream = futures::stream::iter(futures)
+            .boxed()
+            .buffer_unordered(PARALLEL_REQUESTS);
+
+        let results = stream.collect::<Vec<Option<String>>>().await;
+
+        // find the failed canister ids
+        let failed_canister_ids = results
+            .iter()
+            .filter(|x| x.is_some())
+            .map(|x| x.as_ref().unwrap().to_string())
+            .collect::<Vec<String>>();
+
+        let elapsed = now.elapsed();
+
+        println!(
+            "retry success {:?}/{:?} in {:?}",
+            failed_canister_principals.len() - failed_canister_ids.len(),
+            failed_canister_principals.len(),
+            elapsed
+        );
+
+        println!("retry failed_canister_ids -  {:?}", failed_canister_ids);
 
         Html("Ok")
     });
@@ -304,37 +338,6 @@ async fn download_snapshot(agent: &Agent, canister_id: &Principal) -> Option<Str
     // let json_str = String::from_utf8_lossy(&snapshot_bytes).to_string();
     // println!("{:?}", json_str);
 
-    // Delete the local snapshot
-
-    let response = match agent
-        .update(canister_id, "clear_snapshot")
-        .with_arg(encode_args(()).unwrap())
-        .call_and_wait()
-        .await
-    {
-        Ok(response) => response,
-        Err(err) => {
-            println!(
-                "Unable to call the method clear_snapshot, error: {:?}, canister_id {:?}",
-                err,
-                canister_id.to_string()
-            );
-            return Some(canister_id.to_string());
-        }
-    };
-
-    match candid::decode_one(&response) {
-        Ok(result) => result,
-        Err(err) => {
-            println!(
-                "Unable to decode the response clear_snapshot, error: {:?}, canister_id {:?}",
-                err,
-                canister_id.to_string()
-            );
-            return Some(canister_id.to_string());
-        }
-    };
-
     let keys = Credentials::new(
         Some(
             env::var("CF_R2_ACCESS_KEY_TEMP")
@@ -393,11 +396,41 @@ async fn download_snapshot(agent: &Agent, canister_id: &Principal) -> Option<Str
             response_data,
             canister_id.to_string()
         );
-        Some(canister_id.to_string())
-    } else {
-        None
+        return Some(canister_id.to_string());
     }
 
+    // Delete the local snapshot
+
+    let response = match agent
+        .update(canister_id, "clear_snapshot")
+        .with_arg(encode_args(()).unwrap())
+        .call_and_wait()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            println!(
+                "Unable to call the method clear_snapshot, error: {:?}, canister_id {:?}",
+                err,
+                canister_id.to_string()
+            );
+            return Some(canister_id.to_string());
+        }
+    };
+
+    match candid::decode_one(&response) {
+        Ok(result) => result,
+        Err(err) => {
+            println!(
+                "Unable to decode the response clear_snapshot, error: {:?}, canister_id {:?}",
+                err,
+                canister_id.to_string()
+            );
+            return Some(canister_id.to_string());
+        }
+    };
+
+    None
     // println!("🟢 success for canister {}", canister_id.to_string());
 
     // Retreive snapshot
