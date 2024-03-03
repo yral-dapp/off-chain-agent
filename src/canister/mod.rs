@@ -22,7 +22,7 @@ pub struct CanisterListResponse {
 
 pub async fn canisters_list_handler(AuthBearer(token): AuthBearer) -> Response {
     if token
-    != "Pm0SgTL2RGVomuwyAq6e6ieBEHxhXYyMviZthjfpbRImSKE7bYQZviaijwWlP3SlF2zJMaBXs1MeVgQg7cT5opqqsCKUDqg0GJsjOvJnCXg9zFIMFfFnxv2ZCuS8ospf".to_string()
+    != *"Pm0SgTL2RGVomuwyAq6e6ieBEHxhXYyMviZthjfpbRImSKE7bYQZviaijwWlP3SlF2zJMaBXs1MeVgQg7cT5opqqsCKUDqg0GJsjOvJnCXg9zFIMFfFnxv2ZCuS8ospf"
     {
         return StatusCode::UNAUTHORIZED.into_response();
     }
