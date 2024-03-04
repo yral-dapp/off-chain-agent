@@ -27,21 +27,6 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// async fn canister_list_handler() -> Html<String> {
-//     let start = Instant::now();
-//     let creds = Credentials::from_env().unwrap();
-//     let region = Region::UsEast1;
-//     let bucket = Bucket::new("ic-reclaim-backup", region, creds).unwrap();
-//     let mut result = String::new();
-//     for (key, _size, _last_modified) in bucket.list("").await.unwrap() {
-//         result.push_str(&key);
-//         result.push_str("\n");
-//     }
-//     let duration = start.elapsed();
-//     println!("Time elapsed in canister_list_handler() is: {:?}", duration);
-//     Html(result)
-// }
-
 async fn hello_work_handler(AuthBearer(token): AuthBearer) -> Html<&'static str> {
     if token
         != env::var("CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY")
