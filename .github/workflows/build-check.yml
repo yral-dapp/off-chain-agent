@@ -26,13 +26,17 @@ jobs:
       - name: Test pem file
         run: |
           touch actions_identity.pem
-          echo "${{ secrets.SHORT_PEM_TEMP }}" > actions_identity.pem
+          echo "$RECLAIM_CANISTER_PEM" > actions_identity.pem
           wc actions_identity.pem
-          echo "${{ secrets.SHORT_PEM_TEMP }}" | wc
-          echo "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" | wc
+          echo "$RECLAIM_CANISTER_PEM" | wc
+          echo "$CLOUDFLARE_ACCOUNT_ID" | wc
           dfx --version
           dfx identity import --storage-mode=plaintext actions actions_identity.pem
           dfx identity use actions
+        env:
+          RECLAIM_CANISTER_PEM: |
+            ${{ secrets.SHORT_PEM_TEMP }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Build setup
         run: |
           pip3 install ziglang
