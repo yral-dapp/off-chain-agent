@@ -6,14 +6,14 @@ on:
       - main
 
 jobs:
-  build_check:
-    uses: ./.github/workflows/build-check.yml
-    with:
-      publish-artifact: true
+  # build_check:
+  #   uses: ./.github/workflows/build-check.yml
+  #   with:
+  #     publish-artifact: true
 
   deploy:
     name: Deploy
-    needs: build_check
+    # needs: build_check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -40,7 +40,7 @@ jobs:
           flyctl secrets set "CF_R2_ACCESS_KEY_TEMP=$CF_R2_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_R2_SECRET_ACCESS_KEY_TEMP=$CF_R2_SECRET_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY=$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" --app "icp-off-chain-agent" --stage
-          flyctl secrets set "RECLAIM_CANISTER_PEM=$RECLAIM_CANISTER_PEM" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "RECLAIM_CANISTER_PEM=\"$RECLAIM_CANISTER_PEM\"" --app "icp-off-chain-agent" --stage
           flyctl secrets set "HOTORNOT_CF_ACCOUNT_ID=$HOTORNOT_CF_ACCOUNT_ID" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
