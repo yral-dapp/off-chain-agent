@@ -21,9 +21,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - name: Setup dfx
+        uses: dfinity/setup-dfx@main
       - name: Test pem file
         run: |
-          sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
           echo "$RECLAIM_CANISTER_PEM" > /tmp/reclaim.pem
           dfx identity import reclaim_test /tmp/reclaim.pem
           dfx identity list
