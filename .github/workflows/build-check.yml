@@ -29,8 +29,7 @@ jobs:
           dfx identity import reclaim_test /tmp/reclaim.pem
           dfx identity list
         env:
-          RECLAIM_CANISTER_PEM: |
-            ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
+          RECLAIM_CANISTER_PEM: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
       - name: Build setup
         run: |
           pip3 install ziglang
