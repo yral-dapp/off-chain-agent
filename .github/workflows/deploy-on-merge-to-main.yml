@@ -35,7 +35,7 @@ jobs:
           dfx identity use actions
         env:
           RECLAIM_CANISTER_PEM: |
-            ${{ secrets.SHORT_PEM_TEMP }}
+            ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - run: chmod +x target/x86_64-unknown-linux-musl/release/icp-off-chain-agent
       - uses: superfly/flyctl-actions/setup-flyctl@master
