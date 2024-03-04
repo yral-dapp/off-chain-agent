@@ -28,10 +28,10 @@ pub async fn canisters_list_handler(AuthBearer(token): AuthBearer) -> Response {
     }
 
     let mut pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
-    // if pk.len() == 172 {
-    //     pk.push('\n');
-    //     println!("pushing");
-    // }
+
+    let last_few: Vec<char> = pk.chars().rev().take(28).collect();
+    let first_few: Vec<char> = pk.chars().take(30).collect();
+    println!("pk fl: {:?} {:?}", first_few, last_few);
 
     println!("pk len: {:?}", pk.len());
 
