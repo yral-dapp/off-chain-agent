@@ -32,7 +32,6 @@ jobs:
           dfx --version
           dfx identity import --storage-mode=plaintext actions actions_identity.pem
           dfx identity use actions
-          dfx identity list
       - name: Build setup
         run: |
           pip3 install ziglang
