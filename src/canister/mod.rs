@@ -27,16 +27,9 @@ pub async fn canisters_list_handler(AuthBearer(token): AuthBearer) -> Response {
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
-    let mut pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
-    pk.pop();
+    let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
-    let last_few: Vec<char> = pk.chars().rev().take(27).collect();
-    let first_few: Vec<char> = pk.chars().take(29).collect();
-    println!("pk fl: {:?} {:?}", first_few, last_few);
-
-    println!("pk len: {:?}", pk.len());
-
-    let identity = match ic_agent::identity::Secp256k1Identity::from_pem(
+    let identity = match ic_agent::identity::BasicIdentity::from_pem(
         stringreader::StringReader::new(pk.as_str()),
     ) {
         Ok(identity) => identity,
