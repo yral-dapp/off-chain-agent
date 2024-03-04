@@ -63,7 +63,7 @@ pub async fn canisters_list_handler(AuthBearer(token): AuthBearer) -> Response {
 
     let canisters_list = canister_ids_list
         .iter()
-        .map(|x| x.to_string())
+        .map(|x| format!("{}.raw.ic0.app", x.to_string()))
         .collect::<Vec<String>>();
 
     // let canisters_list = vec![
