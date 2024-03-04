@@ -29,6 +29,8 @@ pub async fn canisters_list_handler(AuthBearer(token): AuthBearer) -> Response {
 
     let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
+    println!("pk len: {:?}", pk.len());
+
     let identity = match ic_agent::identity::Secp256k1Identity::from_pem(
         stringreader::StringReader::new(pk.as_str()),
     ) {
