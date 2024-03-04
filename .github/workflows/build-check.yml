@@ -27,6 +27,7 @@ jobs:
         run: |
           touch actions_identity.pem
           echo "${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}" > actions_identity.pem
+          dfx --version
           dfx identity import --storage-mode=plaintext actions actions_identity.pem
           dfx identity use actions
           dfx identity list
