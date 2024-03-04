@@ -24,7 +24,7 @@ jobs:
       - name: Test pem file
         run: |
           echo "$RECLAIM_CANISTER_PEM" > /tmp/reclaim.pem
-          sh -ci "$(curl -fsSL https://raw.githubusercontent.com/dfinity/sdk/dfxvm-install-script/install.sh)"
+          sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
           dfx identity import reclaim_test /tmp/reclaim.pem
           dfx identity list
         env:
