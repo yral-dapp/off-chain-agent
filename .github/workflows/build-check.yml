@@ -26,9 +26,9 @@ jobs:
       - name: Test pem file
         run: |
           touch actions_identity.pem
-          echo "${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY_TEMP }}" > actions_identity.pem
+          echo "${{ secrets.SHORT_PEM_TEMP }}" > actions_identity.pem
           wc actions_identity.pem
-          echo "${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY_TEMP }}" | wc
+          echo "${{ secrets.SHORT_PEM_TEMP }}" | wc
           dfx --version
           dfx identity import --storage-mode=plaintext actions actions_identity.pem
           dfx identity use actions
