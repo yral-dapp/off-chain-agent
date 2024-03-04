@@ -21,7 +21,7 @@ pub async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static 
     tokio::spawn(async {
         let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
-        let identity = match ic_agent::identity::Secp256k1Identity::from_pem(
+        let identity = match ic_agent::identity::BasicIdentity::from_pem(
             stringreader::StringReader::new(pk.as_str()),
         ) {
             Ok(identity) => identity,
