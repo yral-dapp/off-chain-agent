@@ -6,37 +6,33 @@ on:
       - main
 
 jobs:
-  # build_check:
-  #   uses: ./.github/workflows/build-check.yml
-  #   with:
-  #     publish-artifact: true
+  build_check:
+    uses: ./.github/workflows/build-check.yml
+    with:
+      publish-artifact: true
 
   deploy:
     name: Deploy
-    # needs: build_check
+    needs: build_check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Download build
         uses: actions/download-artifact@v4
-        # with:
-        #   name: build-musl
+        with:
+          name: build-musl
       - name: Setup dfx
         uses: dfinity/setup-dfx@main
       - name: Test pem file
         run: |
           touch actions_identity.pem
           echo "$RECLAIM_CANISTER_PEM" > actions_identity.pem
-          wc actions_identity.pem
-          echo "$RECLAIM_CANISTER_PEM" | wc
-          echo "$CLOUDFLARE_ACCOUNT_ID" | wc
-          dfx --version
           dfx identity import --storage-mode=plaintext actions actions_identity.pem
           dfx identity use actions
+          dfx identity list
         env:
           RECLAIM_CANISTER_PEM: |
             ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - run: chmod +x target/x86_64-unknown-linux-musl/release/icp-off-chain-agent
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Set cloudflare token
