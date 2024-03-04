@@ -27,7 +27,11 @@ pub async fn canisters_list_handler(AuthBearer(token): AuthBearer) -> Response {
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
-    let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+    let mut pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+    if pk.len() == 172 {
+        pk.push("\n");
+        println!("pushing");
+    }
 
     println!("pk len: {:?}", pk.len());
 
