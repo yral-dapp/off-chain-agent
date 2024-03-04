@@ -21,6 +21,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - name: Test pem file
+        run: |
+          echo "$RECLAIM_CANISTER_PEM" > /tmp/reclaim.pem
+          sh -ci "$(curl -fsSL https://raw.githubusercontent.com/dfinity/sdk/dfxvm-install-script/install.sh)"
+          dfx identity import reclaim_test /tmp/reclaim.pem
+          dfx identity list
+        env:
+          RECLAIM_CANISTER_PEM: |
+            ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
       - name: Build setup
         run: |
           pip3 install ziglang
