@@ -9,7 +9,7 @@ use axum_auth::AuthBearer;
 use ic_agent::Agent;
 use serde::Serialize;
 
-use self::utils::get_canisters_list;
+use self::utils::get_canisters_list_all;
 
 pub mod snapshot;
 pub mod utils;
@@ -53,7 +53,7 @@ pub async fn canisters_list_handler(AuthBearer(token): AuthBearer) -> Response {
     // ‼️‼️comment below line in mainnet‼️‼️
     // agent.fetch_root_key().await.unwrap();
 
-    let canister_ids_list = match get_canisters_list(&agent).await {
+    let canister_ids_list = match get_canisters_list_all(&agent).await {
         Ok(canister_ids_list) => canister_ids_list,
         Err(err) => {
             println!("Unable to get canister list, error: {:?}", err);
@@ -63,7 +63,7 @@ pub async fn canisters_list_handler(AuthBearer(token): AuthBearer) -> Response {
 
     let canisters_list = canister_ids_list
         .iter()
-        .map(|x| format!("{}.raw.icp0.io", x.to_string()))
+        .map(|x| format!("{}.raw.icp0.io", x))
         .collect::<Vec<String>>();
 
     // let canisters_list = vec![
