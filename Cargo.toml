@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.7.4"
+axum = { version = "0.6.20", features = ["macros"] }
 candid = "0.10.3"
 chrono = { version = "0.4.34", features = ["serde"] }
 futures = "0.3.30"
@@ -16,11 +16,18 @@ serde = "1.0.197"
 serde_json = "1.0.114"
 stringreader = "0.1.1"
 tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread", "time"] }
-openssl = { version = "0.10", features = ["vendored"] }
-axum-auth = { version = "0.7", default-features = false, features = [
-    "auth-bearer",
-] }
+#openssl = { version = "0.10", features = ["vendored"] }
 indicatif = { version = "0.17.8", features = ["futures"] }
+tonic = "0.11.0"
+prost = "0.12.4"
+tower = { version = "0.4", features = ["full"] }
+hyper = { version = "0.14.26", features = ["full"] }
+http = "0.2.11"
+axum-extra = { version = "0.9.3" , features = ["typed-header"]}
+headers = "0.4.0"
+
+[build-dependencies]
+tonic-build = "0.11"
 
 [[bin]]
 name = "icp-off-chain-agent"

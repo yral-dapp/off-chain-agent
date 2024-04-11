@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package warehouse_events;
+
+// Interface exported by the server.
+service WarehouseEvents {
+  // A simple RPC.
+
+  rpc SendEvent(WarehouseEvent) returns (Empty) {}
+
+}
+
+message WarehouseEvent {
+  string event = 1;
+  string params = 2;
+}
+
+message Empty {
+}

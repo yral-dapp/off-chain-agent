@@ -5,9 +5,9 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use axum_auth::AuthBearer;
 use ic_agent::Agent;
 use serde::Serialize;
+use crate::auth::AuthBearer;
 
 use self::utils::get_canisters_list_all;
 
