@@ -1,27 +1,24 @@
-use axum::http::{StatusCode};
-use axum::{async_trait, response::Html, Router, routing::{get}};
 use std::env;
 use std::net::SocketAddr;
-use axum::error_handling::HandleErrorLayer;
-use axum::middleware::from_fn;
+
+use axum::debug_handler;
+use axum::http::StatusCode;
+use axum::{response::Html, routing::get, Router};
 use http::header::CONTENT_TYPE;
-use tonic::transport::Server;
 use tower::make::Shared;
-use tower::ServiceExt;
 use tower::steer::Steer;
-use axum::{debug_handler};
-use axum::extract::FromRequest;
-use crate::auth::{AuthBearer, check_auth_grpc};
+use tower::ServiceExt;
+
+use crate::auth::{check_auth_grpc, AuthBearer};
 use crate::canister::canisters_list_handler;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
 
-pub mod canister;
-mod events;
 mod auth;
+pub mod canister;
 mod consts;
-
+mod events;
 
 #[tokio::main]
 async fn main() {
@@ -34,14 +31,16 @@ async fn main() {
         .map_err(axum::BoxError::from)
         .boxed_clone();
 
-
     let reflection_service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(warehouse_events::FILE_DESCRIPTOR_SET)
         .build()
         .unwrap();
 
     let grpc = tonic::transport::Server::builder()
-        .add_service(WarehouseEventsServer::with_interceptor(WarehouseEventsService{}, check_auth_grpc))
+        .add_service(WarehouseEventsServer::with_interceptor(
+            WarehouseEventsService {},
+            check_auth_grpc,
+        ))
         .add_service(reflection_service)
         .into_service()
         .map_response(|r| r.map(axum::body::boxed))
@@ -85,5 +84,3 @@ async fn hello_work_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
 async fn health_handler() -> (StatusCode, &'static str) {
     (StatusCode::OK, "OK")
 }
-
-

@@ -1,5 +1,6 @@
 use std::{collections::HashMap, env};
 
+use crate::auth::AuthBearer;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -7,7 +8,6 @@ use axum::{
 };
 use ic_agent::Agent;
 use serde::Serialize;
-use crate::auth::AuthBearer;
 
 use self::utils::get_canisters_list_all;
 

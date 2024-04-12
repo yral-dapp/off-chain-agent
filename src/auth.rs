@@ -1,21 +1,13 @@
-
-use axum::http::{StatusCode};
-use axum::{async_trait, Json, RequestPartsExt, response::Html, Router, routing::{get}};
 use std::env;
-use tower::make::Shared;
-use tower::ServiceExt;
-use axum::extract::{FromRequest, FromRequestParts};
+
+use axum::extract::FromRequestParts;
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum_extra::TypedHeader;
-use headers::{
-    authorization::{Bearer},
-    Authorization,
-};
+use axum::{async_trait, Json};
 use http::request::Parts;
 use serde_json::json;
-use tonic::{Request, Status};
 use tonic::metadata::MetadataValue;
-
+use tonic::{Request, Status};
 
 #[derive(Debug)]
 pub enum AuthError {
@@ -29,16 +21,14 @@ pub struct AuthBearer(pub String);
 
 #[async_trait]
 impl<S> FromRequestParts<S> for AuthBearer
-    where
-        S: Send + Sync,
+where
+    S: Send + Sync,
 {
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         // Extract the token from the authorization header
-        let bearer = parts
-            .headers
-            .get("Authorization");
+        let bearer = parts.headers.get("Authorization");
         if bearer.is_none() {
             return Err(AuthError::MissingCredentials);
         }

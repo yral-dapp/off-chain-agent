@@ -1,20 +1,19 @@
 use std::env;
+
 use reqwest::Client;
 use serde_json::Value;
-use tonic::transport::server::Router;
 use yup_oauth2::ServiceAccountAuthenticator;
-use warehouse_events::warehouse_events_server::{WarehouseEvents, WarehouseEventsServer};
+
+use warehouse_events::warehouse_events_server::WarehouseEvents;
+
 use crate::consts::BIGQUERY_INGESTION_URL;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
-
 
 pub mod warehouse_events {
     tonic::include_proto!("warehouse_events");
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
         tonic::include_file_descriptor_set!("warehouse_events_descriptor");
 }
-
-
 
 pub struct WarehouseEventsService {}
 
@@ -24,7 +23,6 @@ impl WarehouseEvents for WarehouseEventsService {
         &self,
         request: tonic::Request<WarehouseEvent>,
     ) -> Result<tonic::Response<Empty>, tonic::Status> {
-
         let request = request.into_inner();
 
         let data = serde_json::json!({
@@ -41,10 +39,12 @@ impl WarehouseEvents for WarehouseEventsService {
 
         let res = stream_to_bigquery(data).await;
 
-
         if res.is_err() {
             println!("Error sending data to BigQuery: {}", res.err().unwrap());
-            return Err(tonic::Status::new(tonic::Code::Unknown, "Error sending data to BigQuery"));
+            return Err(tonic::Status::new(
+                tonic::Code::Unknown,
+                "Error sending data to BigQuery",
+            ));
         }
 
         Ok(tonic::Response::new(Empty {}))
@@ -52,7 +52,6 @@ impl WarehouseEvents for WarehouseEventsService {
 }
 
 async fn get_access_token() -> String {
-
     let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
 
     // Load your service account key
@@ -73,7 +72,6 @@ async fn get_access_token() -> String {
 }
 
 async fn stream_to_bigquery(data: Value) -> Result<(), Box<dyn std::error::Error>> {
-
     let token = get_access_token().await;
     let client = Client::new();
     let request_url = BIGQUERY_INGESTION_URL.to_string();
@@ -88,12 +86,4 @@ async fn stream_to_bigquery(data: Value) -> Result<(), Box<dyn std::error::Error
         true => Ok(()),
         false => Err(format!("Failed to stream data - {:?}", response.text().await?).into()),
     }
-}
-
-
-pub fn new_grpc_server() -> Router {
-    let server = tonic::transport::Server::builder()
-        .add_service(WarehouseEventsServer::new(WarehouseEventsService{}));
-
-    server
 }

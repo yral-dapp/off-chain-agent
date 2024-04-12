@@ -11,9 +11,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     tonic_build::configure()
+        .build_client(false)
         .build_server(true)
         .file_descriptor_set_path(out_dir.join("warehouse_events_descriptor.bin"))
-        .out_dir("./src")
+        .out_dir(out_dir)
         .compile(&[proto_file], &["proto"])?;
 
     Ok(())
