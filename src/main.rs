@@ -1,19 +1,19 @@
 use std::env;
 use std::net::SocketAddr;
 
+use axum::{response::Html, Router, routing::get};
 use axum::debug_handler;
 use axum::http::StatusCode;
-use axum::{response::Html, routing::get, Router};
 use http::header::CONTENT_TYPE;
 use tower::make::Shared;
-use tower::steer::Steer;
 use tower::ServiceExt;
+use tower::steer::Steer;
 
-use crate::auth::{check_auth_grpc, AuthBearer};
+use crate::auth::{AuthBearer, check_auth_grpc};
 use crate::canister::canisters_list_handler;
 use crate::canister::snapshot::backup_job_handler;
-use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
+use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 
 mod auth;
 pub mod canister;
@@ -58,7 +58,7 @@ async fn main() {
     );
 
     // run it
-    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 8080));
+    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50051));
 
     println!("listening on {}", addr);
 
@@ -73,7 +73,7 @@ async fn hello_work_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
     println!("token: {}", token);
     if token
         != env::var("CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY")
-            .expect("$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY is not set")
+        .expect("$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY is not set")
     {
         return Html("Unauthorized");
     }
