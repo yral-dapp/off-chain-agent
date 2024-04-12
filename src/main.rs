@@ -11,16 +11,17 @@ use tower::ServiceExt;
 use tower::steer::Steer;
 use axum::{debug_handler};
 use axum::extract::FromRequest;
-use crate::auth::AuthBearer;
+use crate::auth::{AuthBearer, check_auth_grpc};
+use crate::canister::canisters_list_handler;
+use crate::canister::snapshot::backup_job_handler;
+use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
+use crate::events::{warehouse_events, WarehouseEventsService};
 
 pub mod canister;
 mod events;
 mod auth;
+mod consts;
 
-use crate::canister::canisters_list_handler;
-use crate::canister::snapshot::backup_job_handler;
-use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
-use crate::events::WarehouseEventsService;
 
 #[tokio::main]
 async fn main() {
@@ -33,8 +34,15 @@ async fn main() {
         .map_err(axum::BoxError::from)
         .boxed_clone();
 
+
+    let reflection_service = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(warehouse_events::FILE_DESCRIPTOR_SET)
+        .build()
+        .unwrap();
+
     let grpc = tonic::transport::Server::builder()
-        .add_service(WarehouseEventsServer::new(WarehouseEventsService{}))
+        .add_service(WarehouseEventsServer::with_interceptor(WarehouseEventsService{}, check_auth_grpc))
+        .add_service(reflection_service)
         .into_service()
         .map_response(|r| r.map(axum::body::boxed))
         .boxed_clone();
