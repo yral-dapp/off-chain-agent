@@ -37,10 +37,12 @@ jobs:
           create_credentials_file: true
           workload_identity_provider: 'projects/82502260393/locations/global/workloadIdentityPools/yral-id-pool/providers/yral-provider'
           service_account: 'yral-srv-workload@hot-or-not-feed-intelligence.iam.gserviceaccount.com'
+          token_format: 'access_token'
 
       - name: Test file path
         run: |
           cat ${{ steps.auth.outputs.access_token }}
+          cat ${{ steps.auth.outputs.auth_token }}
       - name: Read file contents and set as output
         id: read_workload_credentials
         run: |
