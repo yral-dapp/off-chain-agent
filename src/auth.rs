@@ -58,10 +58,16 @@ impl IntoResponse for AuthError {
 
 pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
     let grpc_token = env::var("GRPC_AUTH_TOKEN").expect("GRPC_AUTH_TOKEN is required");
-    let token: MetadataValue<_> = format!("Bearer {}", grpc_token).parse().unwrap();
+    let token = format!("Bearer {}", grpc_token);
+
+    let grpc_len = grpc_token.len();
+    // starting few chars
+    println!("start {}", grpc_token[:10]);
+    // end few chars
+    println!("end {}", grpc_token[grpc_len-10:grpc_len]);
 
     Ok(req)
-    
+
     // match req.metadata().get("authorization") {
     //     Some(t) if token == t => Ok(req),
     //     _ => Err(Status::unauthenticated("No valid auth token")),
