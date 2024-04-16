@@ -21,7 +21,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-          
+
     runs-on: ubuntu-latest
 
     steps:
@@ -47,7 +47,7 @@ jobs:
           echo "::set-output name=file_content::$(cat ${{ steps.auth.outputs.credentials_file_path }})"
       - name: Test file
         run: |
-          cat ${{ steps.read_workload_credentials.outputs.file_content }}
+          echo ${{ steps.read_workload_credentials.outputs.file_content }}
 
       - name: Install prereqs
         run: |
