@@ -62,9 +62,9 @@ pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
 
     let grpc_len = grpc_token.len();
     // starting few chars
-    println!("start {}", grpc_token[:10]);
+    println!("start {}", &grpc_token[..10]);
     // end few chars
-    println!("end {}", grpc_token[grpc_len-10:grpc_len]);
+    println!("end {}", &grpc_token[grpc_len - 10..grpc_len]);
 
     Ok(req)
 
