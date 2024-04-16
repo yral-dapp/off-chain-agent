@@ -1,5 +1,5 @@
+use crate::auth::AuthBearer;
 use axum::response::Html;
-use axum_auth::AuthBearer;
 use candid::encode_args;
 use futures::prelude::*;
 use ic_agent::{export::Principal, Agent};

@@ -1,11 +1,11 @@
 use std::{collections::HashMap, env};
 
+use crate::auth::AuthBearer;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
-use axum_auth::AuthBearer;
 use ic_agent::Agent;
 use serde::Serialize;
 

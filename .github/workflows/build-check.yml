@@ -20,7 +20,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install prereqs
+        run: |
+          sudo apt-get install protobuf-compiler
       - name: Build setup
         run: |
           pip3 install ziglang
