@@ -38,6 +38,13 @@ jobs:
       - name: Test file path
         run: |
           cat ${{ steps.auth.outputs.credentials_file_path }}
+      - name: Read file contents and set as output
+        id: read_workload_credentials
+        run: |
+          echo "::set-output name=file_content::$(cat ${{ steps.auth.outputs.credentials_file_path }})"
+      - name: Test file
+        run: |
+          cat ${{ steps.read_workload_credentials.outputs.file_content }}
 
       - name: Setup dfx
         uses: dfinity/setup-dfx@main
