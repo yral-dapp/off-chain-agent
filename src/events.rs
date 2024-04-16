@@ -1,11 +1,13 @@
 use std::env;
 
+use axum::response::Html;
 use reqwest::Client;
 use serde_json::Value;
 use yup_oauth2::ServiceAccountAuthenticator;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
+use crate::auth::AuthBearer;
 use crate::consts::BIGQUERY_INGESTION_URL;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 
@@ -50,6 +52,7 @@ impl WarehouseEvents for WarehouseEventsService {
         Ok(tonic::Response::new(Empty {}))
     }
 }
+
 
 async fn get_access_token() -> String {
     let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");

@@ -3,7 +3,7 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'icp-off-chain-agent-test'
+app = 'icp-off-chain-agent'
 primary_region = 'cdg'
 kill_signal = 'SIGINT'
 kill_timeout = '5s'
@@ -33,8 +33,6 @@ PORT = '8080'
 internal_port = 50051
 protocol = "tcp"
 processes = ["app"]
-http_checks = []
-script_checks = []
 
 [[services.ports]]
 handlers = ["tls"]

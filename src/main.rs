@@ -2,7 +2,6 @@ use std::env;
 use std::net::SocketAddr;
 
 use axum::{response::Html, Router, routing::get};
-use axum::debug_handler;
 use axum::http::StatusCode;
 use http::header::CONTENT_TYPE;
 use tower::make::Shared;
@@ -37,10 +36,11 @@ async fn main() {
         .unwrap();
 
     let grpc = tonic::transport::Server::builder()
-        .add_service(WarehouseEventsServer::with_interceptor(
+        .accept_http1(true)
+        .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
             WarehouseEventsService {},
             check_auth_grpc,
-        ))
+        )))
         .add_service(reflection_service)
         .into_service()
         .map_response(|r| r.map(axum::body::boxed))
@@ -68,9 +68,7 @@ async fn main() {
         .unwrap();
 }
 
-#[debug_handler]
 async fn hello_work_handler(AuthBearer(token): AuthBearer) -> Html<&'static str> {
-    println!("token: {}", token);
     if token
         != env::var("CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY")
         .expect("$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY is not set")

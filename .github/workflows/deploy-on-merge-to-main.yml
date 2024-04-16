@@ -14,6 +14,11 @@ jobs:
   deploy:
     name: Deploy
     needs: build_check
+
+    permissions:
+      id-token: write
+      contents: read
+
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -21,6 +26,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-musl
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          create_credentials_file: true
+          workload_identity_provider: 'projects/82502260393/locations/global/workloadIdentityPools/yral-id-pool/providers/yral-provider'
+          service_account: 'yral-srv-workload@hot-or-not-feed-intelligence.iam.gserviceaccount.com'
+
+      - name: Test file path
+        run: |
+          cat ${{ steps.auth.outputs.credentials_file_path }}
+
       - name: Setup dfx
         uses: dfinity/setup-dfx@main
       - name: Test pem file
@@ -52,7 +70,7 @@ jobs:
           RECLAIM_CANISTER_PEM: |
             ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
           HOTORNOT_CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY_HOT_OR_NOT_INTELLIGENCE }}
+          GOOGLE_SA_KEY: ${{ steps.auth.outputs.credentials_file_path }}
           GRPC_AUTH_TOKEN: ${{ secrets.OFF_CHAIN_AGENT_GRPC_AUTH_TOKEN }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only
