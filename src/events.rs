@@ -5,7 +5,7 @@ use candid::Deserialize;
 use reqwest::Client;
 use serde::Serialize;
 use serde_json::Value;
-use yup_oauth2::{ExternalAccountAuthenticator, ServiceAccountAuthenticator};
+use yup_oauth2::ServiceAccountAuthenticator;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
@@ -55,52 +55,13 @@ impl WarehouseEvents for WarehouseEventsService {
     }
 }
 
-
-// async fn get_access_token() -> String {
-//     let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
-//
-//     // Load your service account key
-//     let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
-//
-//     let auth = ServiceAccountAuthenticator::builder(sa_key)
-//         .build()
-//         .await
-//         .unwrap();
-//
-//     let scopes = &["https://www.googleapis.com/auth/bigquery.insertdata"];
-//     let token = auth.token(scopes).await.unwrap();
-//
-//     match token.token() {
-//         Some(t) => t.to_string(),
-//         _ => panic!("No access token found"),
-//     }
-// }
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExternalAccountSecret {
-    /// audience
-    pub audience: String,
-    /// subject_token_type
-    pub subject_token_type: String,
-    /// service_account_impersonation_url
-    pub service_account_impersonation_url: Option<String>,
-    /// token_url
-    pub token_url: String,
-    // TODO: support service_account_impersonation.
-    /// credential_source
-    pub credential_source: CredentialSource,
-    #[serde(rename = "type")]
-    /// key_type
-    pub key_type: String,
-}
-
-
 async fn get_access_token() -> String {
-    let google_creds_file = env::var("GOOGLE_WL_CREDS").expect("GOOGLE_WL_CREDS is required");
+    let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
 
-    let creds = yup_oauth2::read_external_account_secret(google_creds).await.expect("GOOGLE_WL_CREDS json file");
+    // Load your service account key
+    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
 
-    let auth = ExternalAccountAuthenticator::builder(creds.into())
+    let auth = ServiceAccountAuthenticator::builder(sa_key)
         .build()
         .await
         .unwrap();
@@ -130,4 +91,3 @@ async fn stream_to_bigquery(data: Value) -> Result<(), Box<dyn std::error::Error
         false => Err(format!("Failed to stream data - {:?}", response.text().await?).into()),
     }
 }
-

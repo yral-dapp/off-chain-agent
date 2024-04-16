@@ -15,10 +15,6 @@ jobs:
     name: Deploy
     needs: build_check
 
-    permissions:
-      id-token: write
-      contents: read
-
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -26,23 +22,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-musl
-
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v1'
-        with:
-          create_credentials_file: true
-          workload_identity_provider: 'projects/82502260393/locations/global/workloadIdentityPools/yral-id-pool/providers/yral-provider'
-          service_account: 'yral-srv-workload@hot-or-not-feed-intelligence.iam.gserviceaccount.com'
-
-      - name: Read file contents and set as output
-        id: read_workload_credentials
-        run: |
-          echo "::set-output name=file_content::$(cat ${{ steps.auth.outputs.credentials_file_path }})"
-      #      - name: Test file
-      #        run: |
-      #          cat ${{ steps.read_workload_credentials.outputs.file_content }}
-
       - name: Setup dfx
         uses: dfinity/setup-dfx@main
       - name: Test pem file
@@ -64,7 +43,7 @@ jobs:
           flyctl secrets set "CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY=$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "RECLAIM_CANISTER_PEM=$RECLAIM_CANISTER_PEM" --app "icp-off-chain-agent" --stage
           flyctl secrets set "HOTORNOT_CF_ACCOUNT_ID=$HOTORNOT_CF_ACCOUNT_ID" --app "icp-off-chain-agent" --stage
-          flyctl secrets set GOOGLE_WL_CREDS="GOOGLE_WL_CREDS" --app "hot-or-not-web-leptos-ssr" --stage
+          flyctl secrets set GOOGLE_SA_KEY="$GOOGLE_SA_KEY" --app "hot-or-not-web-leptos-ssr" --stage
           flyctl secrets set "GRPC_AUTH_TOKEN=$GRPC_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
@@ -74,7 +53,7 @@ jobs:
           RECLAIM_CANISTER_PEM: |
             ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
           HOTORNOT_CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          GOOGLE_WL_CREDS: ${{ steps.read_workload_credentials.outputs.file_content }}
+          GOOGLE_SA_KEY: ${{ secrets.YRAL_OFF_CHAIN_AGENT_GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON_KEY }}
           GRPC_AUTH_TOKEN: ${{ secrets.OFF_CHAIN_AGENT_GRPC_AUTH_TOKEN }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only
