@@ -60,6 +60,22 @@ pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
     let grpc_token = env::var("GRPC_AUTH_TOKEN").expect("GRPC_AUTH_TOKEN is required");
     let token = format!("Bearer {}", grpc_token);
 
+    // test auth
+    // length of grpc-token
+    println!("grpc_token len: {}", grpc_token.len());
+    println!("grpc_token start: {}", &grpc_token[..10]);
+    println!("grpc_token end: {}", &grpc_token[grpc_token.len() - 10..]);
+
+    let req_token = req
+        .metadata()
+        .get("authorization")
+        .map(|t| t.to_str().unwrap());
+    if let Some(t) = req_token {
+        println!("req_token len: {}", t.len());
+        println!("req_token start: {}", &t[..10]);
+        println!("req_token end: {}", &t[t.len() - 10..]);
+    }
+
     Ok(req)
 
     // match req
