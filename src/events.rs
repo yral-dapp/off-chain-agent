@@ -3,7 +3,7 @@ use std::env;
 use axum::response::Html;
 use reqwest::Client;
 use serde_json::Value;
-use yup_oauth2::ServiceAccountAuthenticator;
+use yup_oauth2::{ExternalAccountAuthenticator, ServiceAccountAuthenticator};
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
@@ -54,13 +54,33 @@ impl WarehouseEvents for WarehouseEventsService {
 }
 
 
+// async fn get_access_token() -> String {
+//     let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
+//
+//     // Load your service account key
+//     let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
+//
+//     let auth = ServiceAccountAuthenticator::builder(sa_key)
+//         .build()
+//         .await
+//         .unwrap();
+//
+//     let scopes = &["https://www.googleapis.com/auth/bigquery.insertdata"];
+//     let token = auth.token(scopes).await.unwrap();
+//
+//     match token.token() {
+//         Some(t) => t.to_string(),
+//         _ => panic!("No access token found"),
+//     }
+// }
+
 async fn get_access_token() -> String {
-    let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
+    let google_creds = env::var("GOOGLE_WL_CREDS").expect("GOOGLE_WL_CREDS is required");
 
     // Load your service account key
-    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
+    let creds = yup_oauth2::read_external_account_secret(google_creds).await.expect("GOOGLE_WL_CREDS json file");
 
-    let auth = ServiceAccountAuthenticator::builder(sa_key)
+    let auth = ExternalAccountAuthenticator::builder(creds)
         .build()
         .await
         .unwrap();
