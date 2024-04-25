@@ -10,6 +10,7 @@ use tower::ServiceExt;
 
 use crate::auth::{check_auth_grpc, AuthBearer};
 use crate::canister::canisters_list_handler;
+use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
@@ -27,6 +28,7 @@ async fn main() {
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
+        .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .map_err(axum::BoxError::from)
         .boxed_clone();
 
