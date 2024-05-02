@@ -71,12 +71,13 @@ async fn main() {
 }
 
 async fn hello_work_handler(AuthBearer(token): AuthBearer) -> Html<&'static str> {
-    if token
-        != env::var("CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY")
-            .expect("$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY is not set")
+    if token != "test_token"
+    // env::var("CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY")
+    // .expect("$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY is not set")
     {
         return Html("Unauthorized");
     }
+    println!("Hello, World!");
 
     Html("Hello, World!")
 }
