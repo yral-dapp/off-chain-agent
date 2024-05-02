@@ -11,6 +11,7 @@ use serde::Serialize;
 
 use self::utils::get_canisters_list_all;
 
+pub mod reclaim_canisters;
 pub mod snapshot;
 pub mod utils;
 
