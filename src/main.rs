@@ -28,7 +28,7 @@ async fn main() {
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
-        .route("/reclaim_canisters", get(reclaim_canisters_handler))
+        // .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .map_err(axum::BoxError::from)
         .boxed_clone();
 
@@ -82,5 +82,7 @@ async fn hello_work_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
 }
 
 async fn health_handler() -> (StatusCode, &'static str) {
+    println!("Health check");
+
     (StatusCode::OK, "OK")
 }

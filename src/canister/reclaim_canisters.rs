@@ -82,20 +82,20 @@ pub async fn reclaim_canisters_handler() -> Html<&'static str> {
                 .collect::<Vec<Principal>>();
 
             // test
-            // println!(
-            //     "Reclaiming canisters for subnet orchestrator: {:?}, canister_ids: {:?}",
-            //     subnet_orchestrator_id,
-            //     canister_ids
-            //         .iter()
-            //         .map(|x| x.to_string())
-            //         .collect::<Vec<String>>()
-            // );
-            // println!("Num {}/{}", canister_ids.len(), user_canisters_list.len());
+            println!(
+                "Reclaiming canisters for subnet orchestrator: {:?}, canister_ids: {:?}",
+                subnet_orchestrator_id,
+                canister_ids
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+            );
+            println!("Num {}/{}", canister_ids.len(), user_canisters_list.len());
 
             // call subnet orchestrator to reclaim canisters
 
             let response = match agent
-                .update(subnet_orchestrator_id, "recycle_canisters")
+                .update(subnet_orchestrator_id, "reset_user_individual_canisters")
                 .with_arg(encode_args((canister_ids,)).unwrap())
                 .call_and_wait()
                 .await
@@ -110,6 +110,32 @@ pub async fn reclaim_canisters_handler() -> Html<&'static str> {
                     return Html("Unable to call the method recycle_canisters");
                 }
             };
+
+            let res = match candid::decode_one(&response) {
+                Ok(result) => {
+                    let result: Result<String, String> = result;
+                    match result {
+                        Ok(result) => result,
+                        Err(err) => {
+                            println!(
+                                "Error in decoding the response recycle_canisters, error: {:?}, subnet_orchestrator_id {:?}",
+                                err,
+                                subnet_orchestrator_id.to_string()
+                            );
+                            return Html("Error in decoding the response recycle_canisters");
+                        }
+                    }
+                }
+                Err(err) => {
+                    println!(
+                        "Error in decoding the response recycle_canisters, error: {:?}, subnet_orchestrator_id {:?}",
+                        err,
+                        subnet_orchestrator_id.to_string()
+                    );
+                    return Html("Error in decoding the response recycle_canisters");
+                }
+            };
+            println!("Response from subnet orchestrator: {:?}", res);
 
             // call yral-metadata to delete keys
         }
