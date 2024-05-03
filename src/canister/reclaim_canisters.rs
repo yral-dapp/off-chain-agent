@@ -153,7 +153,7 @@ pub async fn reclaim_canisters_handler(
 
             // let yral_metadata_client = state.yral_metadata_client.clone();
             // match yral_metadata_client
-            //     .delete_metadata_bulk(canister_ids)
+            //     .delete_metadata_bulk(user_ids)
             //     .await
             // {
             //     Ok(_) => {}
