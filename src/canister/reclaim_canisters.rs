@@ -270,3 +270,28 @@ async fn filter_canister(
 
     None
 }
+
+pub async fn key_test(
+    State(state): State<Arc<AppState>>,
+    AuthBearer(token): AuthBearer,
+) -> Html<&'static str> {
+    if token != "token_test_tmp" {
+        return Html("Unauthorized");
+    }
+
+    let state = Arc::clone(&state);
+
+    let yral_metadata_client = state.yral_metadata_client.clone();
+    match yral_metadata_client
+        .delete_metadata_bulk(vec![Principal::from_text(
+            "62p2r-n2ihk-mcjc7-hxjki-stvna-73xka-hazwu-il3fw-5e4p7-wuay5-mae",
+        )])
+        .await
+    {
+        Ok(_) => {}
+        Err(err) => {
+            log::error!("Error calling delete_metadata_bulk, error: {:?}", err);
+            return Html("Error calling the method delete_metadata_bulk");
+        }
+    }
+}
