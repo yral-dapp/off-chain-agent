@@ -1,33 +1,35 @@
-use std::{env, time::SystemTime};
+use std::{borrow::Borrow, env, sync::Arc, time::SystemTime};
 
-use axum::response::{Html, Response};
+use axum::{
+    extract::State,
+    response::{Html, Response},
+};
 use candid::{encode_args, Principal};
 use futures::prelude::*;
 use http::StatusCode;
 use ic_agent::Agent;
 use serde::Serialize;
 
-use crate::consts::RECYCLE_THRESHOLD_SECS;
+use crate::{auth::AuthBearer, consts::RECYCLE_THRESHOLD_SECS, types::SessionType, AppState};
 
 use super::utils::get_user_and_canisters_list;
 
-pub async fn reclaim_canisters_handler() -> Html<&'static str> {
-    tokio::spawn(async {
+pub async fn reclaim_canisters_handler(
+    State(state): State<Arc<AppState>>,
+    AuthBearer(token): AuthBearer,
+) -> Html<&'static str> {
+    if token != "reclaim_token_test_tmp" {
+        return Html("Unauthorized");
+    }
+
+    let state = Arc::clone(&state);
+
+    tokio::spawn(async move {
         // TODO: change to BasicIdentity
-        // let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+        let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
-        // let identity = match ic_agent::identity::BasicIdentity::from_pem(
-        //     stringreader::StringReader::new(pk.as_str()),
-        // ) {
-        //     Ok(identity) => identity,
-        //     Err(err) => {
-        //         println!("Unable to create identity, error: {:?}", err);
-        //         return Html("Unable to create identity");
-        //     }
-        // };
-
-        let identity = match ic_agent::identity::Secp256k1Identity::from_pem_file(
-            "/Users/komalsai/Downloads/generated-id.pem",
+        let identity = match ic_agent::identity::BasicIdentity::from_pem(
+            stringreader::StringReader::new(pk.as_str()),
         ) {
             Ok(identity) => identity,
             Err(err) => {
@@ -36,8 +38,18 @@ pub async fn reclaim_canisters_handler() -> Html<&'static str> {
             }
         };
 
+        // let identity = match ic_agent::identity::Secp256k1Identity::from_pem_file(
+        //     "/Users/komalsai/Downloads/generated-id.pem",
+        // ) {
+        //     Ok(identity) => identity,
+        //     Err(err) => {
+        //         println!("Unable to create identity, error: {:?}", err);
+        //         return Html("Unable to create identity");
+        //     }
+        // };
+
         let agent = match Agent::builder()
-            .with_url("http://127.0.0.1:4943") // TODO: https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
+            .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // local : http://127.0.0.1:4943
             .with_identity(identity)
             .build()
         {
@@ -48,7 +60,7 @@ pub async fn reclaim_canisters_handler() -> Html<&'static str> {
             }
         };
         // ‼️‼️comment below line in mainnet‼️‼️
-        agent.fetch_root_key().await.unwrap();
+        // agent.fetch_root_key().await.unwrap();
 
         let user_canisters_map = match get_user_and_canisters_list(&agent).await {
             Ok(user_canisters_map) => user_canisters_map,
@@ -82,7 +94,7 @@ pub async fn reclaim_canisters_handler() -> Html<&'static str> {
                 .collect::<Vec<Principal>>();
 
             // test
-            println!(
+            log::info!(
                 "Reclaiming canisters for subnet orchestrator: {:?}, canister_ids: {:?}",
                 subnet_orchestrator_id,
                 canister_ids
@@ -90,54 +102,66 @@ pub async fn reclaim_canisters_handler() -> Html<&'static str> {
                     .map(|x| x.to_string())
                     .collect::<Vec<String>>()
             );
-            println!("Num {}/{}", canister_ids.len(), user_canisters_list.len());
+            log::info!("Num {}/{}", canister_ids.len(), user_canisters_list.len());
 
             // call subnet orchestrator to reclaim canisters
 
-            let response = match agent
-                .update(subnet_orchestrator_id, "reset_user_individual_canisters")
-                .with_arg(encode_args((canister_ids,)).unwrap())
-                .call_and_wait()
-                .await
-            {
-                Ok(response) => response,
-                Err(err) => {
-                    println!(
-                            "Unable to call the method recycle_canisters, error: {:?}, subnet_orchestrator_id {:?}",
-                            err,
-                            subnet_orchestrator_id.to_string()
-                        );
-                    return Html("Unable to call the method recycle_canisters");
-                }
-            };
+            // let response = match agent
+            //     .update(subnet_orchestrator_id, "reset_user_individual_canisters")
+            //     .with_arg(encode_args((canister_ids,)).unwrap())
+            //     .call_and_wait()
+            //     .await
+            // {
+            //     Ok(response) => response,
+            //     Err(err) => {
+            //         println!(
+            //                 "Unable to call the method recycle_canisters, error: {:?}, subnet_orchestrator_id {:?}",
+            //                 err,
+            //                 subnet_orchestrator_id.to_string()
+            //             );
+            //         return Html("Unable to call the method recycle_canisters");
+            //     }
+            // };
 
-            let res = match candid::decode_one(&response) {
-                Ok(result) => {
-                    let result: Result<String, String> = result;
-                    match result {
-                        Ok(result) => result,
-                        Err(err) => {
-                            println!(
-                                "Error in decoding the response recycle_canisters, error: {:?}, subnet_orchestrator_id {:?}",
-                                err,
-                                subnet_orchestrator_id.to_string()
-                            );
-                            return Html("Error in decoding the response recycle_canisters");
-                        }
-                    }
-                }
-                Err(err) => {
-                    println!(
-                        "Error in decoding the response recycle_canisters, error: {:?}, subnet_orchestrator_id {:?}",
-                        err,
-                        subnet_orchestrator_id.to_string()
-                    );
-                    return Html("Error in decoding the response recycle_canisters");
-                }
-            };
-            println!("Response from subnet orchestrator: {:?}", res);
+            // let res = match candid::decode_one(&response) {
+            //     Ok(result) => {
+            //         let result: Result<String, String> = result;
+            //         match result {
+            //             Ok(result) => result,
+            //             Err(err) => {
+            //                 println!(
+            //                     "Error in decoding the response recycle_canisters, error: {:?}, subnet_orchestrator_id {:?}",
+            //                     err,
+            //                     subnet_orchestrator_id.to_string()
+            //                 );
+            //                 return Html("Error in decoding the response recycle_canisters");
+            //             }
+            //         }
+            //     }
+            //     Err(err) => {
+            //         println!(
+            //             "Error in decoding the response recycle_canisters, error: {:?}, subnet_orchestrator_id {:?}",
+            //             err,
+            //             subnet_orchestrator_id.to_string()
+            //         );
+            //         return Html("Error in decoding the response recycle_canisters");
+            //     }
+            // };
+            // println!("Response from subnet orchestrator: {:?}", res);
 
             // call yral-metadata to delete keys
+
+            // let yral_metadata_client = state.yral_metadata_client.clone();
+            // match yral_metadata_client
+            //     .delete_metadata_bulk(canister_ids)
+            //     .await
+            // {
+            //     Ok(_) => {}
+            //     Err(err) => {
+            //         log::error!("Error calling delete_metadata_bulk, error: {:?}", err);
+            //         return Html("Error calling the method delete_metadata_bulk");
+            //     }
+            // }
         }
         Html("Reclaim canisters - OK")
     });
@@ -150,6 +174,52 @@ async fn filter_canister(
     user_id: &Principal,
     canister_id: &Principal,
 ) -> Option<(Principal, Principal)> {
+    // Call get_session_type
+    let response = match agent
+        .query(canister_id, "get_session_type")
+        .with_arg(encode_args(()).unwrap())
+        .call()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            log::error!(
+                "Unable to call the method get_session_type, error: {:?}, canister_id {:?}",
+                err,
+                canister_id.to_string()
+            );
+            return None;
+        }
+    };
+
+    let session_type = match candid::decode_one(&response) {
+        Ok(result) => {
+            let result: Result<SessionType, String> = result;
+            match result {
+                Ok(result) => result,
+                Err(err) => {
+                    log::error!(
+                        "Error in decoding the response get_session_type, error: {:?}, canister_id {:?}",
+                        err,
+                        canister_id.to_string()
+                    );
+                    return None;
+                }
+            }
+        }
+        Err(err) => {
+            log::error!(
+                "Error in decoding the response get_session_type, error: {:?}, canister_id {:?}",
+                err,
+                canister_id.to_string()
+            );
+            return None;
+        }
+    };
+    if session_type == SessionType::RegisteredSession {
+        return None;
+    }
+
     // Call get_last_canister_functionality_access_time
     let response = match agent
         .query(canister_id, "get_last_canister_functionality_access_time")
@@ -159,8 +229,8 @@ async fn filter_canister(
     {
         Ok(response) => response,
         Err(err) => {
-            println!(
-                "Unable to call the method save_snapshot_json, error: {:?}, canister_id {:?}",
+            log::error!(
+                "Unable to call the method get_last_canister_functionality_access_time, error: {:?}, canister_id {:?}",
                 err,
                 canister_id.to_string()
             );
@@ -174,7 +244,7 @@ async fn filter_canister(
             match result {
                 Ok(result) => result,
                 Err(err) => {
-                    println!(
+                    log::error!(
                         "Error in decoding the response get_last_canister_functionality_access_time, error: {:?}, canister_id {:?}",
                         err,
                         canister_id.to_string()
@@ -184,7 +254,7 @@ async fn filter_canister(
             }
         }
         Err(err) => {
-            println!(
+            log::error!(
                 "Unable to decode the response get_last_canister_functionality_access_time, error: {:?}, canister_id {:?}",
                 err,
                 canister_id.to_string()

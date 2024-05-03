@@ -28,11 +28,16 @@ PORT = '8080'
 #[[services.ports]]
 #port = 80
 #handlers = ['http']
+[processes]
+# The command below is used to launch a Rails server; be sure to
+# replace with the command you're using to launch your server.
+web = "./icp-off-chain-agent"
+cron = "supercronic /app/crontab"
 
 [[services]]
 internal_port = 50051
 protocol = "tcp"
-processes = ["app"]
+processes = ["web"]
 
 [[services.ports]]
 handlers = ["tls"]
