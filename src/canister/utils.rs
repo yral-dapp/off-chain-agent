@@ -172,41 +172,35 @@ pub async fn get_user_and_canisters_list(
     agent: &Agent,
 ) -> Result<HashMap<Principal, Vec<(Principal, Principal)>>, Error> {
     // Platform Orchestrator canister id
-    // let pf_o10r_canister_id = Principal::from_text(PLATFORM_ORCHESTRATOR_ID).unwrap();
+    let pf_o10r_canister_id = Principal::from_text(PLATFORM_ORCHESTRATOR_ID).unwrap();
 
-    // // Get the list of subnet orchestrator canister ids
+    // Get the list of subnet orchestrator canister ids
 
-    // let response = match agent
-    //     .query(&pf_o10r_canister_id, "get_all_subnet_orchestrators")
-    //     .with_arg(encode_args(()).unwrap())
-    //     .call()
-    //     .await
-    // {
-    //     Ok(response) => response,
-    //     Err(err) => {
-    //         println!("Unable to call the method, error: {:?}", err);
-    //         return Err(Error::new(std::io::ErrorKind::Other, err));
-    //     }
-    // };
+    let response = match agent
+        .query(&pf_o10r_canister_id, "get_all_subnet_orchestrators")
+        .with_arg(encode_args(()).unwrap())
+        .call()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            log::error!("Unable to call the method, error: {:?}", err);
+            return Err(Error::new(std::io::ErrorKind::Other, err));
+        }
+    };
 
-    // let subnet_o10r_ids = match candid::decode_one(&response) {
-    //     Ok(result) => {
-    //         let result: Vec<Principal> = result;
-    //         result
-    //     }
-    //     Err(err) => {
-    //         println!("Unable to decode the response, error: {:?}", err);
-    //         return Err(Error::new(std::io::ErrorKind::Other, err));
-    //     }
-    // };
-    // println!(
-    //     "subnet_o10r_ids {:?}",
-    //     subnet_o10r_ids
-    //         .iter()
-    //         .map(|x| x.to_string())
-    //         .collect::<Vec<String>>()
-    // );
-    let subnet_o10r_ids = vec![Principal::from_text("br5f7-7uaaa-aaaaa-qaaca-cai").unwrap()];
+    let subnet_o10r_ids = match candid::decode_one(&response) {
+        Ok(result) => {
+            let result: Vec<Principal> = result;
+            result
+        }
+        Err(err) => {
+            log::error!("Unable to decode the response, error: {:?}", err);
+            return Err(Error::new(std::io::ErrorKind::Other, err));
+        }
+    };
+    // local test
+    // let subnet_o10r_ids = vec![Principal::from_text("br5f7-7uaaa-aaaaa-qaaca-cai").unwrap()];
 
     let mut user_canister_ids_map = HashMap::new();
 
@@ -227,7 +221,7 @@ pub async fn get_user_and_canisters_list(
         {
             Ok(response) => response,
             Err(err) => {
-                println!("Unable to call the method, error: {:?}", err);
+                log::error!("Unable to call the method, error: {:?}", err);
                 return Err(Error::new(std::io::ErrorKind::Other, err));
             }
         };
@@ -238,11 +232,11 @@ pub async fn get_user_and_canisters_list(
                 result
             }
             Err(err) => {
-                println!("Unable to decode the response, error: {:?}", err);
+                log::error!("Unable to decode the response, error: {:?}", err);
                 return Err(Error::new(std::io::ErrorKind::Other, err));
             }
         };
-        println!(
+        log::info!(
             "subnet_o10r_canister_id {} canister_ids_len {:?}",
             subnet_o10r_canister_id,
             user_canister_ids.len()
