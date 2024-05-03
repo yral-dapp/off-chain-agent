@@ -285,7 +285,8 @@ pub async fn key_test(
     match yral_metadata_client
         .delete_metadata_bulk(vec![Principal::from_text(
             "62p2r-n2ihk-mcjc7-hxjki-stvna-73xka-hazwu-il3fw-5e4p7-wuay5-mae",
-        )])
+        )
+        .unwrap()])
         .await
     {
         Ok(_) => {}
@@ -294,4 +295,6 @@ pub async fn key_test(
             return Html("Error calling the method delete_metadata_bulk");
         }
     }
+
+    Html("Key test - OK")
 }
