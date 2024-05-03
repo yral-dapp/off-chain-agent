@@ -112,6 +112,8 @@ async fn hello_work_handler(AuthBearer(token): AuthBearer) -> Html<&'static str>
 
 async fn health_handler() -> (StatusCode, &'static str) {
     log::info!("Health check");
+    log::warn!("Health check");
+    log::error!("Health check");
 
     (StatusCode::OK, "OK")
 }
