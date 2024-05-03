@@ -5,7 +5,9 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
+use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
+use log::LevelFilter;
 use reqwest::Url;
 use tower::make::Shared;
 use tower::steer::Steer;
@@ -42,7 +44,12 @@ pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let conf = AppConfig::load()?;
-    env_logger::init();
+
+    Builder::new()
+        .filter_level(LevelFilter::Info)
+        .target(Target::Stdout)
+        .init();
+
     let shared_state = Arc::new(AppState {
         yral_metadata_client: init_yral_metadata_client(&conf),
     });
