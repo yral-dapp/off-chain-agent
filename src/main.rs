@@ -3,7 +3,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::http::StatusCode;
-use axum::{response::Html, routing::get, Router};
+use axum::{
+    response::Html,
+    routing::{get, post},
+    Router,
+};
 use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
@@ -17,8 +21,8 @@ use yral_metadata_client::MetadataClient;
 
 use crate::auth::{check_auth_grpc, AuthBearer};
 use crate::canister::canisters_list_handler;
-use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::backup_job_handler;
+use crate::canister::{migrate, reclaim_canisters::reclaim_canisters_handler};
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
 use error::*;
@@ -31,7 +35,7 @@ mod error;
 mod events;
 mod types;
 
-struct AppState {
+pub struct AppState {
     yral_metadata_client: MetadataClient<true>,
 }
 
@@ -61,6 +65,10 @@ async fn main() -> Result<()> {
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
+        .route(
+            "/migrate",
+            post(migrate::transfer_hotornot_token_and_post_to_yral),
+        )
         .with_state(shared_state)
         .map_err(axum::BoxError::from)
         .boxed_clone();
