@@ -89,7 +89,10 @@ pub async fn transfer_hotornot_token_and_post_to_yral(
     .await
     {
         Ok(_) => (StatusCode::OK, "Hot Or Not transfer - OK"),
-        Err(error) => (StatusCode::BAD_REQUEST, format!("{:?}", error).as_ref()),
+        Err(error) => {
+            log::error!("{:?}", error);
+            (StatusCode::BAD_REQUEST, "Hot Or Not transfer - Failed")
+        }
     }
 }
 
