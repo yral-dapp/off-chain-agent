@@ -1,5 +1,5 @@
 use crate::AppState;
-use axum::{extract::State, response::Html, Json};
+use axum::{extract::State, Json};
 use candid::{decode_args, encode_args, Principal};
 use http::StatusCode;
 use ic_agent::Agent;
@@ -11,19 +11,19 @@ use yral_metadata_types::UserMetadata;
 pub async fn transfer_hotornot_token_and_post_to_yral(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<MigrateRequest>,
-) -> Json<(StatusCode, &'static str)> {
+) -> (StatusCode, &'static str) {
     let from_account = match Principal::from_str(&payload.from_account) {
         Ok(principal) => principal,
         Err(error) => {
             log::error!("Invalid from_account: {:?}", error);
-            return Json((StatusCode::BAD_REQUEST, "Invalid from_account"));
+            return (StatusCode::BAD_REQUEST, "Invalid from_account");
         }
     };
     let to_account = match Principal::from_str(&payload.to_account) {
         Ok(principal) => principal,
         Err(error) => {
             log::error!("Invalid to_account: {:?}", error);
-            return Json((StatusCode::BAD_REQUEST, "Invalid to_account"));
+            return (StatusCode::BAD_REQUEST, "Invalid to_account");
         }
     };
     let user_metadata = UserMetadata {
@@ -37,7 +37,7 @@ pub async fn transfer_hotornot_token_and_post_to_yral(
         Ok(_) => {}
         Err(error) => {
             log::error!("Unauthorized: {:?}", error);
-            return Json((StatusCode::UNAUTHORIZED, "Unauthorized"));
+            return (StatusCode::UNAUTHORIZED, "Unauthorized");
         }
     }
 
@@ -48,11 +48,11 @@ pub async fn transfer_hotornot_token_and_post_to_yral(
 
     if let Err(error) = from_account_canister_id {
         log::error!("canister id not found: {:?}", error);
-        return Json((StatusCode::BAD_REQUEST, "canister id not found"));
+        return (StatusCode::BAD_REQUEST, "canister id not found");
     }
     if let Err(error) = to_account_canister_id {
         log::error!("canister id not found: {:?}", error);
-        return Json((StatusCode::BAD_REQUEST, "canister id not found"));
+        return (StatusCode::BAD_REQUEST, "canister id not found");
     }
 
     let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
@@ -63,7 +63,7 @@ pub async fn transfer_hotornot_token_and_post_to_yral(
         Ok(identity) => identity,
         Err(err) => {
             println!("Unable to create identity, error: {:?}", err);
-            return Json((StatusCode::BAD_REQUEST, "Unable to create identity"));
+            return (StatusCode::BAD_REQUEST, "Unable to create identity");
         }
     };
     let agent = match Agent::builder()
@@ -74,7 +74,7 @@ pub async fn transfer_hotornot_token_and_post_to_yral(
         Ok(agent) => agent,
         Err(err) => {
             println!("Unable to create agent, error: {:?}", err);
-            return Json((StatusCode::BAD_REQUEST, "Unable to create agent"));
+            return (StatusCode::BAD_REQUEST, "Unable to create agent");
         }
     };
     // ‼️‼️comment below line in mainnet‼️‼️
@@ -85,9 +85,10 @@ pub async fn transfer_hotornot_token_and_post_to_yral(
         from_account_canister_id.unwrap(),
         to_account,
         to_account_canister_id.unwrap(),
-    );
+    )
+    .await;
 
-    return Json((StatusCode::OK, "Hot Or Not transfer - OK"));
+    (StatusCode::OK, "Hot Or Not transfer - OK")
 }
 
 async fn get_canister_id_from_metadata(
@@ -116,19 +117,22 @@ async fn transfer_tokens_and_posts(
     from_account_canister_id: Principal,
     to_account: Principal,
     to_account_canister_id: Principal,
-) -> Result<String, String> {
-    match agent
+) -> Result<(String,), String> {
+    let result = match agent
         .update(&from_account_canister_id, "transfer_tokens_and_posts")
         .with_arg(encode_args((to_account, to_account_canister_id)).unwrap())
         .call_and_wait()
         .await
     {
-        Ok(response) => decode_args(response.as_slice()).map_err(|error| format!("{:?}", error)),
+        Ok(response) => {
+            decode_args::<(String,)>(response.as_slice()).map_err(|error| format!("{:?}", error))
+        }
         Err(err) => {
             log::error!("Unable to call the method, error: {:?}", err);
             return Err(format!("{:?}", err));
         }
-    }
+    };
+    result
 }
 
 #[derive(Serialize, Deserialize)]

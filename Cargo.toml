@@ -32,8 +32,8 @@ yup-oauth2 = { version = "8.3.3", features = ["hyper-rustls"] }
 tonic-web = "0.11.0"
 log = "0.4.21"
 yral-identity = { git = "https://github.com/go-bazzinga/yral-identity.git", rev = "346f61f5bf07b619be8dfc3d041dc665c4c66113" }
-yral-metadata-client = { git = "https://github.com/go-bazzinga/yral-metadata.git" }
-yral-metadata-types = { git = "https://github.com/go-bazzinga/yral-metadata.git" }
+yral-metadata-client = { git = "https://github.com/go-bazzinga/yral-metadata.git", rev = "258a51b4c5d1152e3c045b747865eea8b6fd3096" }
+yral-metadata-types = { git = "https://github.com/go-bazzinga/yral-metadata.git", rev = "258a51b4c5d1152e3c045b747865eea8b6fd3096" }
 config = { version = "0.14.0", features = ["toml"] }
 serde_with = "3.7.0"
 thiserror = "1.0.58"
