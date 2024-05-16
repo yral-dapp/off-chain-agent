@@ -80,15 +80,17 @@ pub async fn transfer_hotornot_token_and_post_to_yral(
     // ‼️‼️comment below line in mainnet‼️‼️
     // agent.fetch_root_key().await.unwrap();
 
-    transfer_tokens_and_posts(
+    match transfer_tokens_and_posts(
         &agent,
         from_account_canister_id.unwrap(),
         to_account,
         to_account_canister_id.unwrap(),
     )
-    .await;
-
-    (StatusCode::OK, "Hot Or Not transfer - OK")
+    .await
+    {
+        Ok(_) => (StatusCode::OK, "Hot Or Not transfer - OK"),
+        Err(error) => (StatusCode::BAD_REQUEST, error.as_ref()),
+    }
 }
 
 async fn get_canister_id_from_metadata(
