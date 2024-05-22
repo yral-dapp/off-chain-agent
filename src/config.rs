@@ -6,6 +6,9 @@ use serde_with::serde_as;
 #[derive(Deserialize, Clone)]
 pub struct AppConfig {
     pub yral_metadata_token: String,
+    pub google_sa_key: String,
+    pub ml_server_auth_token: String,
+    pub upstash_vector_rest_token: String,
 }
 
 impl AppConfig {
