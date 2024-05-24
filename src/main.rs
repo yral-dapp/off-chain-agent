@@ -57,8 +57,6 @@ async fn main() -> Result<()> {
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
 
-    call_predict().await;
-
     // build our application with a route
     let http = Router::new()
         .route("/", get(hello_work_handler))

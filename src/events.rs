@@ -178,22 +178,22 @@ pub mod ml_server {
 }
 
 pub async fn call_predict() -> Html<&'static str> {
-    let pem = match std::fs::read_to_string(
-        "/Users/komalsai/Library/Application Support/mkcert/rootCA.pem",
-    ) {
-        Ok(pem) => pem,
-        Err(e) => {
-            error!("Failed to read rootCA.pem: {}", e);
-            return Html("Failed to read rootCA.pem");
-        }
-    };
-    let ca = Certificate::from_pem(pem);
+    // let pem = match std::fs::read_to_string(
+    //     "/Users/komalsai/Library/Application Support/mkcert/rootCA.pem",
+    // ) {
+    //     Ok(pem) => pem,
+    //     Err(e) => {
+    //         error!("Failed to read rootCA.pem: {}", e);
+    //         return Html("Failed to read rootCA.pem");
+    //     }
+    // };
+    // let ca = Certificate::from_pem(pem);
 
-    let tls = ClientTlsConfig::new().ca_certificate(ca);
+    // let tls = ClientTlsConfig::new().ca_certificate(ca);
 
-    let channel = match Channel::from_static("https://2a09:8280:1::36:3aa2:0:50051")
-        .tls_config(tls)
-        .unwrap()
+    let channel = match Channel::from_static("https://yral-ml-server-test.fly.dev:443")
+        // .tls_config(tls)
+        // .unwrap()
         .connect()
         .await
     {
