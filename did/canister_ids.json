@@ -1,0 +1,20 @@
+{
+  "configuration": {
+    "ic": "efsfj-sqaaa-aaaap-qatwa-cai"
+  },
+  "data_backup": {
+    "ic": "jwktp-qyaaa-aaaag-abcfa-cai"
+  },
+  "individual_user_template": {
+    "ic": "dc47w-kaaaa-aaaak-qav3q-cai"
+  },
+  "platform_orchestrator": {
+    "ic": "74zq4-iqaaa-aaaam-ab53a-cai"
+  },
+  "post_cache": {
+    "ic": "zyajx-3yaaa-aaaag-acoga-cai"
+  },
+  "user_index": {
+    "ic": "rimrc-piaaa-aaaao-aaljq-cai"
+  }
+}
