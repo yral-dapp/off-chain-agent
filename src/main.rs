@@ -3,12 +3,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::http::StatusCode;
-use axum::{response::Html, routing::get, Router};
+use axum::{extract::Json, response::Html, routing::get, routing::post, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use reqwest::Url;
+use serde_json::Value;
 use tower::make::Shared;
 use tower::steer::Steer;
 use tower::ServiceExt;
@@ -60,6 +61,7 @@ async fn main() -> Result<()> {
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
+        .route("/cf_webhook", post(cf_stream_webhook_handler))
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .with_state(shared_state)
         .map_err(axum::BoxError::from)
@@ -123,4 +125,37 @@ async fn health_handler() -> (StatusCode, &'static str) {
     log::error!("Health check");
 
     (StatusCode::OK, "OK")
+}
+
+use serde::Deserialize;
+
+#[derive(Deserialize, Debug)]
+struct WebhookPayload {
+    uid: String,
+    status: Status,
+    meta: Meta
+    // Add other fields as needed
+}
+
+
+#[derive(Deserialize, Debug)]
+struct Status{
+    state: String
+}
+
+
+#[derive(Deserialize, Debug)]
+struct Meta {
+    creator: String,
+    #[serde(rename = "fileName")]
+    file_name: String,
+
+}
+
+
+async fn cf_stream_webhook_handler(Json(payload): Json<Value>) {
+    let payload: WebhookPayload = serde_json::from_value(payload).unwrap();
+    println!("Status: {}", payload.status.state);
+    println!("Meta: {:?}", payload.meta);
+    
 }
