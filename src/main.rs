@@ -2,10 +2,12 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::handler::Handler;
+use anyhow::{anyhow, Context, Result};
+// use axum::debug_handler;
+// use axum::handler::Handler;
 use axum::{
-    extract::Json, extract::State, http::StatusCode, response::Html,
-    routing::get, routing::post, Router,
+    extract::Json, extract::State, http::StatusCode, response::Html, routing::get, routing::post,
+    Router,
 };
 use candid::Principal;
 // use crate::canister::{authenticated_canisters, Canisters};
@@ -29,7 +31,8 @@ use crate::canister::individual_user_template::IndividualUserTemplate;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
-use error::*;
+// use error::*;
+use error::AppError;
 
 mod auth;
 pub mod canister;
@@ -82,16 +85,18 @@ impl AppState {
     pub async fn get_individual_canister_by_user_principal(
         &self,
         user_principal: Principal,
-    ) -> Result<Principal, Box<dyn std::error::Error>> {
+    ) -> Result<Principal> {
         let meta = self
             .yral_metadata_client
             .get_user_metadata(user_principal)
-            .await?;
+            .await
+            .context("Failed to get user_metadata from yral_metadata_client")?;
 
-        if let Some(meta) = meta {
-            Ok(meta.user_canister_id)
-        } else {
-            Err("get_individual_canister_by_user_principal".into())
+        match meta {
+            Some(meta) => Ok(meta.user_canister_id),
+            None => Err(anyhow!(
+                "user metadata does not exist in yral_metadata_service"
+            )),
         }
     }
 
@@ -207,23 +212,40 @@ struct Meta {
     post_id: String,
 }
 
-async fn cf_stream_webhook_handler(State(state): State<Arc<AppState>>, Json(payload): Json<Value>) {
+// #[debug_handler]
+async fn cf_stream_webhook_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Value>,
+) -> Result<(), AppError> {
     let yral_metadata_client = state.yral_metadata_client.clone();
+
     let payload: WebhookPayload = serde_json::from_value(payload).unwrap();
-    let post_id: u64 = payload.meta.post_id.parse().unwrap();
+
+    let post_id: u64 = payload
+        .meta
+        .post_id
+        .parse()
+        .context("Failed to get user_metadata from yral_metadata_client")?;
 
     if let Ok(user_principal) = payload.meta.creator.parse::<Principal>() {
-        let meta_result = yral_metadata_client.get_user_metadata(user_principal).await;
-        if let Ok(Some(meta)) = meta_result {
-            if let Ok(user_canister_id) = state
-                .get_individual_canister_by_user_principal(meta.user_canister_id)
-                .await
-            {
-                let user = state.individual_user(user_canister_id);
-                user.update_post_as_ready_to_view(post_id).await;
-            } else {
-                panic!("Could not extract UserMetadata");
-            };
-        };
-    };
+        let meta = yral_metadata_client
+            .get_user_metadata(user_principal)
+            .await
+            .context("yral_metadata - could not connect to client")?
+            .context("yral_metadata has value None")?;
+
+        let user_canister_id = state
+            .get_individual_canister_by_user_principal(meta.user_canister_id)
+            .await
+            .context("Failed to get user_canister_id")?;
+
+        let user = state.individual_user(user_canister_id);
+        let _ = user
+            .update_post_as_ready_to_view(post_id)
+            .await
+            .context("Failed to update post status")?;
+        println!("payload {meta:?}");
+    }
+
+    Ok(())
 }

@@ -43,6 +43,7 @@ config = { version = "0.14.0", features = ["toml"] }
 serde_with = "3.7.0"
 thiserror = "1.0.58"
 env_logger = "0.11.3"
+anyhow = "1.0.86"
 # yral-metadata-types = { git = "https://github.com/go-bazzinga/yral-metadata", rev = "c2c5d254ac273681a66966d62b6f01785679a1be", default-features = false }
 
 
