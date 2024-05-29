@@ -2164,6 +2164,7 @@ dependencies = [
  "reqwest 0.12.3",
  "rust-s3",
  "serde",
+ "serde_bytes",
  "serde_json",
  "serde_with",
  "stringreader",

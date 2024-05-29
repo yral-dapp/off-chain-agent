@@ -15,6 +15,7 @@ rust-s3 = { version = "0.33.0", features = [
     "tokio-rustls-tls",
 ], default-features = false }
 serde = "1.0.197"
+serde_bytes = "0.11.14"
 serde_json = "1.0.114"
 stringreader = "0.1.1"
 tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread", "time"] }
@@ -42,6 +43,8 @@ config = { version = "0.14.0", features = ["toml"] }
 serde_with = "3.7.0"
 thiserror = "1.0.58"
 env_logger = "0.11.3"
+# yral-metadata-types = { git = "https://github.com/go-bazzinga/yral-metadata", rev = "c2c5d254ac273681a66966d62b6f01785679a1be", default-features = false }
+
 
 [build-dependencies]
 serde = { version = "1.0", features = ["derive"] }

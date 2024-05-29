@@ -2,23 +2,30 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::http::StatusCode;
-use axum::{extract::Json, response::Html, routing::get, routing::post, Router};
+use axum::handler::Handler;
+use axum::{
+    extract::Json, extract::State, http::StatusCode, response::Html,
+    routing::get, routing::post, Router,
+};
+use candid::Principal;
+// use crate::canister::{authenticated_canisters, Canisters};
+
 use config::AppConfig;
+use consts::YRAL_METADATA_URL;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
-use reqwest::Url;
+// use reqwest::Url;
 use serde_json::Value;
 use tower::make::Shared;
 use tower::steer::Steer;
 use tower::ServiceExt;
-use yral_metadata_client::consts::DEFAULT_API_URL;
 use yral_metadata_client::MetadataClient;
 
 use crate::auth::{check_auth_grpc, AuthBearer};
 use crate::canister::canisters_list_handler;
-use crate::canister::reclaim_canisters::reclaim_canisters_handler;
+use crate::canister::individual_user_template::IndividualUserTemplate;
+// use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
@@ -32,16 +39,66 @@ mod error;
 mod events;
 mod types;
 
+use ic_agent::Agent;
+
+#[derive(Clone)]
 struct AppState {
+    agent: ic_agent::Agent,
     yral_metadata_client: MetadataClient<true>,
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
-    let metadata_client = MetadataClient::with_base_url(Url::parse(DEFAULT_API_URL).unwrap())
-        .with_jwt_token(conf.yral_metadata_token.clone());
-    metadata_client
+    MetadataClient::with_base_url(YRAL_METADATA_URL.clone())
+        .with_jwt_token(conf.yral_metadata_token.clone())
 }
 
+pub fn init_agent() -> Agent {
+    let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+
+    let identity = match ic_agent::identity::BasicIdentity::from_pem(
+        stringreader::StringReader::new(pk.as_str()),
+    ) {
+        Ok(identity) => identity,
+        Err(err) => {
+            panic!("Unable to create identity, error: {:?}", err);
+        }
+    };
+
+    let agent = match Agent::builder()
+        .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
+        .with_identity(identity)
+        .build()
+    {
+        Ok(agent) => agent,
+        Err(err) => {
+            panic!("Unable to create agent, error: {:?}", err);
+        }
+    };
+
+    agent
+}
+
+impl AppState {
+    pub async fn get_individual_canister_by_user_principal(
+        &self,
+        user_principal: Principal,
+    ) -> Result<Principal, Box<dyn std::error::Error>> {
+        let meta = self
+            .yral_metadata_client
+            .get_user_metadata(user_principal)
+            .await?;
+
+        if let Some(meta) = meta {
+            Ok(meta.user_canister_id)
+        } else {
+            Err("get_individual_canister_by_user_principal".into())
+        }
+    }
+
+    pub fn individual_user(&self, user_canister: Principal) -> IndividualUserTemplate<'_> {
+        IndividualUserTemplate(user_canister, &self.agent)
+    }
+}
 #[tokio::main]
 async fn main() -> Result<()> {
     let conf = AppConfig::load()?;
@@ -53,6 +110,7 @@ async fn main() -> Result<()> {
 
     let shared_state = Arc::new(AppState {
         yral_metadata_client: init_yral_metadata_client(&conf),
+        agent: init_agent(),
     });
 
     // build our application with a route
@@ -133,29 +191,39 @@ use serde::Deserialize;
 struct WebhookPayload {
     uid: String,
     status: Status,
-    meta: Meta
-    // Add other fields as needed
+    meta: Meta,
 }
-
 
 #[derive(Deserialize, Debug)]
-struct Status{
-    state: String
+struct Status {
+    state: String,
 }
-
 
 #[derive(Deserialize, Debug)]
 struct Meta {
     creator: String,
     #[serde(rename = "fileName")]
     file_name: String,
-
+    post_id: String,
 }
 
-
-async fn cf_stream_webhook_handler(Json(payload): Json<Value>) {
+async fn cf_stream_webhook_handler(State(state): State<Arc<AppState>>, Json(payload): Json<Value>) {
+    let yral_metadata_client = state.yral_metadata_client.clone();
     let payload: WebhookPayload = serde_json::from_value(payload).unwrap();
-    println!("Status: {}", payload.status.state);
-    println!("Meta: {:?}", payload.meta);
-    
+    let post_id: u64 = payload.meta.post_id.parse().unwrap();
+
+    if let Ok(user_principal) = payload.meta.creator.parse::<Principal>() {
+        let meta_result = yral_metadata_client.get_user_metadata(user_principal).await;
+        if let Ok(Some(meta)) = meta_result {
+            if let Ok(user_canister_id) = state
+                .get_individual_canister_by_user_principal(meta.user_canister_id)
+                .await
+            {
+                let user = state.individual_user(user_canister_id);
+                user.update_post_as_ready_to_view(post_id).await;
+            } else {
+                panic!("Could not extract UserMetadata");
+            };
+        };
+    };
 }
