@@ -42,6 +42,7 @@ config = { version = "0.14.0", features = ["toml"] }
 serde_with = "3.7.0"
 thiserror = "1.0.58"
 env_logger = "0.11.3"
+anyhow = "1.0.86"
 
 [build-dependencies]
 tonic-build = "0.11"

@@ -55,7 +55,7 @@ impl WarehouseEvents for WarehouseEventsService {
     }
 }
 
-async fn get_access_token() -> String {
+pub async fn get_access_token() -> String {
     let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
 
     // Load your service account key

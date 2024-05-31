@@ -2,12 +2,14 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use anyhow::{anyhow, Context, Result};
 use axum::http::StatusCode;
 use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
+use report::{create_subscription_handler, report_handler};
 use reqwest::Url;
 use tower::make::Shared;
 use tower::steer::Steer;
@@ -29,6 +31,7 @@ mod config;
 mod consts;
 mod error;
 mod events;
+mod report;
 mod types;
 
 struct AppState {
@@ -61,6 +64,8 @@ async fn main() -> Result<()> {
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
+        .route("/report", get(report_handler))
+        .route("/subscribe", get(create_subscription_handler))
         .with_state(shared_state)
         .map_err(axum::BoxError::from)
         .boxed_clone();
