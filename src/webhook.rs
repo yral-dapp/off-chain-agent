@@ -1,16 +1,17 @@
+use axum::{debug_handler, response::IntoResponse};
+use http::StatusCode;
+use crate::{app_state::AppState, error::AppError};
+use crate::consts::SHARED_SECRET;
+use anyhow::{anyhow, Context, Result};
+use axum::{http::HeaderMap,response::Response, extract::State};
 
-
-// use axum::debug_handler;
-use anyhow::{ Context, Result};
-use axum::{extract::Json, extract::State};
-use serde_json::Value;
-use serde::Deserialize;
-use std::sync::Arc;
 use candid::Principal;
+// use ic_agent::agent::http_transport::reqwest_transport::reqwest::Request;
+use serde::Deserialize;
+use signature::{verify_signature, WebhookSignature};
+use std::sync::Arc;
 
-use crate::error::AppError;
-use crate::app_state::AppState;
-
+mod signature;
 
 #[derive(Deserialize, Debug)]
 struct WebhookPayload {
@@ -32,14 +33,38 @@ struct Meta {
     post_id: String,
 }
 
-// #[debug_handler]
+#[debug_handler]
 pub async fn cf_stream_webhook_handler(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<Value>,
-) -> Result<(), AppError> {
+    headers: HeaderMap,
+    body: String,
+) -> Result<Response, AppError>  {
+    // verify the webhook first.
+    let secret: String = SHARED_SECRET.clone();
+
+    // Get the Webhook-Signature header
+    let signature_header = headers
+        .get("Webhook-Signature")
+        .context("no header Webhook-Signature")?;
+
+    // let signature_header = header_value;
+    // Extract the value from the HeaderValue
+    let signature = signature_header
+        .to_str()
+        .map_err(|_err| anyhow!("Invalid Webhook-Signature header"))?;
+
+    let webhook_signature: WebhookSignature = signature.parse().unwrap();
+
+    let verified = verify_signature(secret.as_str(), &webhook_signature, body.as_str());
+
+    if !verified {
+        return Err(anyhow!("Unauthorized"))?;
+    }
+
+    // if webhook is verified, continue
     let yral_metadata_client = state.yral_metadata_client.clone();
 
-    let payload: WebhookPayload = serde_json::from_value(payload).unwrap();
+    let payload: WebhookPayload = serde_json::from_str(&body).unwrap();
 
     let post_id: u64 = payload
         .meta
@@ -67,5 +92,5 @@ pub async fn cf_stream_webhook_handler(
         println!("payload {meta:?}");
     }
 
-    Ok(())
+    Ok((StatusCode::OK).into_response())
 }

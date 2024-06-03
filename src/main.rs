@@ -2,7 +2,7 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 // use axum::handler::Handler;
 use axum::{
     http::StatusCode, response::Html, routing::get, routing::post,
@@ -61,6 +61,7 @@ async fn main() -> Result<()> {
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
         .route("/cf_webhook", post(cf_stream_webhook_handler))
+        // .route_layer(axum::middleware::from_fn(verify_sig_webhook))
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .with_state(shared_state)
         .map_err(axum::BoxError::from)
