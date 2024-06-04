@@ -1,9 +1,10 @@
-use axum::{debug_handler, response::IntoResponse};
-use http::StatusCode;
-use crate::{app_state::AppState, error::AppError};
 use crate::consts::SHARED_SECRET;
+use crate::{app_state::AppState, error::AppError};
 use anyhow::{anyhow, Context, Result};
-use axum::{http::HeaderMap,response::Response, extract::State};
+use axum::{debug_handler, response::IntoResponse};
+use axum::{extract::State, http::HeaderMap, response::Response};
+use http::StatusCode;
+use redis::AsyncCommands;
 
 use candid::Principal;
 // use ic_agent::agent::http_transport::reqwest_transport::reqwest::Request;
@@ -38,7 +39,7 @@ pub async fn cf_stream_webhook_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: String,
-) -> Result<Response, AppError>  {
+) -> Result<Response, AppError> {
     // verify the webhook first.
     let secret: String = SHARED_SECRET.clone();
 
@@ -63,8 +64,12 @@ pub async fn cf_stream_webhook_handler(
 
     // if webhook is verified, continue
     let yral_metadata_client = state.yral_metadata_client.clone();
+    let mut redis_conn = state.redis.get().await?.clone();
 
     let payload: WebhookPayload = serde_json::from_str(&body).unwrap();
+
+    // set the entry to true - indicating the webhook was received.
+    redis_conn.set(payload.uid, true).await?;
 
     let post_id: u64 = payload
         .meta

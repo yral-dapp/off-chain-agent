@@ -6,17 +6,21 @@ use ic_agent::Agent;
 use std::env;
 use yral_metadata_client::MetadataClient;
 
+pub type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
+
 #[derive(Clone)]
 pub struct AppState {
     pub agent: ic_agent::Agent,
+    pub redis: RedisPool,
     pub yral_metadata_client: MetadataClient<true>,
 }
 
 impl AppState {
-    pub fn new(app_config: AppConfig) -> Self {
+    pub async fn new(app_config: AppConfig) -> Self {
         AppState {
             yral_metadata_client: init_yral_metadata_client(&app_config),
             agent: init_agent(),
+            redis: init_redis(&app_config).await,
         }
     }
 
@@ -41,6 +45,12 @@ impl AppState {
     pub fn individual_user(&self, user_canister: Principal) -> IndividualUserTemplate<'_> {
         IndividualUserTemplate(user_canister, &self.agent)
     }
+}
+
+pub async fn init_redis(conf: &AppConfig) -> RedisPool {
+    let manager = bb8_redis::RedisConnectionManager::new(conf.redis_url.clone())
+        .expect("failed to open connection to redis");
+    RedisPool::builder().build(manager).await.unwrap()
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {

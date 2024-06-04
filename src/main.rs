@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
         .target(Target::Stdout)
         .init();
 
-    let shared_state = Arc::new(AppState::new(conf.clone()));
+    let shared_state = Arc::new(AppState::new(conf.clone()).await);
 
     // build our application with a route
     let http = Router::new()
