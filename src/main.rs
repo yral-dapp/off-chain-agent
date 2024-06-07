@@ -3,13 +3,15 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
+use auth::check_auth_grpc_test;
 use axum::http::StatusCode;
+use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
-use report::{create_subscription_handler, report_handler};
+use report::{report_approved_handler, report_handler};
 use reqwest::Url;
 use tower::make::Shared;
 use tower::steer::Steer;
@@ -23,6 +25,8 @@ use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
+use crate::report::off_chain::off_chain_server::OffChainServer;
+use crate::report::{off_chain, OffChainService};
 use error::*;
 
 mod auth;
@@ -64,8 +68,7 @@ async fn main() -> Result<()> {
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
-        .route("/report", get(report_handler))
-        .route("/subscribe", get(create_subscription_handler))
+        .route("/report-approved", post(report_approved_handler))
         .with_state(shared_state)
         .map_err(axum::BoxError::from)
         .boxed_clone();
@@ -80,6 +83,10 @@ async fn main() -> Result<()> {
         .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
             WarehouseEventsService {},
             check_auth_grpc,
+        )))
+        .add_service(tonic_web::enable(OffChainServer::with_interceptor(
+            OffChainService {},
+            check_auth_grpc_test, // TODO: change to check_auth_grpc
         )))
         .add_service(reflection_service)
         .into_service()

@@ -4,7 +4,7 @@
 #
 
 app = 'icp-off-chain-agent-komal'
-primary_region = 'cdg'
+primary_region = 'sin'
 kill_signal = 'SIGINT'
 kill_timeout = '5s'
 
@@ -13,26 +13,11 @@ kill_timeout = '5s'
 [env]
 PORT = '8080'
 
-#[http_service]
-#internal_port = 8080
-#force_https = true
-#auto_stop_machines = true
-#auto_start_machines = true
-#min_machines_running = 1
-#processes = ['app']
-
-#[[http_service.checks]]
-#path = '/healthz'
-
-
-#[[services.ports]]
-#port = 80
-#handlers = ['http']
 [processes]
 # The command below is used to launch a Rails server; be sure to
 # replace with the command you're using to launch your server.
 web = "./icp-off-chain-agent"
-cron = "supercronic /app/crontab"
+# cron = "supercronic /app/crontab"
 
 [[services]]
 internal_port = 50051
@@ -41,10 +26,8 @@ processes = ["web"]
 
 [[services.ports]]
 handlers = ["tls"]
+tls_options = { "alpn" = ["h2"], "versions" = ["TLSv1.2", "TLSv1.3"] }
 port = 443
-
-[services.ports.tls_options]
-alpn = ["h2"]
 
 [services.concurrency]
 hard_limit = 25
