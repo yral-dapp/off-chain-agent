@@ -194,8 +194,8 @@ pub async fn report_approved_handler(
     headers: HeaderMap,
     body: String,
 ) -> Result<(), AppError> {
-    // log::error!("report_approved_handler: headers: {:?}", headers);
-    // log::error!("report_approved_handler: body: {:?}", body);
+    log::error!("report_approved_handler: headers: {:?}", headers);
+    log::error!("report_approved_handler: body: {:?}", body);
 
     // authenticate the request
 
@@ -221,7 +221,9 @@ pub async fn report_approved_handler(
     let res_body = res.text().await?;
     let jwt: GoogleJWT = serde_json::from_str(&res_body)?;
 
-    if jwt.aud != "https://icp-off-chain-agent-komal.fly.dev/report-approved"
+    log::error!("report_approved_handler: jwt: {:?}", jwt);
+
+    if jwt.aud != "https://icp-off-chain-agent.fly.dev/report-approved"
         && jwt.email != "events-bq@hot-or-not-feed-intelligence.iam.gserviceaccount.com"
     {
         return Err(anyhow::anyhow!("Invalid JWT").into());
