@@ -2,12 +2,16 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use anyhow::{anyhow, Context, Result};
+use auth::check_auth_grpc_test;
 use axum::http::StatusCode;
+use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
+use report::report_approved_handler;
 use reqwest::Url;
 use tower::make::Shared;
 use tower::steer::Steer;
@@ -21,25 +25,21 @@ use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
+use crate::report::off_chain::off_chain_server::OffChainServer;
+use crate::report::{off_chain, OffChainService};
 use error::*;
 
+mod app_state;
 mod auth;
 pub mod canister;
 mod config;
 mod consts;
 mod error;
 mod events;
+mod report;
 mod types;
 
-struct AppState {
-    yral_metadata_client: MetadataClient<true>,
-}
-
-pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
-    let metadata_client = MetadataClient::with_base_url(Url::parse(DEFAULT_API_URL).unwrap())
-        .with_jwt_token(conf.yral_metadata_token.clone());
-    metadata_client
-}
+use app_state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -50,9 +50,7 @@ async fn main() -> Result<()> {
         .target(Target::Stdout)
         .init();
 
-    let shared_state = Arc::new(AppState {
-        yral_metadata_client: init_yral_metadata_client(&conf),
-    });
+    let shared_state = Arc::new(AppState::new(conf.clone()).await);
 
     // build our application with a route
     let http = Router::new()
@@ -61,6 +59,7 @@ async fn main() -> Result<()> {
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
+        .route("/report-approved", post(report_approved_handler))
         .with_state(shared_state)
         .map_err(axum::BoxError::from)
         .boxed_clone();
@@ -75,6 +74,10 @@ async fn main() -> Result<()> {
         .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
             WarehouseEventsService {},
             check_auth_grpc,
+        )))
+        .add_service(tonic_web::enable(OffChainServer::with_interceptor(
+            OffChainService {},
+            check_auth_grpc_test, // TODO: change to check_auth_grpc
         )))
         .add_service(reflection_service)
         .into_service()

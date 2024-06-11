@@ -66,3 +66,7 @@ pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
         _ => Err(Status::unauthenticated("No valid auth token")),
     }
 }
+
+pub fn check_auth_grpc_test(req: Request<()>) -> Result<Request<()>, Status> {
+    Ok(req)
+}
