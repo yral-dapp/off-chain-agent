@@ -1,9 +1,15 @@
-use std::{env, fmt::format};
+use std::{env, fmt::format, sync::Arc};
 
-use crate::AppError;
+use crate::{
+    app_state::AppState,
+    canister::individual_user_template::{PostStatus, Result5},
+    consts::GOOGLE_CHAT_REPORT_SPACE_URL,
+    AppError,
+};
 use anyhow::{Context, Result};
-use axum::Json;
+use axum::{extract::State, Json};
 use axum_extra::TypedHeader;
+use candid::Principal;
 use headers::{
     authorization::{Basic, Bearer},
     Authorization,
@@ -34,10 +40,6 @@ impl OffChain for OffChainService {
         request: tonic::Request<ReportPostRequest>,
     ) -> core::result::Result<tonic::Response<Empty>, tonic::Status> {
         let request = request.into_inner();
-        let request_url = "https://chat.googleapis.com/v1/spaces/AAAA1yDLYO4/messages";
-
-        let token = get_chat_access_token().await;
-        let client = Client::new();
 
         let text_str = format!(
             "reporter_id: {} \n publisher_id: {} \n publisher_canister_id: {} \n post_id: {} \n video_id: {} \n reason: {} \n video_url: {}",
@@ -61,6 +63,14 @@ impl OffChain for OffChainService {
                         {
                             "buttonList": {
                                 "buttons": [
+                                    {
+                                    "text": "View video",
+                                    "onClick": {
+                                        "openLink": {
+                                        "url": request.video_url
+                                        }
+                                    }
+                                    },
                                     {
                                     "text": "Ban Post",
                                     "onClick": {
@@ -86,24 +96,14 @@ impl OffChain for OffChainService {
             ]
         });
 
-        let response = client
-            .post(request_url)
-            .bearer_auth(token)
-            .header("Content-Type", "application/json")
-            .json(&data)
-            .send()
-            .await;
-
-        if response.is_err() {
-            log::error!("Error sending data to Google Chat: {:?}", response);
+        let res = send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, data).await;
+        if res.is_err() {
+            log::error!("Error sending data to Google Chat: {:?}", res);
             return Err(tonic::Status::new(
                 tonic::Code::Unknown,
                 "Error sending data to Google Chat",
             ));
         }
-
-        let body = response.unwrap().text().await.unwrap();
-        log::info!("Response from Google Chat: {:?}", body);
 
         Ok(tonic::Response::new(Empty {}))
     }
@@ -129,12 +129,75 @@ pub async fn get_chat_access_token() -> String {
     }
 }
 
+pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
+    let token = get_chat_access_token().await;
+    let client = Client::new();
+
+    let response = client
+        .post(request_url)
+        .bearer_auth(token)
+        .header("Content-Type", "application/json")
+        .json(&data)
+        .send()
+        .await;
+
+    if response.is_err() {
+        log::error!("Error sending data to Google Chat: {:?}", response);
+        return Err(anyhow::anyhow!("Error sending data to Google Chat").into());
+    }
+
+    let body = response.unwrap().text().await.unwrap();
+
+    Ok(())
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GoogleJWT {
+    aud: String,
+    azp: String,
+    email: String,
+    sub: String,
+    email_verified: String,
+    exp: String,
+    iat: String,
+    iss: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GChatPayload {
+    #[serde(rename = "type")]
+    payload_type: String,
+    #[serde(rename = "eventTime")]
+    event_time: String,
+    message: serde_json::Value,
+    space: serde_json::Value,
+    user: serde_json::Value,
+    action: GChatPayloadAction,
+    common: serde_json::Value,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GChatPayloadAction {
+    #[serde(rename = "actionMethodName")]
+    action_method_name: String,
+    parameters: Vec<GChatPayloadActionParameter>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GChatPayloadActionParameter {
+    key: String,
+    value: String,
+}
+
 pub async fn report_approved_handler(
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<Value>,
+    body: String,
 ) -> Result<(), AppError> {
-    log::error!("report_approved_handler: headers: {:?}", headers);
-    log::error!("report_approved_handler: body: {:?}", body);
+    // log::error!("report_approved_handler: headers: {:?}", headers);
+    // log::error!("report_approved_handler: body: {:?}", body);
+
+    // authenticate the request
 
     let bearer = headers
         .get("Authorization")
@@ -155,12 +218,36 @@ pub async fn report_approved_handler(
         .query(&[("id_token", auth_token)])
         .send()
         .await?;
-    log::info!("report_approved_handler: tokeninfo response: {:?}", res);
     let res_body = res.text().await?;
-    log::info!(
-        "report_approved_handler: tokeninfo response body: {:?}",
-        res_body
-    );
+    let jwt: GoogleJWT = serde_json::from_str(&res_body)?;
+
+    if jwt.aud != "https://icp-off-chain-agent-komal.fly.dev/report-approved"
+        && jwt.email != "events-bq@hot-or-not-feed-intelligence.iam.gserviceaccount.com"
+    {
+        return Err(anyhow::anyhow!("Invalid JWT").into());
+    }
+
+    // Get the data from the body
+    let payload: GChatPayload = serde_json::from_str(&body)?;
+    let view_type = payload.action.parameters[0].value.clone();
+
+    // view_type format : "canister_id post_id(int)"
+    let view_type: Vec<&str> = view_type.split(" ").collect();
+    let canister_id = view_type[0];
+    let canister_principal = Principal::from_text(canister_id)?;
+    let post_id = view_type[1].parse::<u64>()?;
+
+    let user = state.individual_user(canister_principal);
+
+    let res = user
+        .update_post_status(post_id, PostStatus::BannedDueToUserReporting)
+        .await?;
+
+    // send confirmation to Google Chat
+    let confirmation_msg = json!({
+        "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
+    });
+    let _ = send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
 
     Ok(())
 }

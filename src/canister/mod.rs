@@ -10,10 +10,13 @@ use ic_agent::Agent;
 use serde::Serialize;
 
 use self::utils::get_canisters_list_all;
+#[allow(clippy::all)]
+mod generated;
 
 pub mod reclaim_canisters;
 pub mod snapshot;
 pub mod utils;
+pub use generated::*;
 
 #[derive(Serialize)]
 pub struct CanisterListResponse {

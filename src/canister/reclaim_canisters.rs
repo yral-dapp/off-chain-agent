@@ -25,7 +25,6 @@ pub async fn reclaim_canisters_handler(
     let state = Arc::clone(&state);
 
     tokio::spawn(async move {
-        // TODO: change to BasicIdentity
         let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
         let identity = match ic_agent::identity::BasicIdentity::from_pem(

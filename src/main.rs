@@ -11,7 +11,7 @@ use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
-use report::{report_approved_handler, report_handler};
+use report::report_approved_handler;
 use reqwest::Url;
 use tower::make::Shared;
 use tower::steer::Steer;
@@ -29,6 +29,7 @@ use crate::report::off_chain::off_chain_server::OffChainServer;
 use crate::report::{off_chain, OffChainService};
 use error::*;
 
+mod app_state;
 mod auth;
 pub mod canister;
 mod config;
@@ -38,15 +39,7 @@ mod events;
 mod report;
 mod types;
 
-struct AppState {
-    yral_metadata_client: MetadataClient<true>,
-}
-
-pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
-    let metadata_client = MetadataClient::with_base_url(Url::parse(DEFAULT_API_URL).unwrap())
-        .with_jwt_token(conf.yral_metadata_token.clone());
-    metadata_client
-}
+use app_state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -57,9 +50,7 @@ async fn main() -> Result<()> {
         .target(Target::Stdout)
         .init();
 
-    let shared_state = Arc::new(AppState {
-        yral_metadata_client: init_yral_metadata_client(&conf),
-    });
+    let shared_state = Arc::new(AppState::new(conf.clone()).await);
 
     // build our application with a route
     let http = Router::new()
