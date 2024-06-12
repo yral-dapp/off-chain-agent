@@ -1,4 +1,4 @@
-use std::{env, fmt::format, sync::Arc};
+use std::{collections::HashMap, env, fmt::format, sync::Arc};
 
 use crate::{
     app_state::AppState,
@@ -15,6 +15,7 @@ use headers::{
     Authorization,
 };
 use http::HeaderMap;
+use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
 use yup_oauth2::{
@@ -154,12 +155,6 @@ pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
 #[derive(Debug, serde::Deserialize)]
 struct GoogleJWT {
     aud: String,
-    azp: String,
-    email: String,
-    sub: String,
-    email_verified: String,
-    exp: String,
-    iat: String,
     iss: String,
 }
 
@@ -194,8 +189,8 @@ pub async fn report_approved_handler(
     headers: HeaderMap,
     body: String,
 ) -> Result<(), AppError> {
-    log::error!("report_approved_handler: headers: {:?}", headers);
-    log::error!("report_approved_handler: body: {:?}", body);
+    // log::error!("report_approved_handler: headers: {:?}", headers);
+    // log::error!("report_approved_handler: body: {:?}", body);
 
     // authenticate the request
 
@@ -210,22 +205,38 @@ pub async fn report_approved_handler(
         .last()
         .context("Failed to parse Bearer token")?;
 
-    // call GET https://oauth2.googleapis.com/tokeninfo?id_token={BEARER_TOKEN} using reqwest
+    // get PUBLIC_CERTS from GET https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com
 
     let client = reqwest::Client::new();
     let res = client
-        .get("https://oauth2.googleapis.com/tokeninfo")
-        .query(&[("id_token", auth_token)])
+        .get("https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com")
         .send()
         .await?;
     let res_body = res.text().await?;
-    let jwt: GoogleJWT = serde_json::from_str(&res_body)?;
 
-    log::error!("report_approved_handler: jwt: {:?}", jwt);
+    let certs: HashMap<String, String> = serde_json::from_str(&res_body)?;
 
-    if jwt.aud != "https://icp-off-chain-agent.fly.dev/report-approved"
-        && jwt.email != "events-bq@hot-or-not-feed-intelligence.iam.gserviceaccount.com"
-    {
+    // verify the JWT using jsonwebtoken crate
+
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
+    validation.set_issuer(&["chat@system.gserviceaccount.com"]);
+    validation.set_audience(&["82502260393"]);
+
+    let mut valid = false;
+
+    for (k, v) in &certs {
+        let jwt = jsonwebtoken::decode::<GoogleJWT>(
+            auth_token,
+            &DecodingKey::from_rsa_pem(v.as_bytes())?,
+            &validation,
+        );
+
+        if jwt.is_ok() {
+            valid = true;
+            break;
+        }
+    }
+    if !valid {
         return Err(anyhow::anyhow!("Invalid JWT").into());
     }
 
