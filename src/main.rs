@@ -77,7 +77,7 @@ async fn main() -> Result<()> {
         )))
         .add_service(tonic_web::enable(OffChainServer::with_interceptor(
             OffChainService {},
-            check_auth_grpc_test, // TODO: change to check_auth_grpc
+            check_auth_grpc,
         )))
         .add_service(reflection_service)
         .into_service()
