@@ -16,8 +16,8 @@ pub const RECYCLE_THRESHOLD_SECS: u64 = 60 * 10; // TODO: 15 * 24 * 60 * 60; // 
 pub const GOOGLE_CHAT_REPORT_SPACE_URL: &str =
     "https://chat.googleapis.com/v1/spaces/AAAA1yDLYO4/messages";
 
-pub const ML_SERVER_URL: &str = "http://168.220.93.94:50051";
+pub const ML_SERVER_URL: &str = "https://yral-gpu-compute-tasks.fly.dev:443";
 
-pub const UPSTASH_VECTOR_REST_URL: &str = "https://misty-night-5155-fly-vector.upstash.io";
+pub const UPSTASH_VECTOR_REST_URL: &str = "http://misty-night-5155-fly-vector.upstash.io";
 
 pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
