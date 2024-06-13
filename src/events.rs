@@ -206,13 +206,11 @@ pub async fn call_predict() -> Result<(), AppError> {
 
     println!("RESPONSE={:?}", response);
 
+    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/upsert", UPSTASH_VECTOR_REST_URL))
-        .header(
-            "Authorization",
-            format!("Bearer {}", UPSTASH_VECTOR_REST_TOKEN),
-        )
+        .header("Authorization", format!("Bearer {}", upstash_token))
         .json(&serde_json::json!({
             "id": "ee1201fc2a6e45d9a981a3e484a7da0a",
             "vector": response.result
@@ -229,13 +227,11 @@ pub async fn call_predict() -> Result<(), AppError> {
 pub async fn test_uv() -> Result<(), AppError> {
     // Call GET curl $UPSTASH_VECTOR_REST_URL/range -H "Authorization: Bearer $UPSTASH_VECTOR_REST_TOKEN" -d '{ "cursor": "0", "limit": 2, "includeMetadata": true }'
 
+    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
     let client = reqwest::Client::new();
     let response = client
         .get(format!("{}/range", UPSTASH_VECTOR_REST_URL))
-        .header(
-            "Authorization",
-            format!("Bearer {}", UPSTASH_VECTOR_REST_TOKEN),
-        )
+        .header("Authorization", format!("Bearer {}", upstash_token))
         .json(&serde_json::json!({
             "cursor": "0",
             "limit": 2,
