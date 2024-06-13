@@ -228,7 +228,12 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
     let bearer_token = env::var("CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN")?;
 
     let client = reqwest::Client::new();
-    let response = client.get(url).bearer_auth(bearer_token).send().await?;
+    let response = client
+        .get(url)
+        .bearer_auth(bearer_token)
+        .query(&[("asc", "true")])
+        .send()
+        .await?;
     log::info!("Response: {:?}", response);
     if response.status() != 200 {
         log::info!("yo 0");
