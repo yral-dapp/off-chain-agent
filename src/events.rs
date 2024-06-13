@@ -18,8 +18,7 @@ use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::AuthBearer;
 use crate::consts::{
-    BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, ML_SERVER_URL, UPSTASH_VECTOR_REST_TOKEN,
-    UPSTASH_VECTOR_REST_URL,
+    BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, ML_SERVER_URL, UPSTASH_VECTOR_REST_URL,
 };
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::{AppError, AppState};
@@ -156,13 +155,11 @@ async fn process_event(event: Event) {
         "Failed to parse response body: {} for event {:?}",
         body, event
     ));
+    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN").unwrap();
 
     let response = client
         .post(format!("{}/upsert", UPSTASH_VECTOR_REST_URL))
-        .header(
-            "Authorization",
-            format!("Bearer {}", UPSTASH_VECTOR_REST_TOKEN),
-        )
+        .header("Authorization", format!("Bearer {}", upstash_token))
         .json(&serde_json::json!({
             "id": uid,
             "vector": result.result[0]
