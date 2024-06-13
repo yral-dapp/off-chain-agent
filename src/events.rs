@@ -205,6 +205,51 @@ pub async fn call_predict() -> Result<(), AppError> {
     let response: ml_server::VideoEmbedResponse = client.predict(request).await?.into_inner();
 
     println!("RESPONSE={:?}", response);
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/upsert", UPSTASH_VECTOR_REST_URL))
+        .header(
+            "Authorization",
+            format!("Bearer {}", UPSTASH_VECTOR_REST_TOKEN),
+        )
+        .json(&serde_json::json!({
+            "id": "ee1201fc2a6e45d9a981a3e484a7da0a",
+            "vector": response.result
+        }))
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("Failed to upsert vector to upstash").into());
+    }
+
+    Ok(())
+}
+
+pub async fn test_uv() -> Result<(), AppError> {
+    // Call GET curl $UPSTASH_VECTOR_REST_URL/range -H "Authorization: Bearer $UPSTASH_VECTOR_REST_TOKEN" -d '{ "cursor": "0", "limit": 2, "includeMetadata": true }'
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("{}/range", UPSTASH_VECTOR_REST_URL))
+        .header(
+            "Authorization",
+            format!("Bearer {}", UPSTASH_VECTOR_REST_TOKEN),
+        )
+        .json(&serde_json::json!({
+            "cursor": "0",
+            "limit": 2,
+            "includeMetadata": true
+        }))
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("Failed to get range from upstash").into());
+    }
+
+    log::info!("RESPONSE={:?}", response.text().await?);
+
     Ok(())
 }
 
