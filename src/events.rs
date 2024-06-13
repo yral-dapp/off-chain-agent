@@ -178,30 +178,16 @@ pub mod ml_server {
     tonic::include_proto!("ml_server");
 }
 
-pub async fn call_predict() -> Html<&'static str> {
-    let channel = match Channel::from_static("https://yral-gpu-compute-tasks.fly.dev:443")
+pub async fn call_predict() -> Result<(), AppError> {
+    let channel = Channel::from_static("https://yral-gpu-compute-tasks.fly.dev:443")
         .connect()
-        .await
-    {
-        Ok(channel) => channel,
-        Err(e) => {
-            error!("Failed to connect to ML Server: {}", e);
-            return Html("Failed to connect to ML Server");
-        }
-    };
+        .await?;
 
-    let mut off_chain_agent_grpc_auth_token = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ5cmFsLW1sLXNlcnZlciIsImNvbXBhbnkiOiJnb2JhenppbmdhIn0.ObgL1-x_e2yEheD3Xj-nyh6NS2881f2qFyTMA-8ai0XW3bJjMkfqMpZBokubJv2RKhsUGoRdfwukZNobm2xdCA".to_string();
+    let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
-    let token: MetadataValue<_> =
-        match format!("Bearer {}", off_chain_agent_grpc_auth_token).parse() {
-            Ok(token) => token,
-            Err(e) => {
-                error!("Failed to parse token: {}", e);
-                return Html("Failed to parse token");
-            }
-        };
+    let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token).parse()?;
 
     let mut client = ml_server::ml_server_client::MlServerClient::with_interceptor(
         channel,
@@ -215,16 +201,10 @@ pub async fn call_predict() -> Html<&'static str> {
         video_id: "ee1201fc2a6e45d9a981a3e484a7da0a".into(),
     });
 
-    let response: ml_server::VideoEmbedResponse = match client.predict(request).await {
-        Ok(response) => response.into_inner(),
-        Err(e) => {
-            error!("Failed to get response from ML Server: {}", e);
-            return Html("Failed to get response from ML Server");
-        }
-    };
+    let response: ml_server::VideoEmbedResponse = client.predict(request).await?.into_inner();
 
     println!("RESPONSE={:?}", response);
-    Html("Hello, World!")
+    Ok(())
 }
 
 pub async fn test_cloudflare() -> Result<(), AppError> {
@@ -251,7 +231,7 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
     log::info!("yo 1");
     let body = response.text().await?;
     log::info!("yo 2");
-    log::info!("Response body: {:?}", body);
+    log::info!("Response body: {:?}", &body[..700]);
     log::info!("yo 3");
 
     Ok(())
