@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
 
@@ -212,7 +213,7 @@ struct CFStreamResult {
     result: Vec<CFStream>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct CFStream {
     uid: String,
     created: String,
@@ -232,6 +233,7 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
     let mut num_vids = 0;
     let mut start_time = "2021-05-03T00:00:00Z".to_string();
     let mut cnt = 0;
+    let mut hashset: HashSet<String> = HashSet::new();
 
     loop {
         let response = client
@@ -240,9 +242,8 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
             .query(&[("asc", "true"), ("start", &start_time)])
             .send()
             .await?;
-        log::info!("Response: {:?}", response);
+        // log::info!("Response: {:?}", response);
         if response.status() != 200 {
-            log::info!("yo 0");
             log::error!(
                 "Failed to get response from Cloudflare: {:?}",
                 response.text().await?
@@ -252,27 +253,33 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
 
         let body = response.text().await?;
         let result: CFStreamResult = serde_json::from_str(&body)?;
+        let mut result_vec = result.result.clone();
 
-        // print first 5 results and last 5 results
-        log::info!("First 2 results: {:?}", &result.result[..2]);
-        log::info!(
-            "Last 2 results: {:?}",
-            &result.result[result.result.len() - 2..]
-        );
+        // add uids to hashset
+        for r in &result_vec {
+            hashset.insert(r.uid.clone());
+        }
 
-        num_vids += result.result.len();
-        if result.result.len() == 0 {
+        if cnt > 0 {
+            result_vec.remove(0);
+        }
+
+        num_vids += result_vec.len();
+        if result_vec.len() == 0 {
             break;
         }
         let last = &result.result[result.result.len() - 1];
         start_time = last.created.clone();
         cnt += 1;
-        if cnt > 10 {
+
+        if cnt > 10000 {
+            log::info!("Breaking after 10000 iterations");
             break;
         }
     }
 
     log::info!("Total number of videos: {}", num_vids);
+    log::info!("Total number of videos in hashset: {}", hashset.len());
 
     Ok(())
 }
