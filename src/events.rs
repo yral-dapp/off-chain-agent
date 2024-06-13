@@ -260,9 +260,10 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
             response.text().await?
         );
         return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
-    } else {
-        log::error!("Response: {:?}", response.text().await?);
     }
+
+    let body = response.text().await?;
+    log::error!("Response: {:?}", body);
 
     Ok(())
 }
