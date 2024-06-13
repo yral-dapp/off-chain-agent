@@ -220,6 +220,7 @@ struct CFStream {
 
 pub async fn test_cloudflare() -> Result<(), AppError> {
     // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
+    // Query param start 2021-05-03T00:00:00Z
 
     let url = format!(
         "https://api.cloudflare.com/client/v4/accounts/{}/stream",
@@ -228,31 +229,50 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
     let bearer_token = env::var("CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN")?;
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(url)
-        .bearer_auth(bearer_token)
-        .query(&[("asc", "true")])
-        .send()
-        .await?;
-    log::info!("Response: {:?}", response);
-    if response.status() != 200 {
-        log::info!("yo 0");
-        log::error!(
-            "Failed to get response from Cloudflare: {:?}",
-            response.text().await?
+    let mut num_vids = 0;
+    let mut start_time = "2021-05-03T00:00:00Z".to_string();
+    let mut cnt = 0;
+
+    loop {
+        let response = client
+            .get(&url)
+            .bearer_auth(&bearer_token)
+            .query(&[("asc", "true"), ("start", &start_time)])
+            .send()
+            .await?;
+        log::info!("Response: {:?}", response);
+        if response.status() != 200 {
+            log::info!("yo 0");
+            log::error!(
+                "Failed to get response from Cloudflare: {:?}",
+                response.text().await?
+            );
+            return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
+        }
+
+        let body = response.text().await?;
+        let result: CFStreamResult = serde_json::from_str(&body)?;
+
+        // print first 5 results and last 5 results
+        log::info!("First 2 results: {:?}", &result.result[..2]);
+        log::info!(
+            "Last 2 results: {:?}",
+            &result.result[result.result.len() - 2..]
         );
-        return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
+
+        num_vids += result.result.len();
+        if result.result.len() == 0 {
+            break;
+        }
+        let last = &result.result[result.result.len() - 1];
+        start_time = last.created.clone();
+        cnt += 1;
+        if cnt > 10 {
+            break;
+        }
     }
 
-    let body = response.text().await?;
-    let result: CFStreamResult = serde_json::from_str(&body)?;
-
-    // print first 5 results and last 5 results
-    log::info!("First 5 results: {:?}", &result.result[..5]);
-    log::info!(
-        "Last 5 results: {:?}",
-        &result.result[result.result.len() - 5..]
-    );
+    log::info!("Total number of videos: {}", num_vids);
 
     Ok(())
 }
