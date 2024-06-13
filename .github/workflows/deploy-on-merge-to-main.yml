@@ -48,6 +48,7 @@ jobs:
           flyctl secrets set "YRAL_METADATA_TOKEN=$YRAL_METADATA_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "UPSTASH_VECTOR_READ_WRITE_TOKEN=$UPSTASH_VECTOR_READ_WRITE_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "ML_SERVER_JWT_TOKEN=$ML_SERVER_JWT_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN=$CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
@@ -61,6 +62,7 @@ jobs:
           YRAL_METADATA_TOKEN: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_JWT_TOKEN_FOR_OFFCHAIN_AGENT }}
           UPSTASH_VECTOR_READ_WRITE_TOKEN: ${{ secrets.UPSTASH_VECTOR_READ_WRITE_TOKEN }}
           ML_SERVER_JWT_TOKEN: ${{ secrets.ML_SERVER_JWT_TOKEN }}
+          CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN: ${{ secrets.CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only
         env:
