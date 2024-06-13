@@ -210,11 +210,6 @@ pub async fn call_predict() -> Result<(), AppError> {
 #[derive(Debug, Serialize, Deserialize)]
 struct CFStreamResult {
     result: Vec<CFStream>,
-    errors: Vec<String>,
-    messages: Vec<String>,
-    success: bool,
-    range: u64,
-    total: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
