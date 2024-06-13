@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
     );
 
     // run it
-    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50052)); // TODO: 50051
+    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50051));
 
     log::info!("listening on {}", addr);
 
