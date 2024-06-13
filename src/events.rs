@@ -207,6 +207,22 @@ pub async fn call_predict() -> Result<(), AppError> {
     Ok(())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct CFStreamResult {
+    result: Vec<CFStream>,
+    errors: Vec<String>,
+    messages: Vec<String>,
+    success: bool,
+    range: u64,
+    total: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CFStream {
+    uid: String,
+    created: String,
+}
+
 pub async fn test_cloudflare() -> Result<(), AppError> {
     // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
 
@@ -228,11 +244,15 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
         return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
     }
 
-    log::info!("yo 1");
     let body = response.text().await?;
-    log::info!("yo 2");
-    log::info!("Response body: {:?}", &body[..700]);
-    log::info!("yo 3");
+    let result: CFStreamResult = serde_json::from_str(&body)?;
+
+    // print first 5 results and last 5 results
+    log::info!("First 5 results: {:?}", &result.result[..5]);
+    log::info!(
+        "Last 5 results: {:?}",
+        &result.result[result.result.len() - 5..]
+    );
 
     Ok(())
 }
