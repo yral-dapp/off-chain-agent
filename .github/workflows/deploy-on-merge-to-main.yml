@@ -46,6 +46,8 @@ jobs:
           flyctl secrets set "GOOGLE_SA_KEY=$GOOGLE_SA_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "GRPC_AUTH_TOKEN=$GRPC_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "YRAL_METADATA_TOKEN=$YRAL_METADATA_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "UPSTASH_VECTOR_READ_WRITE_TOKEN=$UPSTASH_VECTOR_READ_WRITE_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "ML_SERVER_JWT_TOKEN=$ML_SERVER_JWT_TOKEN" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
@@ -57,6 +59,8 @@ jobs:
           GOOGLE_SA_KEY: ${{ secrets.YRAL_OFF_CHAIN_AGENT_GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON_KEY }}
           GRPC_AUTH_TOKEN: ${{ secrets.OFF_CHAIN_AGENT_GRPC_AUTH_TOKEN }}
           YRAL_METADATA_TOKEN: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_JWT_TOKEN_FOR_OFFCHAIN_AGENT }}
+          UPSTASH_VECTOR_READ_WRITE_TOKEN: ${{ secrets.UPSTASH_VECTOR_READ_WRITE_TOKEN }}
+          ML_SERVER_JWT_TOKEN: ${{ secrets.ML_SERVER_JWT_TOKEN }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only
         env:

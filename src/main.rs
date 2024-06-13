@@ -9,6 +9,7 @@ use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
+use events::test_cloudflare;
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use report::report_approved_handler;
@@ -18,13 +19,14 @@ use tower::steer::Steer;
 use tower::ServiceExt;
 use yral_metadata_client::consts::DEFAULT_API_URL;
 use yral_metadata_client::MetadataClient;
+use yup_oauth2::ServiceAccountAuthenticator;
 
 use crate::auth::{check_auth_grpc, AuthBearer};
 use crate::canister::canisters_list_handler;
 use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
-use crate::events::{warehouse_events, WarehouseEventsService};
+use crate::events::{call_predict, warehouse_events, WarehouseEventsService};
 use crate::report::off_chain::off_chain_server::OffChainServer;
 use crate::report::{off_chain, OffChainService};
 use error::*;
@@ -40,6 +42,10 @@ mod report;
 mod types;
 
 use app_state::AppState;
+// struct AppState {
+//     yral_metadata_client: MetadataClient<true>,
+//     google_sa_key_access_token: String,
+// }
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -58,8 +64,10 @@ async fn main() -> Result<()> {
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
+        // .route("/call_predict", get(call_predict))
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
+        .route("/test-cf", get(test_cloudflare))
         .with_state(shared_state)
         .map_err(axum::BoxError::from)
         .boxed_clone();

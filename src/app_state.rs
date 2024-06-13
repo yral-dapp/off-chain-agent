@@ -5,6 +5,7 @@ use candid::Principal;
 use ic_agent::Agent;
 use std::env;
 use yral_metadata_client::MetadataClient;
+use yup_oauth2::ServiceAccountAuthenticator;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -46,6 +47,26 @@ impl AppState {
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
     MetadataClient::with_base_url(YRAL_METADATA_URL.clone())
         .with_jwt_token(conf.yral_metadata_token.clone())
+}
+
+pub async fn init_google_sa_key_access_token(conf: &AppConfig) -> String {
+    let sa_key_file = conf.google_sa_key.clone();
+
+    // Load service account key
+    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY");
+
+    let auth = ServiceAccountAuthenticator::builder(sa_key)
+        .build()
+        .await
+        .unwrap();
+
+    let scopes = &["https://www.googleapis.com/auth/bigquery.insertdata"];
+    let token = auth.token(scopes).await.unwrap();
+
+    match token.token() {
+        Some(t) => t.to_string(),
+        _ => panic!("No access token found"),
+    }
 }
 
 pub async fn init_agent() -> Agent {
