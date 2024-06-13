@@ -20,3 +20,5 @@ pub const ML_SERVER_URL: &str = "http://168.220.93.94:50051";
 
 pub const UPSTASH_VECTOR_REST_URL: &str = "https://communal-flea-37939-us1-vector.upstash.io";
 pub const UPSTASH_VECTOR_REST_TOKEN: &str = "ABcFMGNvbW11bmFsLWZsZWEtMzc5MzktdXMxYWRtaW5OV0ZrWkRNNVpUTXROamhrTmkwMFl6Vm1MVGxtT1dJdFptVm1OVEZtWmpJeU4yTmw=";
+
+pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";

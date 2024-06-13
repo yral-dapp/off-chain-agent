@@ -17,10 +17,11 @@ use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::AuthBearer;
 use crate::consts::{
-    BIGQUERY_INGESTION_URL, ML_SERVER_URL, UPSTASH_VECTOR_REST_TOKEN, UPSTASH_VECTOR_REST_URL,
+    BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, ML_SERVER_URL, UPSTASH_VECTOR_REST_TOKEN,
+    UPSTASH_VECTOR_REST_URL,
 };
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
-use crate::AppState;
+use crate::{AppError, AppState};
 
 pub mod warehouse_events {
     tonic::include_proto!("warehouse_events");
@@ -239,4 +240,29 @@ pub async fn call_predict() -> Html<&'static str> {
 
     println!("RESPONSE={:?}", response);
     Html("Hello, World!")
+}
+
+pub async fn test_cloudflare() -> Result<(), AppError> {
+    // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
+
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/stream",
+        CLOUDFLARE_ACCOUNT_ID
+    );
+    let bearer_token = env::var("CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN")?;
+
+    let client = reqwest::Client::new();
+    let response = client.get(url).bearer_auth(bearer_token).send().await?;
+    log::info!("Response: {:?}", response);
+    if response.status() != 200 {
+        log::error!(
+            "Failed to get response from Cloudflare: {:?}",
+            response.text().await?
+        );
+        return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
+    } else {
+        log::error!("Response: {:?}", response.text().await?);
+    }
+
+    Ok(())
 }
