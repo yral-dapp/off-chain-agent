@@ -240,6 +240,7 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
     let response = client.get(url).bearer_auth(bearer_token).send().await?;
     log::info!("Response: {:?}", response);
     if response.status() != 200 {
+        log::info!("yo 0");
         log::error!(
             "Failed to get response from Cloudflare: {:?}",
             response.text().await?
@@ -247,8 +248,11 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
         return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
     }
 
+    log::info!("yo 1");
     let body = response.text().await?;
-    log::error!("Response: {:?}", body);
+    log::info!("yo 2");
+    log::info!("Response body: {:?}", body);
+    log::info!("yo 3");
 
     Ok(())
 }
