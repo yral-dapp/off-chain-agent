@@ -1,4 +1,4 @@
-use crate::consts::YRAL_METADATA_URL;
+use crate::consts::{ML_SERVER_URL, YRAL_METADATA_URL};
 use crate::{canister::individual_user_template::IndividualUserTemplate, config::AppConfig};
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -11,6 +11,7 @@ use yup_oauth2::ServiceAccountAuthenticator;
 pub struct AppState {
     pub agent: ic_agent::Agent,
     pub yral_metadata_client: MetadataClient<true>,
+    pub ml_server_grpc_channel: tonic::transport::Channel,
 }
 
 impl AppState {
@@ -18,6 +19,7 @@ impl AppState {
         AppState {
             yral_metadata_client: init_yral_metadata_client(&app_config),
             agent: init_agent().await,
+            ml_server_grpc_channel: init_ml_server_grpc_channel().await,
         }
     }
 
@@ -47,6 +49,13 @@ impl AppState {
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
     MetadataClient::with_base_url(YRAL_METADATA_URL.clone())
         .with_jwt_token(conf.yral_metadata_token.clone())
+}
+
+pub async fn init_ml_server_grpc_channel() -> tonic::transport::Channel {
+    tonic::transport::Channel::from_static(ML_SERVER_URL)
+        .connect()
+        .await
+        .expect("Failed to connect to ML server")
 }
 
 pub async fn init_google_sa_key_access_token(conf: &AppConfig) -> String {

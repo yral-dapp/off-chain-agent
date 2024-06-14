@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
         .route("/report-approved", post(report_approved_handler))
         .route("/test-cf", get(test_cloudflare))
         .route("/test-uv", get(test_uv))
-        .with_state(shared_state)
+        .with_state(shared_state.clone())
         .map_err(axum::BoxError::from)
         .boxed_clone();
 
@@ -81,7 +81,9 @@ async fn main() -> Result<()> {
     let grpc = tonic::transport::Server::builder()
         .accept_http1(true)
         .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
-            WarehouseEventsService {},
+            WarehouseEventsService {
+                shared_state: shared_state.clone(),
+            },
             check_auth_grpc,
         )))
         .add_service(tonic_web::enable(OffChainServer::with_interceptor(

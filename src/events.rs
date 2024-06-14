@@ -3,6 +3,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::extract::State;
 use axum::response::Html;
 use candid::Deserialize;
 use log::{error, info};
@@ -30,7 +31,9 @@ pub mod warehouse_events {
         tonic::include_file_descriptor_set!("warehouse_events_descriptor");
 }
 
-pub struct WarehouseEventsService {}
+pub struct WarehouseEventsService {
+    pub shared_state: Arc<AppState>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Event {
@@ -74,15 +77,20 @@ impl WarehouseEvents for WarehouseEventsService {
             ));
         }
 
+        let shared_state = self.shared_state.clone();
+
         if request.event == "video_upload_successful" {
             tokio::spawn(async move {
                 let params: Value = serde_json::from_str(&request.params).expect("Invalid JSON");
 
-                let res = process_upload_event(Event {
-                    event: request.event,
-                    params,
-                    timestamp,
-                })
+                let res = process_upload_event(
+                    Event {
+                        event: request.event,
+                        params,
+                        timestamp,
+                    },
+                    shared_state,
+                )
                 .await;
                 if res.is_err() {
                     log::error!("Error processing upload event: {:?}", res.err());
@@ -135,18 +143,14 @@ struct EmbeddingResponse {
     result: Vec<Vec<f64>>,
 }
 
-async fn process_upload_event(event: Event) -> Result<(), AppError> {
+async fn process_upload_event(event: Event, shared_state: Arc<AppState>) -> Result<(), AppError> {
     let uid = event.params["video_id"].as_str().unwrap();
     let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
     let op = || async {
-        // map_err to tonic::Status
-        let channel = Channel::from_static(ML_SERVER_URL)
-            .connect()
-            .await
-            .map_err(|e| tonic::Status::new(tonic::Code::Unavailable, e.to_string()))?;
+        let channel = shared_state.clone().ml_server_grpc_channel.clone();
 
         let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
             .parse()
@@ -208,18 +212,13 @@ pub mod ml_server {
     tonic::include_proto!("ml_server");
 }
 
-pub async fn call_predict() -> Result<(), AppError> {
+pub async fn call_predict(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
     let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
     let op = || async {
-        // map_err to tonic::Status
-        let channel = Channel::from_static(ML_SERVER_URL)
-            .connect()
-            .await
-            .map_err(|e| tonic::Status::new(tonic::Code::Unavailable, e.to_string()))?;
-
+        let channel = state.clone().ml_server_grpc_channel.clone();
         let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
             .parse()
             .unwrap();
