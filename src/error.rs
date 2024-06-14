@@ -13,6 +13,7 @@ pub enum Error {
 // pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 // Make our own error that wraps `anyhow::Error`.
+#[derive(Debug)]
 pub struct AppError(anyhow::Error);
 
 // Tell axum how to convert `AppError` into a response.

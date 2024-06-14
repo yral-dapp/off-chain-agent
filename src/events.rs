@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::response::Html;
 use candid::Deserialize;
@@ -73,18 +74,21 @@ impl WarehouseEvents for WarehouseEventsService {
             ));
         }
 
-        // if request.event == "video_upload_successful" {
-        //     tokio::spawn(async move {
-        //         let params: Value = serde_json::from_str(&request.params).expect("Invalid JSON");
+        if request.event == "video_upload_successful" {
+            tokio::spawn(async move {
+                let params: Value = serde_json::from_str(&request.params).expect("Invalid JSON");
 
-        //         process_event(Event {
-        //             event: request.event,
-        //             params,
-        //             timestamp,
-        //         })
-        //         .await;
-        //     });
-        // }
+                let res = process_upload_event(Event {
+                    event: request.event,
+                    params,
+                    timestamp,
+                })
+                .await;
+                if res.is_err() {
+                    log::error!("Error processing upload event: {:?}", res.err());
+                }
+            });
+        }
         Ok(tonic::Response::new(Empty {}))
     }
 }
@@ -131,45 +135,73 @@ struct EmbeddingResponse {
     result: Vec<Vec<f64>>,
 }
 
-async fn process_event(event: Event) {
+async fn process_upload_event(event: Event) -> Result<(), AppError> {
     let uid = event.params["video_id"].as_str().unwrap();
+    let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
+    // removing whitespaces and new lines for proper parsing
+    off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
-    // call ML_SERVER_URL/api/v1/predict_bulk using reqwest
+    let op = || async {
+        // map_err to tonic::Status
+        let channel = Channel::from_static(ML_SERVER_URL)
+            .connect()
+            .await
+            .map_err(|e| tonic::Status::new(tonic::Code::Unavailable, e.to_string()))?;
+
+        let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
+            .parse()
+            .unwrap();
+        let mut client = ml_server::ml_server_client::MlServerClient::with_interceptor(
+            channel,
+            move |mut req: Request<()>| {
+                req.metadata_mut().insert("authorization", token.clone());
+                Ok(req)
+            },
+        );
+        let request = tonic::Request::new(ml_server::VideoEmbedRequest {
+            video_id: uid.into(),
+        });
+        client.predict(request).await
+    };
+
+    // Retry mechanism
+    let retries = 4;
+    let min = Duration::from_secs(60);
+    let max = Duration::from_secs(600);
+    let backoff = exponential_backoff::Backoff::new(retries, min, max);
+
+    let mut response: ml_server::VideoEmbedResponse = Default::default();
+    for duration in &backoff {
+        log::info!("Retrying after {:?}", duration);
+        match op().await {
+            Ok(s) => {
+                response = s.into_inner();
+                break;
+            }
+            Err(_) => tokio::time::sleep(duration).await,
+        }
+    }
+
+    if response.result.is_empty() {
+        return Err(anyhow::anyhow!("Failed to get response from ml_server").into());
+    }
+
+    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
     let client = reqwest::Client::new();
-    let response = client
-        .post(format!("{}/api/v1/predict", ML_SERVER_URL))
-        .json(&serde_json::json!({
-            "video_id": uid
-        }))
-        .send()
-        .await
-        .expect(&format!(
-            "Failed to send request to {} for event {:?}",
-            ML_SERVER_URL, event
-        ));
-    let body = response.text().await.expect(&format!(
-        "Failed to get response body from {} for event {:?}",
-        ML_SERVER_URL, event
-    ));
-    let result: EmbeddingResponse = serde_json::from_str(&body).expect(&format!(
-        "Failed to parse response body: {} for event {:?}",
-        body, event
-    ));
-    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN").unwrap();
-
     let response = client
         .post(format!("{}/upsert", UPSTASH_VECTOR_REST_URL))
         .header("Authorization", format!("Bearer {}", upstash_token))
         .json(&serde_json::json!({
             "id": uid,
-            "vector": result.result[0]
+            "vector": response.result
         }))
         .send()
-        .await
-        .expect(&format!(
-            "Failed to send request to {} for event {:?}",
-            UPSTASH_VECTOR_REST_URL, event
-        ));
+        .await?;
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("Failed to upsert vector to upstash").into());
+    }
+
+    Ok(())
 }
 
 pub mod ml_server {
@@ -177,29 +209,54 @@ pub mod ml_server {
 }
 
 pub async fn call_predict() -> Result<(), AppError> {
-    let channel = Channel::from_static("https://yral-gpu-compute-tasks.fly.dev:443")
-        .connect()
-        .await?;
-
     let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
-    let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token).parse()?;
+    let op = || async {
+        // map_err to tonic::Status
+        let channel = Channel::from_static(ML_SERVER_URL)
+            .connect()
+            .await
+            .map_err(|e| tonic::Status::new(tonic::Code::Unavailable, e.to_string()))?;
 
-    let mut client = ml_server::ml_server_client::MlServerClient::with_interceptor(
-        channel,
-        move |mut req: Request<()>| {
-            req.metadata_mut().insert("authorization", token.clone());
-            Ok(req)
-        },
-    );
+        let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
+            .parse()
+            .unwrap();
+        let mut client = ml_server::ml_server_client::MlServerClient::with_interceptor(
+            channel,
+            move |mut req: Request<()>| {
+                req.metadata_mut().insert("authorization", token.clone());
+                Ok(req)
+            },
+        );
+        let request = tonic::Request::new(ml_server::VideoEmbedRequest {
+            video_id: "ee1201fc2a6e45d9a981a3e484a7da0a".into(),
+        });
+        client.predict(request).await
+    };
 
-    let request = tonic::Request::new(ml_server::VideoEmbedRequest {
-        video_id: "ee1201fc2a6e45d9a981a3e484a7da0a".into(),
-    });
+    // Retry mechanism
+    let retries = 4;
+    let min = Duration::from_secs(60);
+    let max = Duration::from_secs(600);
+    let backoff = exponential_backoff::Backoff::new(retries, min, max);
 
-    let response: ml_server::VideoEmbedResponse = client.predict(request).await?.into_inner();
+    let mut response: ml_server::VideoEmbedResponse = Default::default();
+    for duration in &backoff {
+        log::info!("Retrying after {:?}", duration);
+        match op().await {
+            Ok(s) => {
+                response = s.into_inner();
+                break;
+            }
+            Err(_) => tokio::time::sleep(duration).await,
+        }
+    }
+
+    if response.result.is_empty() {
+        return Err(anyhow::anyhow!("Failed to get response from ml_server").into());
+    }
 
     println!("RESPONSE={:?}", response);
 
@@ -222,8 +279,6 @@ pub async fn call_predict() -> Result<(), AppError> {
 }
 
 pub async fn test_uv() -> Result<(), AppError> {
-    // Call GET curl $UPSTASH_VECTOR_REST_URL/range -H "Authorization: Bearer $UPSTASH_VECTOR_REST_TOKEN" -d '{ "cursor": "0", "limit": 2, "includeMetadata": true }'
-
     let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
     let client = reqwest::Client::new();
     let response = client
@@ -231,7 +286,7 @@ pub async fn test_uv() -> Result<(), AppError> {
         .header("Authorization", format!("Bearer {}", upstash_token))
         .json(&serde_json::json!({
             "cursor": "0",
-            "limit": 2,
+            "limit": 10,
             "includeMetadata": true
         }))
         .send()
