@@ -238,13 +238,20 @@ pub async fn ml_server_predict(uid: &String, ml_server_grpc_channel: Channel) {
 
     let mut response: ml_server::VideoEmbedResponse = Default::default();
     for duration in &backoff {
-        log::info!("Retrying after {:?}", duration);
+        log::info!("Retrying after {:?} for {:?}", duration, uid);
         match op().await {
             Ok(s) => {
                 response = s.into_inner();
                 break;
             }
-            Err(_) => tokio::time::sleep(duration).await,
+            Err(e) => {
+                log::error!(
+                    "Error while fetching response from ml_server for {:?}: {:?}",
+                    uid,
+                    e
+                );
+                tokio::time::sleep(duration).await
+            }
         }
     }
     if response.result.is_empty() {
