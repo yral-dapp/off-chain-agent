@@ -339,9 +339,12 @@ struct CFStream {
     created: String,
 }
 
-pub async fn test_cloudflare() -> Result<(), AppError> {
+pub async fn test_cloudflare(
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<(), AppError> {
     // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
     // Query param start 2021-05-03T00:00:00Z
+    let startdate = params.get("startdate").unwrap().clone();
 
     let url = format!(
         "https://api.cloudflare.com/client/v4/accounts/{}/stream",
@@ -351,7 +354,7 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
 
     let client = reqwest::Client::new();
     let mut num_vids = 0;
-    let mut start_time = "2022-01-01T00:00:00Z".to_string();
+    let mut start_time = startdate;
     let mut cnt = 0;
     let mut hashset: HashSet<String> = HashSet::new();
     let thresh = 20;
@@ -411,31 +414,32 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
 
     log::info!("Total number of videos: {}", num_vids);
     log::info!("Total number of videos in hashset: {}", hashset.len());
+    log::info!("Hashset: {:?}", hashset);
 
     // hit the endpoint for all uids of hashset
     // GET https://icp-off-chain-agent.fly.dev/call_predict_v2?uid=ee1201fc2a6e45d9a981a3e484a7da0a
 
-    let mut cnt = 0;
-    for uid in hashset {
-        let response = client
-            .get(format!(
-                "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
-                uid
-            ))
-            .send()
-            .await?;
-        if response.status() != 200 {
-            log::error!(
-                "Failed to get response from off_chain_agent: {:?}",
-                response.text().await?
-            );
-            return Err(anyhow::anyhow!("Failed to get response from off_chain_agent").into());
-        }
+    // let mut cnt = 0;
+    // for uid in hashset {
+    //     let response = client
+    //         .get(format!(
+    //             "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
+    //             uid
+    //         ))
+    //         .send()
+    //         .await?;
+    //     if response.status() != 200 {
+    //         log::error!(
+    //             "Failed to get response from off_chain_agent: {:?}",
+    //             response.text().await?
+    //         );
+    //         return Err(anyhow::anyhow!("Failed to get response from off_chain_agent").into());
+    //     }
 
-        let body = response.text().await?;
-        // log::info!("Response: {:?}", body);
-        cnt += 1;
-    }
+    //     let body = response.text().await?;
+    //     // log::info!("Response: {:?}", body);
+    //     cnt += 1;
+    // }
 
     Ok(())
 }
