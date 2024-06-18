@@ -419,27 +419,27 @@ pub async fn test_cloudflare(
     // hit the endpoint for all uids of hashset
     // GET https://icp-off-chain-agent.fly.dev/call_predict_v2?uid=ee1201fc2a6e45d9a981a3e484a7da0a
 
-    // let mut cnt = 0;
-    // for uid in hashset {
-    //     let response = client
-    //         .get(format!(
-    //             "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
-    //             uid
-    //         ))
-    //         .send()
-    //         .await?;
-    //     if response.status() != 200 {
-    //         log::error!(
-    //             "Failed to get response from off_chain_agent: {:?}",
-    //             response.text().await?
-    //         );
-    //         return Err(anyhow::anyhow!("Failed to get response from off_chain_agent").into());
-    //     }
+    let mut cnt = 0;
+    for uid in hashset {
+        let response = client
+            .get(format!(
+                "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
+                uid
+            ))
+            .send()
+            .await?;
+        if response.status() != 200 {
+            log::error!(
+                "Failed to get response from off_chain_agent: {:?}",
+                response.text().await?
+            );
+            return Err(anyhow::anyhow!("Failed to get response from off_chain_agent").into());
+        }
 
-    //     let body = response.text().await?;
-    //     // log::info!("Response: {:?}", body);
-    //     cnt += 1;
-    // }
+        // let body = response.text().await?;
+        // log::info!("Response: {:?}", body);
+        cnt += 1;
+    }
 
     Ok(())
 }
