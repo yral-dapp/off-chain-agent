@@ -345,6 +345,7 @@ pub async fn test_cloudflare(
     // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
     // Query param start 2021-05-03T00:00:00Z
     let startdate = params.get("startdate").unwrap().clone();
+    let thresh = params.get("thresh").unwrap().parse::<usize>().unwrap();
 
     let url = format!(
         "https://api.cloudflare.com/client/v4/accounts/{}/stream",
@@ -357,7 +358,6 @@ pub async fn test_cloudflare(
     let mut start_time = startdate;
     let mut cnt = 0;
     let mut hashset: HashSet<String> = HashSet::new();
-    let thresh = 20;
 
     loop {
         let response = client
@@ -414,7 +414,7 @@ pub async fn test_cloudflare(
 
     log::info!("Total number of videos: {}", num_vids);
     log::info!("Total number of videos in hashset: {}", hashset.len());
-    log::info!("Hashset: {:?}", hashset);
+    // log::info!("Hashset: {:?}", hashset);
 
     // hit the endpoint for all uids of hashset
     // GET https://icp-off-chain-agent.fly.dev/call_predict_v2?uid=ee1201fc2a6e45d9a981a3e484a7da0a
