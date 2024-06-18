@@ -443,3 +443,83 @@ pub async fn test_cloudflare(
 
     Ok(())
 }
+
+pub async fn test_cloudflare_v2(
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<(), AppError> {
+    // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
+    // Query param start 2021-05-03T00:00:00Z
+    let startdate = params.get("startdate").unwrap().clone();
+    let thresh = params.get("thresh").unwrap().parse::<usize>().unwrap();
+
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/stream",
+        CLOUDFLARE_ACCOUNT_ID
+    );
+    let bearer_token = env::var("CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN")?;
+
+    let client = reqwest::Client::new();
+    let mut num_vids = 0;
+    let mut start_time = startdate;
+    let mut cnt = 0;
+    let mut hashset: HashSet<String> = HashSet::new();
+
+    loop {
+        let response = client
+            .get(&url)
+            .bearer_auth(&bearer_token)
+            .query(&[("asc", "true"), ("start", &start_time)])
+            .send()
+            .await?;
+        // log::info!("Response: {:?}", response);
+        if response.status() != 200 {
+            log::error!(
+                "Failed to get response from Cloudflare: {:?}",
+                response.text().await?
+            );
+            return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
+        }
+
+        let body = response.text().await?;
+        let result: CFStreamResult = serde_json::from_str(&body)?;
+        let mut result_vec = result.result.clone();
+
+        // add uids to hashset
+        for r in &result_vec {
+            hashset.insert(r.uid.clone());
+
+            if hashset.len() >= thresh {
+                break;
+            }
+        }
+
+        if cnt > 0 {
+            result_vec.remove(0);
+        }
+
+        num_vids += result_vec.len();
+        if result_vec.len() == 0 {
+            break;
+        }
+        let last = &result.result[result.result.len() - 1];
+        start_time = last.created.clone();
+        cnt += 1;
+
+        if cnt > 10000 {
+            log::info!("Breaking after 10000 iterations");
+            break;
+        }
+
+        if hashset.len() >= thresh {
+            // hashset retain only 100 elements
+            log::error!("Last: {:?}", last);
+            break;
+        }
+    }
+
+    log::info!("Total number of videos: {}", num_vids);
+    log::info!("Total number of videos in hashset: {}", hashset.len());
+    // log::info!("Hashset: {:?}", hashset);
+
+    Ok(())
+}
