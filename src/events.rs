@@ -351,7 +351,7 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
 
     let client = reqwest::Client::new();
     let mut num_vids = 0;
-    let mut start_time = "2021-05-03T00:00:00Z".to_string();
+    let mut start_time = "2022-01-01T00:00:00Z".to_string();
     let mut cnt = 0;
     let mut hashset: HashSet<String> = HashSet::new();
     let thresh = 20;
