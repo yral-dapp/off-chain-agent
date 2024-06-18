@@ -9,7 +9,7 @@ use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
-use events::{test_cloudflare, test_uv};
+use events::{call_predict_v2, test_cloudflare, test_uv};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use report::report_approved_handler;
@@ -65,6 +65,7 @@ async fn main() -> Result<()> {
         .route("/start_backup", get(backup_job_handler))
         .route("/canisters_list", get(canisters_list_handler))
         .route("/call_predict", get(call_predict))
+        .route("/call_predict_v2", get(call_predict_v2))
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
         .route("/test-cf", get(test_cloudflare))

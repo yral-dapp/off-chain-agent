@@ -1,27 +1,22 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::State;
-use axum::response::Html;
+use axum::extract::{Query, State};
 use candid::Deserialize;
 use log::{error, info};
 use reqwest::Client;
-use s3::creds::time::serde::timestamp;
 use serde::Serialize;
 use serde_json::Value;
 use tonic::metadata::MetadataValue;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+use tonic::transport::Channel;
 use tonic::Request;
 use yup_oauth2::ServiceAccountAuthenticator;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
-use crate::auth::AuthBearer;
-use crate::consts::{
-    BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, ML_SERVER_URL, UPSTASH_VECTOR_REST_URL,
-};
+use crate::consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, UPSTASH_VECTOR_REST_URL};
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::{AppError, AppState};
 
@@ -212,13 +207,13 @@ pub mod ml_server {
     tonic::include_proto!("ml_server");
 }
 
-pub async fn call_predict(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
-    let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
+pub async fn ml_server_predict(uid: &String, ml_server_grpc_channel: Channel) {
+    let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN").unwrap();
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
     let op = || async {
-        let channel = state.clone().ml_server_grpc_channel.clone();
+        let channel = ml_server_grpc_channel.clone();
         let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
             .parse()
             .unwrap();
@@ -230,7 +225,7 @@ pub async fn call_predict(State(state): State<Arc<AppState>>) -> Result<(), AppE
             },
         );
         let request = tonic::Request::new(ml_server::VideoEmbedRequest {
-            video_id: "ee1201fc2a6e45d9a981a3e484a7da0a".into(),
+            video_id: uid.into(),
         });
         client.predict(request).await
     };
@@ -252,27 +247,53 @@ pub async fn call_predict(State(state): State<Arc<AppState>>) -> Result<(), AppE
             Err(_) => tokio::time::sleep(duration).await,
         }
     }
-
     if response.result.is_empty() {
-        return Err(anyhow::anyhow!("Failed to get response from ml_server").into());
+        log::error!("Failed to get response from ml_server for {:?}", uid);
+        return;
     }
 
-    println!("RESPONSE={:?}", response);
-
-    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
+    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN").unwrap();
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/upsert", UPSTASH_VECTOR_REST_URL))
         .header("Authorization", format!("Bearer {}", upstash_token))
         .json(&serde_json::json!({
-            "id": "ee1201fc2a6e45d9a981a3e484a7da0a",
+            "id": uid,
             "vector": response.result
         }))
         .send()
-        .await?;
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!("Failed to upsert vector to upstash").into());
+        .await;
+    if response.is_err() {
+        log::error!("Failed to upsert vector to upstash");
     }
+    if !response.unwrap().status().is_success() {
+        log::error!("Failed to upsert vector to upstash");
+    } else {
+        log::info!("Successfully upserted vector {:?}", uid);
+    }
+}
+
+pub async fn call_predict_v2(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<(), AppError> {
+    let uid = params.get("uid").unwrap().clone();
+
+    tokio::spawn(async move {
+        ml_server_predict(&uid, state.ml_server_grpc_channel.clone()).await;
+    });
+
+    Ok(())
+}
+
+pub async fn call_predict(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    tokio::spawn(async move {
+        ml_server_predict(
+            &"ee1201fc2a6e45d9a981a3e484a7da0a".to_string(),
+            state.ml_server_grpc_channel.clone(),
+        )
+        .await;
+    });
 
     Ok(())
 }
@@ -285,7 +306,7 @@ pub async fn test_uv() -> Result<(), AppError> {
         .header("Authorization", format!("Bearer {}", upstash_token))
         .json(&serde_json::json!({
             "cursor": "0",
-            "limit": 10,
+            "limit": 30,
             "includeMetadata": true
         }))
         .send()
@@ -326,6 +347,7 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
     let mut start_time = "2021-05-03T00:00:00Z".to_string();
     let mut cnt = 0;
     let mut hashset: HashSet<String> = HashSet::new();
+    let thresh = 20;
 
     loop {
         let response = client
@@ -350,6 +372,10 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
         // add uids to hashset
         for r in &result_vec {
             hashset.insert(r.uid.clone());
+
+            if hashset.len() >= thresh {
+                break;
+            }
         }
 
         if cnt > 0 {
@@ -368,10 +394,41 @@ pub async fn test_cloudflare() -> Result<(), AppError> {
             log::info!("Breaking after 10000 iterations");
             break;
         }
+
+        if hashset.len() >= thresh {
+            // hashset retain only 100 elements
+            log::error!("Last: {:?}", last);
+            break;
+        }
     }
 
     log::info!("Total number of videos: {}", num_vids);
     log::info!("Total number of videos in hashset: {}", hashset.len());
+
+    // hit the endpoint for all uids of hashset
+    // GET https://icp-off-chain-agent.fly.dev/call_predict_v2?uid=ee1201fc2a6e45d9a981a3e484a7da0a
+
+    let mut cnt = 0;
+    for uid in hashset {
+        let response = client
+            .get(format!(
+                "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
+                uid
+            ))
+            .send()
+            .await?;
+        if response.status() != 200 {
+            log::error!(
+                "Failed to get response from off_chain_agent: {:?}",
+                response.text().await?
+            );
+            return Err(anyhow::anyhow!("Failed to get response from off_chain_agent").into());
+        }
+
+        let body = response.text().await?;
+        // log::info!("Response: {:?}", body);
+        cnt += 1;
+    }
 
     Ok(())
 }
