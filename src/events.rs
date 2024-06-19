@@ -16,7 +16,9 @@ use yup_oauth2::ServiceAccountAuthenticator;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
-use crate::consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, UPSTASH_VECTOR_REST_URL};
+use crate::consts::{
+    BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, ML_SERVER_URL, UPSTASH_VECTOR_REST_URL,
+};
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::{AppError, AppState};
 
@@ -207,7 +209,12 @@ pub mod ml_server {
     tonic::include_proto!("ml_server");
 }
 
-pub async fn ml_server_predict(uid: &String, ml_server_grpc_channel: Channel) {
+pub async fn ml_server_predict(uid: &String) {
+    let ml_server_grpc_channel = tonic::transport::Channel::from_static(ML_SERVER_URL)
+        .connect()
+        .await
+        .expect("Failed to connect to ML server");
+
     let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN").unwrap();
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
@@ -281,25 +288,20 @@ pub async fn ml_server_predict(uid: &String, ml_server_grpc_channel: Channel) {
 }
 
 pub async fn call_predict_v2(
-    State(state): State<Arc<AppState>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<(), AppError> {
     let uid = params.get("uid").unwrap().clone();
 
     tokio::spawn(async move {
-        ml_server_predict(&uid, state.ml_server_grpc_channel.clone()).await;
+        ml_server_predict(&uid).await;
     });
 
     Ok(())
 }
 
-pub async fn call_predict(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+pub async fn call_predict() -> Result<(), AppError> {
     tokio::spawn(async move {
-        ml_server_predict(
-            &"ee1201fc2a6e45d9a981a3e484a7da0a".to_string(),
-            state.ml_server_grpc_channel.clone(),
-        )
-        .await;
+        ml_server_predict(&"ee1201fc2a6e45d9a981a3e484a7da0a".to_string()).await;
     });
 
     Ok(())
@@ -507,6 +509,7 @@ pub async fn test_cloudflare_v2(
             hashset.insert(r.uid.clone());
 
             if hashset.len() >= thresh {
+                log::error!("Last above: {:?}", r);
                 break;
             }
         }
