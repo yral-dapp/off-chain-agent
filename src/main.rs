@@ -9,7 +9,9 @@ use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
-use events::{call_predict_v2, test_cloudflare, test_cloudflare_v2, test_uv};
+use events::{
+    call_predict_v2, get_cf_info, test_cloudflare, test_cloudflare_v2, test_uv, test_uv_info,
+};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use report::report_approved_handler;
@@ -70,7 +72,9 @@ async fn main() -> Result<()> {
         .route("/report-approved", post(report_approved_handler))
         .route("/test-cf", get(test_cloudflare))
         .route("/test-cf-v2", get(test_cloudflare_v2))
+        .route("/test-cf-info", get(get_cf_info))
         .route("/test-uv", get(test_uv))
+        .route("/test-uv-info", get(test_uv_info))
         .with_state(shared_state.clone())
         .map_err(axum::BoxError::from)
         .boxed_clone();

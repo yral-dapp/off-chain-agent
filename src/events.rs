@@ -328,6 +328,24 @@ pub async fn test_uv() -> Result<(), AppError> {
     Ok(())
 }
 
+pub async fn test_uv_info() -> Result<(), AppError> {
+    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("{}/info", UPSTASH_VECTOR_REST_URL))
+        .header("Authorization", format!("Bearer {}", upstash_token))
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("Failed to get range from upstash").into());
+    }
+
+    log::info!("RESPONSE={:?}", response.text().await?);
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct CFStreamResult {
     result: Vec<CFStream>,
@@ -520,6 +538,33 @@ pub async fn test_cloudflare_v2(
     log::info!("Total number of videos: {}", num_vids);
     log::info!("Total number of videos in hashset: {}", hashset.len());
     // log::info!("Hashset: {:?}", hashset);
+
+    Ok(())
+}
+
+pub async fn get_cf_info(Query(params): Query<HashMap<String, String>>) -> Result<(), AppError> {
+    let uid = params.get("uid").unwrap().clone();
+    let bearer_token = env::var("CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN")?;
+
+    // CALL GET https://api.cloudflare.com/client/v4/accounts/{account_id}/stream/{identifier}
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{}/stream/{}",
+        CLOUDFLARE_ACCOUNT_ID, uid
+    );
+
+    let client = reqwest::Client::new();
+    let response = client.get(&url).bearer_auth(&bearer_token).send().await?;
+
+    if response.status() != 200 {
+        log::error!(
+            "Failed to get response from Cloudflare: {:?}",
+            response.text().await?
+        );
+        return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
+    }
+
+    let body = response.text().await?;
+    log::info!("Response: {:?}", body);
 
     Ok(())
 }
