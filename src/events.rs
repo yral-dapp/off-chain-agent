@@ -74,20 +74,15 @@ impl WarehouseEvents for WarehouseEventsService {
             ));
         }
 
-        let shared_state = self.shared_state.clone();
-
         if request.event == "video_upload_successful" {
             tokio::spawn(async move {
                 let params: Value = serde_json::from_str(&request.params).expect("Invalid JSON");
 
-                let res = process_upload_event(
-                    Event {
-                        event: request.event,
-                        params,
-                        timestamp,
-                    },
-                    shared_state,
-                )
+                let res = process_upload_event(Event {
+                    event: request.event,
+                    params,
+                    timestamp,
+                })
                 .await;
                 if res.is_err() {
                     log::error!("Error processing upload event: {:?}", res.err());
@@ -140,14 +135,19 @@ struct EmbeddingResponse {
     result: Vec<Vec<f64>>,
 }
 
-async fn process_upload_event(event: Event, shared_state: Arc<AppState>) -> Result<(), AppError> {
+async fn process_upload_event(event: Event) -> Result<(), AppError> {
+    let ml_server_grpc_channel = tonic::transport::Channel::from_static(ML_SERVER_URL)
+        .connect()
+        .await
+        .expect("Failed to connect to ML server");
+
     let uid = event.params["video_id"].as_str().unwrap();
     let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
     let op = || async {
-        let channel = shared_state.clone().ml_server_grpc_channel.clone();
+        let channel = ml_server_grpc_channel.clone();
 
         let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
             .parse()
