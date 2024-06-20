@@ -442,41 +442,33 @@ pub async fn test_cloudflare(
     // hit the endpoint for all uids of hashset
     // GET https://icp-off-chain-agent.fly.dev/call_predict_v2?uid=ee1201fc2a6e45d9a981a3e484a7da0a
 
-    tokio::spawn(async move {
-        let mut cnt = 0;
-        for uid in hashset {
-            let response = match client
-                .get(format!(
-                    "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
-                    uid
-                ))
-                .send()
-                .await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    log::error!("Failed to get response from off_chain_agent: {:?}", e);
-                    continue;
-                }
-            };
-            if response.status() != 200 {
-                log::error!(
-                    "Failed to get response from off_chain_agent: {:?}",
-                    response.text().await
-                );
+    let mut cnt = 0;
+    for uid in hashset {
+        let response = match client
+            .get(format!(
+                "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
+                uid
+            ))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                log::error!("Failed to get response from off_chain_agent: {:?}", e);
+                continue;
             }
-
-            // let body = response.text().await?;
-            // log::info!("Response: {:?}", body);
-            cnt += 1;
-
-            if cnt % 5000 == 0 {
-                tokio::time::sleep(Duration::from_secs(170)).await
-            }
+        };
+        if response.status() != 200 {
+            log::error!(
+                "Failed to get response from off_chain_agent: {:?}",
+                response.text().await
+            );
         }
 
-        Ok::<(), ()>(())
-    });
+        // let body = response.text().await?;
+        // log::info!("Response: {:?}", body);
+        cnt += 1;
+    }
 
     Ok(())
 }
