@@ -219,6 +219,7 @@ pub async fn ml_server_predict(uid: &String) {
         {
             Ok(channel) => channel,
             Err(e) => {
+                log::error!("yoyo Failed to connect to ML server: {:?}", e);
                 return Err(tonic::Status::internal("Failed to connect to ML server"));
             }
         };
