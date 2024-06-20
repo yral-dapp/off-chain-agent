@@ -213,10 +213,15 @@ pub async fn ml_server_predict(uid: &String) {
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
     let op = || async {
-        let channel = tonic::transport::Channel::from_static(ML_SERVER_URL)
+        let channel = match tonic::transport::Channel::from_static(ML_SERVER_URL)
             .connect()
             .await
-            .expect("Failed to connect to ML server");
+        {
+            Ok(channel) => channel,
+            Err(e) => {
+                return Err(tonic::Status::internal("Failed to connect to ML server"));
+            }
+        };
 
         let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
             .parse()
