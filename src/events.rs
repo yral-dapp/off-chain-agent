@@ -461,7 +461,7 @@ pub async fn test_cloudflare(
         cnt += 1;
 
         if cnt % 5000 == 0 {
-            tokio::time::sleep(Duration::from_secs(300)).await
+            tokio::time::sleep(Duration::from_secs(170)).await
         }
     }
 
