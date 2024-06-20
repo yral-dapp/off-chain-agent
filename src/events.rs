@@ -247,7 +247,7 @@ pub async fn ml_server_predict(uid: &String) {
 
     let mut response: ml_server::VideoEmbedResponse = Default::default();
     for duration in &backoff {
-        // log::info!("Retrying after {:?} for {:?}", duration, uid);
+        // log::info!("Retrying after p {:?} for {:?}", duration, uid);
         match op().await {
             Ok(s) => {
                 response = s.into_inner();
