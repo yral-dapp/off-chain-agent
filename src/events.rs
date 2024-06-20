@@ -136,18 +136,16 @@ struct EmbeddingResponse {
 }
 
 async fn process_upload_event(event: Event) -> Result<(), AppError> {
-    let ml_server_grpc_channel = tonic::transport::Channel::from_static(ML_SERVER_URL)
-        .connect()
-        .await
-        .expect("Failed to connect to ML server");
-
     let uid = event.params["video_id"].as_str().unwrap();
     let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
     let op = || async {
-        let channel = ml_server_grpc_channel.clone();
+        let channel = tonic::transport::Channel::from_static(ML_SERVER_URL)
+            .connect()
+            .await
+            .expect("Failed to connect to ML server");
 
         let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
             .parse()
@@ -210,17 +208,16 @@ pub mod ml_server {
 }
 
 pub async fn ml_server_predict(uid: &String) {
-    let ml_server_grpc_channel = tonic::transport::Channel::from_static(ML_SERVER_URL)
-        .connect()
-        .await
-        .expect("Failed to connect to ML server");
-
     let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN").unwrap();
     // removing whitespaces and new lines for proper parsing
     off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
 
     let op = || async {
-        let channel = ml_server_grpc_channel.clone();
+        let channel = tonic::transport::Channel::from_static(ML_SERVER_URL)
+            .connect()
+            .await
+            .expect("Failed to connect to ML server");
+
         let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
             .parse()
             .unwrap();
@@ -282,9 +279,10 @@ pub async fn ml_server_predict(uid: &String) {
     }
     if !response.unwrap().status().is_success() {
         log::error!("Failed to upsert vector to upstash");
-    } else {
-        log::info!("Successfully upserted vector {:?}", uid);
     }
+    // else {
+    //     log::info!("Successfully upserted vector {:?}", uid);
+    // }
 }
 
 pub async fn call_predict_v2(
@@ -439,31 +437,41 @@ pub async fn test_cloudflare(
     // hit the endpoint for all uids of hashset
     // GET https://icp-off-chain-agent.fly.dev/call_predict_v2?uid=ee1201fc2a6e45d9a981a3e484a7da0a
 
-    let mut cnt = 0;
-    for uid in hashset {
-        let response = client
-            .get(format!(
-                "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
-                uid
-            ))
-            .send()
-            .await?;
-        if response.status() != 200 {
-            log::error!(
-                "Failed to get response from off_chain_agent: {:?}",
-                response.text().await?
-            );
-            return Err(anyhow::anyhow!("Failed to get response from off_chain_agent").into());
+    tokio::spawn(async move {
+        let mut cnt = 0;
+        for uid in hashset {
+            let response = match client
+                .get(format!(
+                    "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
+                    uid
+                ))
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("Failed to get response from off_chain_agent: {:?}", e);
+                    continue;
+                }
+            };
+            if response.status() != 200 {
+                log::error!(
+                    "Failed to get response from off_chain_agent: {:?}",
+                    response.text().await
+                );
+            }
+
+            // let body = response.text().await?;
+            // log::info!("Response: {:?}", body);
+            cnt += 1;
+
+            if cnt % 5000 == 0 {
+                tokio::time::sleep(Duration::from_secs(170)).await
+            }
         }
 
-        // let body = response.text().await?;
-        // log::info!("Response: {:?}", body);
-        cnt += 1;
-
-        if cnt % 5000 == 0 {
-            tokio::time::sleep(Duration::from_secs(170)).await
-        }
-    }
+        Ok::<(), ()>(())
+    });
 
     Ok(())
 }
