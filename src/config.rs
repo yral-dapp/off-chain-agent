@@ -7,8 +7,6 @@ use serde_with::serde_as;
 pub struct AppConfig {
     pub yral_metadata_token: String,
     pub google_sa_key: String,
-    pub ml_server_jwt_token: String,
-    pub upstash_vector_read_write_token: String,
 }
 
 impl AppConfig {
