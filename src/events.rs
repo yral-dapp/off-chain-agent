@@ -74,6 +74,8 @@ impl WarehouseEvents for WarehouseEventsService {
 
         if request.event == "video_upload_successful" {
             tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+
                 let params: Value = serde_json::from_str(&request.params).expect("Invalid JSON");
                 let uid = params["video_id"].as_str().unwrap();
 
@@ -361,7 +363,7 @@ pub async fn test_gcs(Query(params): Query<HashMap<String, String>>) -> Result<(
 
     tokio::spawn(async move {
         let res = upload_gcs(&uid).await;
-        log::error!("Upload GCS Response: {:?}", res);
+        log::info!("Upload GCS Response: {:?}", res);
     });
 
     Ok(())
