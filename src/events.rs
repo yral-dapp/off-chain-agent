@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use axum::extract::{Query, State};
 use candid::Deserialize;
+use futures::StreamExt;
 use log::{error, info};
 use reqwest::Client;
 use serde::Serialize;
@@ -237,15 +238,26 @@ pub async fn test_cloudflare(
     log::info!("Total number of videos in hashset: {}", hashset.len());
     // log::info!("Hashset: {:?}", hashset);
 
-    for uid in hashset {
-        // call upload_gcs
-        tokio::spawn(async move {
-            let res = upload_gcs(&uid).await;
-            if let Err(e) = res {
-                log::error!("Error uploading to GCS: {:?}", e);
+    // call upload_gcs
+    tokio::spawn(async move {
+        const PARALLEL_REQUESTS: usize = 50;
+        let futures = hashset
+            .iter()
+            .map(|uid| upload_gcs(&uid))
+            .collect::<Vec<_>>();
+
+        let stream = futures::stream::iter(futures)
+            .boxed()
+            .buffer_unordered(PARALLEL_REQUESTS);
+        let results = stream.collect::<Vec<Result<(), anyhow::Error>>>().await;
+
+        for r in results {
+            match r {
+                Ok(_) => continue,
+                Err(e) => log::error!("Failed to upload to GCS: {:?}", e),
             }
-        });
-    }
+        }
+    });
 
     Ok(())
 }
