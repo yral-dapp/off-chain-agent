@@ -241,7 +241,9 @@ pub async fn test_cloudflare(
         // call upload_gcs
         tokio::spawn(async move {
             let res = upload_gcs(&uid).await;
-            log::error!("Upload GCS Response: {:?}", res);
+            if let Err(e) = res {
+                log::error!("Error uploading to GCS: {:?}", e);
+            }
         });
     }
 
