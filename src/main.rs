@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
         // .route("/test-cf", get(test_cloudflare))
         // .route("/test-cf-v2", get(test_cloudflare_v2))
         .route("/test-cf-info", get(get_cf_info))
-        // .route("/test-gcs", get(test_gcs))
+        .route("/test-gcs", get(test_gcs))
         .with_state(shared_state.clone())
         .map_err(axum::BoxError::from)
         .boxed_clone();

@@ -354,29 +354,15 @@ pub async fn get_cf_info(Query(params): Query<HashMap<String, String>>) -> Resul
     Ok(())
 }
 
-pub async fn test_gcs() -> Result<(), AppError> {
+pub async fn test_gcs(Query(params): Query<HashMap<String, String>>) -> Result<(), AppError> {
     // Call GET https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{uid}/downloads/default.mp4 and download the video content
 
-    let uid = "ee1201fc2a6e45d9a981a3e484a7da0a".to_string();
-    let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        uid
-    );
-    let name = format!("{}.mp4", uid);
+    let uid = params.get("uid").unwrap().clone();
 
-    let file = reqwest::Client::new()
-        .get(&url)
-        .send()
-        .await?
-        .bytes_stream();
-
-    // write to GCS
-    let gcs_client = cloud_storage::Client::default();
-    let res = gcs_client
-        .object()
-        .create_streamed("yral-videos", file, None, &name, "video/mp4")
-        .await;
-    log::info!("Uploaded video to GCS: {:?}", res);
+    tokio::spawn(async move {
+        let res = upload_gcs(&uid).await;
+        log::error!("Upload GCS Response: {:?}", res);
+    });
 
     Ok(())
 }
