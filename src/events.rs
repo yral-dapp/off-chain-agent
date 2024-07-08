@@ -250,7 +250,7 @@ pub async fn test_cloudflare(
 
 pub async fn test_cloudflare_v2(
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Vec<String>, AppError> {
+) -> Result<(), AppError> {
     // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
     // Query param start 2021-05-03T00:00:00Z
     let startdate = params.get("startdate").unwrap().clone();
@@ -326,7 +326,7 @@ pub async fn test_cloudflare_v2(
     log::info!("Total number of videos in hashset: {}", hashset.len());
     // log::info!("Hashset: {:?}", hashset);
 
-    Ok(hashset.into_iter().collect())
+    Ok(())
 }
 
 pub async fn get_cf_info(Query(params): Query<HashMap<String, String>>) -> Result<(), AppError> {
