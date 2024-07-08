@@ -9,9 +9,7 @@ use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
-use events::{
-    call_predict_v2, get_cf_info, test_cloudflare, test_cloudflare_v2, test_uv, test_uv_info,
-};
+use events::{get_cf_info, test_cloudflare, test_cloudflare_v2, test_gcs};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use report::report_approved_handler;
@@ -28,7 +26,7 @@ use crate::canister::canisters_list_handler;
 use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
-use crate::events::{call_predict, warehouse_events, WarehouseEventsService};
+use crate::events::{warehouse_events, WarehouseEventsService};
 use crate::report::off_chain::off_chain_server::OffChainServer;
 use crate::report::{off_chain, OffChainService};
 use error::*;
@@ -71,10 +69,9 @@ async fn main() -> Result<()> {
         // .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
         // .route("/test-cf", get(test_cloudflare))
-        .route("/test-cf-v2", get(test_cloudflare_v2))
+        // .route("/test-cf-v2", get(test_cloudflare_v2))
         .route("/test-cf-info", get(get_cf_info))
-        .route("/test-uv", get(test_uv))
-        .route("/test-uv-info", get(test_uv_info))
+        // .route("/test-gcs", get(test_gcs))
         .with_state(shared_state.clone())
         .map_err(axum::BoxError::from)
         .boxed_clone();
