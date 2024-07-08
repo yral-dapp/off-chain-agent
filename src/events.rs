@@ -16,9 +16,7 @@ use yup_oauth2::ServiceAccountAuthenticator;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
-use crate::consts::{
-    BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, ML_SERVER_URL, UPSTASH_VECTOR_REST_URL,
-};
+use crate::consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID};
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::{AppError, AppState};
 
@@ -77,20 +75,39 @@ impl WarehouseEvents for WarehouseEventsService {
         if request.event == "video_upload_successful" {
             tokio::spawn(async move {
                 let params: Value = serde_json::from_str(&request.params).expect("Invalid JSON");
+                let uid = params["video_id"].as_str().unwrap();
 
-                let res = process_upload_event(Event {
-                    event: request.event,
-                    params,
-                    timestamp,
-                })
-                .await;
+                let res = upload_gcs(uid).await;
                 if res.is_err() {
-                    log::error!("Error processing upload event: {:?}", res.err());
+                    log::error!("Error uploading video to GCS: {:?}", res.err());
                 }
             });
         }
         Ok(tonic::Response::new(Empty {}))
     }
+}
+
+pub async fn upload_gcs(uid: &str) -> Result<(), anyhow::Error> {
+    let url = format!(
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
+        uid
+    );
+    let name = format!("{}.mp4", uid);
+
+    let file = reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await?
+        .bytes_stream();
+
+    // write to GCS
+    let gcs_client = cloud_storage::Client::default();
+    let _ = gcs_client
+        .object()
+        .create_streamed("yral-videos", file, None, &name, "video/mp4")
+        .await?;
+
+    Ok(())
 }
 
 pub async fn get_access_token() -> String {
@@ -128,228 +145,6 @@ async fn stream_to_bigquery(data: Value) -> Result<(), Box<dyn std::error::Error
         true => Ok(()),
         false => Err(format!("Failed to stream data - {:?}", response.text().await?).into()),
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct EmbeddingResponse {
-    result: Vec<Vec<f64>>,
-}
-
-async fn process_upload_event(event: Event) -> Result<(), AppError> {
-    let uid = event.params["video_id"].as_str().unwrap();
-    let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN")?;
-    // removing whitespaces and new lines for proper parsing
-    off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
-
-    let op = || async {
-        let channel = tonic::transport::Channel::from_static(ML_SERVER_URL)
-            .connect()
-            .await
-            .expect("Failed to connect to ML server");
-
-        let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
-            .parse()
-            .unwrap();
-        let mut client = ml_server::ml_server_client::MlServerClient::with_interceptor(
-            channel,
-            move |mut req: Request<()>| {
-                req.metadata_mut().insert("authorization", token.clone());
-                Ok(req)
-            },
-        );
-        let request = tonic::Request::new(ml_server::VideoEmbedRequest {
-            video_id: uid.into(),
-        });
-        client.predict(request).await
-    };
-
-    // Retry mechanism
-    let retries = 4;
-    let min = Duration::from_secs(60);
-    let max = Duration::from_secs(600);
-    let backoff = exponential_backoff::Backoff::new(retries, min, max);
-
-    let mut response: ml_server::VideoEmbedResponse = Default::default();
-    for duration in &backoff {
-        log::info!("Retrying after {:?}", duration);
-        match op().await {
-            Ok(s) => {
-                response = s.into_inner();
-                break;
-            }
-            Err(_) => tokio::time::sleep(duration).await,
-        }
-    }
-
-    if response.result.is_empty() {
-        return Err(anyhow::anyhow!("Failed to get response from ml_server").into());
-    }
-
-    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
-    let client = reqwest::Client::new();
-    let response = client
-        .post(format!("{}/upsert", UPSTASH_VECTOR_REST_URL))
-        .header("Authorization", format!("Bearer {}", upstash_token))
-        .json(&serde_json::json!({
-            "id": uid,
-            "vector": response.result
-        }))
-        .send()
-        .await?;
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!("Failed to upsert vector to upstash").into());
-    }
-
-    Ok(())
-}
-
-pub mod ml_server {
-    tonic::include_proto!("ml_server");
-}
-
-pub async fn ml_server_predict(uid: &String) {
-    let mut off_chain_agent_grpc_auth_token = env::var("ML_SERVER_JWT_TOKEN").unwrap();
-    // removing whitespaces and new lines for proper parsing
-    off_chain_agent_grpc_auth_token.retain(|c| !c.is_whitespace());
-
-    let op = || async {
-        let channel = match tonic::transport::Channel::from_static(ML_SERVER_URL)
-            .connect()
-            .await
-        {
-            Ok(channel) => channel,
-            Err(e) => {
-                log::error!("yoyo Failed to connect to ML server: {:?}", e);
-                return Err(tonic::Status::internal("Failed to connect to ML server"));
-            }
-        };
-
-        let token: MetadataValue<_> = format!("Bearer {}", off_chain_agent_grpc_auth_token)
-            .parse()
-            .unwrap();
-        let mut client = ml_server::ml_server_client::MlServerClient::with_interceptor(
-            channel,
-            move |mut req: Request<()>| {
-                req.metadata_mut().insert("authorization", token.clone());
-                Ok(req)
-            },
-        );
-        let request = tonic::Request::new(ml_server::VideoEmbedRequest {
-            video_id: uid.into(),
-        });
-        client.predict(request).await
-    };
-
-    // Retry mechanism
-    let retries = 4;
-    let min = Duration::from_secs(60);
-    let max = Duration::from_secs(600);
-    let backoff = exponential_backoff::Backoff::new(retries, min, max);
-
-    let mut response: ml_server::VideoEmbedResponse = Default::default();
-    for duration in &backoff {
-        // log::info!("Retrying after p {:?} for {:?}", duration, uid);
-        match op().await {
-            Ok(s) => {
-                response = s.into_inner();
-                break;
-            }
-            Err(e) => {
-                log::error!(
-                    "Error while fetching response from ml_server for {:?}: {:?}",
-                    uid,
-                    e
-                );
-                tokio::time::sleep(duration).await
-            }
-        }
-    }
-    if response.result.is_empty() {
-        log::error!("Failed to get response from ml_server for {:?}", uid);
-        return;
-    }
-
-    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN").unwrap();
-    let client = reqwest::Client::new();
-    let response = client
-        .post(format!("{}/upsert", UPSTASH_VECTOR_REST_URL))
-        .header("Authorization", format!("Bearer {}", upstash_token))
-        .json(&serde_json::json!({
-            "id": uid,
-            "vector": response.result
-        }))
-        .send()
-        .await;
-    if response.is_err() {
-        log::error!("Failed to upsert vector to upstash");
-    }
-    if !response.unwrap().status().is_success() {
-        log::error!("Failed to upsert vector to upstash");
-    }
-    // else {
-    //     log::info!("Successfully upserted vector {:?}", uid);
-    // }
-}
-
-pub async fn call_predict_v2(
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<(), AppError> {
-    let uid = params.get("uid").unwrap().clone();
-
-    tokio::spawn(async move {
-        ml_server_predict(&uid).await;
-    });
-
-    Ok(())
-}
-
-pub async fn call_predict() -> Result<(), AppError> {
-    tokio::spawn(async move {
-        ml_server_predict(&"ee1201fc2a6e45d9a981a3e484a7da0a".to_string()).await;
-    });
-
-    Ok(())
-}
-
-pub async fn test_uv() -> Result<(), AppError> {
-    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
-    let client = reqwest::Client::new();
-    let response = client
-        .get(format!("{}/range", UPSTASH_VECTOR_REST_URL))
-        .header("Authorization", format!("Bearer {}", upstash_token))
-        .json(&serde_json::json!({
-            "cursor": "0",
-            "limit": 30,
-            "includeMetadata": true
-        }))
-        .send()
-        .await?;
-
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!("Failed to get range from upstash").into());
-    }
-
-    log::info!("RESPONSE={:?}", response.text().await?);
-
-    Ok(())
-}
-
-pub async fn test_uv_info() -> Result<(), AppError> {
-    let upstash_token = env::var("UPSTASH_VECTOR_READ_WRITE_TOKEN")?;
-    let client = reqwest::Client::new();
-    let response = client
-        .get(format!("{}/info", UPSTASH_VECTOR_REST_URL))
-        .header("Authorization", format!("Bearer {}", upstash_token))
-        .send()
-        .await?;
-
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!("Failed to get range from upstash").into());
-    }
-
-    log::info!("RESPONSE={:?}", response.text().await?);
-
-    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -440,35 +235,12 @@ pub async fn test_cloudflare(
     log::info!("Total number of videos in hashset: {}", hashset.len());
     // log::info!("Hashset: {:?}", hashset);
 
-    // hit the endpoint for all uids of hashset
-    // GET https://icp-off-chain-agent.fly.dev/call_predict_v2?uid=ee1201fc2a6e45d9a981a3e484a7da0a
-
-    let mut cnt = 0;
     for uid in hashset {
-        let response = match client
-            .get(format!(
-                "https://icp-off-chain-agent.fly.dev/call_predict_v2?uid={}",
-                uid
-            ))
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                log::error!("Failed to get response from off_chain_agent: {:?}", e);
-                continue;
-            }
-        };
-        if response.status() != 200 {
-            log::error!(
-                "Failed to get response from off_chain_agent: {:?}",
-                response.text().await
-            );
-        }
-
-        // let body = response.text().await?;
-        // log::info!("Response: {:?}", body);
-        cnt += 1;
+        // call upload_gcs
+        tokio::spawn(async move {
+            let res = upload_gcs(&uid).await;
+            log::error!("Upload GCS Response: {:?}", res);
+        });
     }
 
     Ok(())
@@ -476,7 +248,7 @@ pub async fn test_cloudflare(
 
 pub async fn test_cloudflare_v2(
     Query(params): Query<HashMap<String, String>>,
-) -> Result<(), AppError> {
+) -> Result<Vec<String>, AppError> {
     // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
     // Query param start 2021-05-03T00:00:00Z
     let startdate = params.get("startdate").unwrap().clone();
@@ -552,7 +324,7 @@ pub async fn test_cloudflare_v2(
     log::info!("Total number of videos in hashset: {}", hashset.len());
     // log::info!("Hashset: {:?}", hashset);
 
-    Ok(())
+    Ok(hashset.into_iter().collect())
 }
 
 pub async fn get_cf_info(Query(params): Query<HashMap<String, String>>) -> Result<(), AppError> {
@@ -578,6 +350,33 @@ pub async fn get_cf_info(Query(params): Query<HashMap<String, String>>) -> Resul
 
     let body = response.text().await?;
     log::info!("Response: {:?}", body);
+
+    Ok(())
+}
+
+pub async fn test_gcs() -> Result<(), AppError> {
+    // Call GET https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{uid}/downloads/default.mp4 and download the video content
+
+    let uid = "ee1201fc2a6e45d9a981a3e484a7da0a".to_string();
+    let url = format!(
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
+        uid
+    );
+    let name = format!("{}.mp4", uid);
+
+    let file = reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await?
+        .bytes_stream();
+
+    // write to GCS
+    let gcs_client = cloud_storage::Client::default();
+    let res = gcs_client
+        .object()
+        .create_streamed("yral-videos", file, None, &name, "video/mp4")
+        .await;
+    log::info!("Uploaded video to GCS: {:?}", res);
 
     Ok(())
 }
