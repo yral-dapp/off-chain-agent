@@ -10,7 +10,8 @@ use axum::{response::Html, routing::get, Router};
 use config::AppConfig;
 use env_logger::{Builder, Target};
 use events::{
-    call_predict_v2, get_cf_info, test_cloudflare, test_cloudflare_v2, test_uv, test_uv_info,
+    call_predict_v2, get_cf_info, test_cloudflare, test_cloudflare_v2, test_gcs, test_uv,
+    test_uv_info,
 };
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
@@ -75,6 +76,7 @@ async fn main() -> Result<()> {
         .route("/test-cf-info", get(get_cf_info))
         .route("/test-uv", get(test_uv))
         .route("/test-uv-info", get(test_uv_info))
+        .route("/test-gcs", get(test_gcs))
         .with_state(shared_state.clone())
         .map_err(axum::BoxError::from)
         .boxed_clone();
