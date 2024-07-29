@@ -83,7 +83,7 @@ impl WarehouseEvents for WarehouseEventsService {
 
                 let uid = params["video_id"].as_str().unwrap();
                 let canister_id = params["canister_id"].as_str().unwrap();
-                let post_id = params["post_id"].as_str().unwrap();
+                let post_id = params["post_id"].as_u64().unwrap();
 
                 let res = upload_gcs(uid, canister_id, post_id).await;
                 if res.is_err() {
@@ -95,7 +95,7 @@ impl WarehouseEvents for WarehouseEventsService {
     }
 }
 
-pub async fn upload_gcs(uid: &str, canister_id: &str, post_id: &str) -> Result<(), anyhow::Error> {
+pub async fn upload_gcs(uid: &str, canister_id: &str, post_id: u64) -> Result<(), anyhow::Error> {
     let url = format!(
         "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
         uid
