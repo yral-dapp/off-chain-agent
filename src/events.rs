@@ -78,9 +78,6 @@ impl WarehouseEvents for WarehouseEventsService {
                 tokio::time::sleep(Duration::from_secs(30)).await;
 
                 let params: Value = serde_json::from_str(&request.params).expect("Invalid JSON");
-
-                log::error!("Params: {:?}", params);
-
                 let uid = params["video_id"].as_str().unwrap();
                 let canister_id = params["canister_id"].as_str().unwrap();
                 let post_id = params["post_id"].as_u64().unwrap();
