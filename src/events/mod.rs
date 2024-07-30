@@ -1,25 +1,9 @@
-use std::collections::{HashMap, HashSet};
-use std::env;
 use std::sync::Arc;
-use std::time::Duration;
-
-use axum::extract::{Query, State};
-use candid::Deserialize;
-use futures::StreamExt;
-use log::{error, info};
-use reqwest::Client;
-use serde::Serialize;
-use serde_json::Value;
-use tonic::metadata::MetadataValue;
-use tonic::transport::Channel;
-use tonic::Request;
-use yup_oauth2::ServiceAccountAuthenticator;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
-use crate::consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID};
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
-use crate::{AppError, AppState};
+use crate::AppState;
 
 pub mod warehouse_events {
     tonic::include_proto!("warehouse_events");
@@ -27,16 +11,18 @@ pub mod warehouse_events {
         tonic::include_file_descriptor_set!("warehouse_events_descriptor");
 }
 
+pub mod event;
+
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Event {
-    event: String,
-    params: Value,
-    timestamp: String,
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// struct Event {
+//     event: String,
+//     params: Value,
+//     timestamp: String,
+// }
 
 #[tonic::async_trait]
 impl WarehouseEvents for WarehouseEventsService {
@@ -44,119 +30,14 @@ impl WarehouseEvents for WarehouseEventsService {
         &self,
         request: tonic::Request<WarehouseEvent>,
     ) -> Result<tonic::Response<Empty>, tonic::Status> {
-        // let shared_state = self.shared_state.clone();
-        // let access_token = shared_state.google_sa_key_access_token.clone();
-
         let request = request.into_inner();
+        let event = event::Event::new(request);
 
-        let timestamp = chrono::Utc::now().to_rfc3339();
+        event.stream_to_bigquery();
 
-        let data = serde_json::json!({
-            "kind": "bigquery#tableDataInsertAllRequest",
-            "rows": [
-                {
-                    "json": {
-                        "event": request.event,
-                        "params": request.params,
-                        "timestamp": timestamp,
-                    }
-                }
-            ]
-        });
+        event.upload_to_gcs();
 
-        let res = stream_to_bigquery(data).await;
-        if res.is_err() {
-            error!("Error sending data to BigQuery: {}", res.err().unwrap());
-            return Err(tonic::Status::new(
-                tonic::Code::Unknown,
-                "Error sending data to BigQuery",
-            ));
-        }
-
-        if request.event == "video_upload_successful" {
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(30)).await;
-
-                let params: Value = serde_json::from_str(&request.params).expect("Invalid JSON");
-                let uid = params["video_id"].as_str().unwrap();
-                let canister_id = params["canister_id"].as_str().unwrap();
-                let post_id = params["post_id"].as_u64().unwrap();
-
-                let res = upload_gcs(uid, canister_id, post_id).await;
-                if res.is_err() {
-                    log::error!("Error uploading video to GCS: {:?}", res.err());
-                }
-            });
-        }
         Ok(tonic::Response::new(Empty {}))
-    }
-}
-
-pub async fn upload_gcs(uid: &str, canister_id: &str, post_id: u64) -> Result<(), anyhow::Error> {
-    let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        uid
-    );
-    let name = format!("{}.mp4", uid);
-
-    let file = reqwest::Client::new()
-        .get(&url)
-        .send()
-        .await?
-        .bytes_stream();
-
-    // write to GCS
-    let gcs_client = cloud_storage::Client::default();
-    let mut res_obj = gcs_client
-        .object()
-        .create_streamed("yral-videos", file, None, &name, "video/mp4")
-        .await?;
-
-    let mut hashmap = HashMap::new();
-    hashmap.insert("canister_id".to_string(), canister_id.to_string());
-    hashmap.insert("post_id".to_string(), post_id.to_string());
-    res_obj.metadata = Some(hashmap);
-
-    // update
-    let _ = gcs_client.object().update(&res_obj).await?;
-
-    Ok(())
-}
-
-pub async fn get_access_token() -> String {
-    let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
-
-    // Load your service account key
-    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
-
-    let auth = ServiceAccountAuthenticator::builder(sa_key)
-        .build()
-        .await
-        .unwrap();
-
-    let scopes = &["https://www.googleapis.com/auth/bigquery.insertdata"];
-    let token = auth.token(scopes).await.unwrap();
-
-    match token.token() {
-        Some(t) => t.to_string(),
-        _ => panic!("No access token found"),
-    }
-}
-
-async fn stream_to_bigquery(data: Value) -> Result<(), Box<dyn std::error::Error>> {
-    let token = get_access_token().await;
-    let client = Client::new();
-    let request_url = BIGQUERY_INGESTION_URL.to_string();
-    let response = client
-        .post(request_url)
-        .bearer_auth(token)
-        .json(&data)
-        .send()
-        .await?;
-
-    match response.status().is_success() {
-        true => Ok(()),
-        false => Err(format!("Failed to stream data - {:?}", response.text().await?).into()),
     }
 }
 
