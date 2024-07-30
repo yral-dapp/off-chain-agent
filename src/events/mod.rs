@@ -17,25 +17,24 @@ pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
 }
 
-// #[derive(Debug, Serialize, Deserialize)]
-// struct Event {
-//     event: String,
-//     params: Value,
-//     timestamp: String,
-// }
-
 #[tonic::async_trait]
 impl WarehouseEvents for WarehouseEventsService {
     async fn send_event(
         &self,
         request: tonic::Request<WarehouseEvent>,
     ) -> Result<tonic::Response<Empty>, tonic::Status> {
+        let shared_state = self.shared_state.clone();
+
         let request = request.into_inner();
         let event = event::Event::new(request);
 
         event.stream_to_bigquery();
 
         event.upload_to_gcs();
+
+        // event.update_watch_history(&shared_state.clone());
+
+        // event.update_success_history(&shared_state.clone());
 
         Ok(tonic::Response::new(Empty {}))
     }
