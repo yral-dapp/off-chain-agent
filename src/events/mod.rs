@@ -32,9 +32,9 @@ impl WarehouseEvents for WarehouseEventsService {
 
         event.upload_to_gcs();
 
-        // event.update_watch_history(&shared_state.clone());
+        event.update_watch_history(&shared_state.clone());
 
-        // event.update_success_history(&shared_state.clone());
+        event.update_success_history(&shared_state.clone());
 
         Ok(tonic::Response::new(Empty {}))
     }
