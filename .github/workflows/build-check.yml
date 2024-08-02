@@ -30,8 +30,6 @@ jobs:
           sudo apt-get install protobuf-compiler
       - name: Build setup
         run: |
-          pip3 install ziglang
-          cargo install cargo-zigbuild
           rustup target add x86_64-unknown-linux-musl
           rustup component add rustfmt
           rustup component add clippy
@@ -40,7 +38,7 @@ jobs:
       #     cargo fmt --check
       #     cargo clippy --no-deps --all-features --release -- -Dwarnings
       - name: Build
-        run: cargo zigbuild --release --target x86_64-unknown-linux-musl
+        run: TARGET_CC=x86_64-linux-musl-gcc cargo build --release --target x86_64-unknown-linux-musl
       # - name: Run tests
       #   run: cargo test --verbose
       - run: touch .empty
