@@ -27,7 +27,7 @@ jobs:
 
       - name: Install prereqs
         run: |
-          sudo apt-get install protobuf-compiler
+          sudo apt-get install protobuf-compiler musl-tools
       - name: Build setup
         run: |
           rustup target add x86_64-unknown-linux-musl
@@ -38,7 +38,9 @@ jobs:
       #     cargo fmt --check
       #     cargo clippy --no-deps --all-features --release -- -Dwarnings
       - name: Build
-        run: TARGET_CC=x86_64-linux-musl-gcc cargo build --release --target x86_64-unknown-linux-musl
+        run: cargo build --release --target x86_64-unknown-linux-musl
+        env:
+          TARGET_CC: x86_64-linux-musl-gcc
       # - name: Run tests
       #   run: cargo test --verbose
       - run: touch .empty
