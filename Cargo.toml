@@ -50,6 +50,7 @@ exponential-backoff = "1.2.0"
 cloud-storage = { version = "0.11.1", default-features = false, features = [
     "rustls-tls",
 ] }
+time = "0.3.36"
 
 [build-dependencies]
 serde = { version = "1.0", features = ["derive"] }
