@@ -28,6 +28,13 @@ jobs:
       - name: Install prereqs
         run: |
           sudo apt-get install protobuf-compiler musl-tools
+
+      - name: Rust Setup
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "stable"
+          targets: "x86_64-unknown-linux-musl"
+
       - name: Build setup
         run: |
           rustup target add x86_64-unknown-linux-musl
