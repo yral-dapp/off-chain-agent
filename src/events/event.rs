@@ -9,12 +9,16 @@ use crate::{
     events::warehouse_events::{Empty, WarehouseEvent},
 };
 use candid::Principal;
+use hyper::client::HttpConnector;
 use ic_agent::Agent;
 use log::{error, info};
 use reqwest::Client;
 use serde_json::Value;
+use tokio::sync::OnceCell;
 use std::time::Duration;
-use yup_oauth2::ServiceAccountAuthenticator;
+use yup_oauth2::{authenticator::Authenticator, hyper_rustls::HttpsConnector, ServiceAccountAuthenticator};
+
+static AUTH: OnceCell<Authenticator<HttpsConnector<HttpConnector>>> = OnceCell::const_new();
 
 pub struct Event {
     pub event: WarehouseEvent,
@@ -233,7 +237,7 @@ pub async fn upload_gcs(uid: &str, canister_id: &str, post_id: u64) -> Result<()
     Ok(())
 }
 
-pub async fn get_access_token() -> String {
+pub async fn init_auth() -> Result<(), anyhow::Error> {
     let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
 
     // Load your service account key
@@ -244,7 +248,13 @@ pub async fn get_access_token() -> String {
         .await
         .unwrap();
 
-    let scopes = &["https://www.googleapis.com/auth/bigquery.insertdata"];
+    AUTH.set(auth).map_err(|_| anyhow::anyhow!("Auth already initialized"))?;
+
+    Ok(())
+}
+
+pub async fn get_access_token(scopes: &[&str]) -> String {
+    let auth = AUTH.get().expect("Auth not initialized");
     let token = auth.token(scopes).await.unwrap();
 
     match token.token() {
@@ -254,7 +264,7 @@ pub async fn get_access_token() -> String {
 }
 
 async fn stream_to_bigquery(data: Value) -> Result<(), Box<dyn std::error::Error>> {
-    let token = get_access_token().await;
+    let token = get_access_token(&["https://www.googleapis.com/auth/bigquery.insertdata"]).await;
     let client = Client::new();
     let request_url = BIGQUERY_INGESTION_URL.to_string();
     let response = client
