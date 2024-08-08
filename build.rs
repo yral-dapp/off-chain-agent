@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .out_dir(out_dir)
         .compile(&[proto_file], &["proto"])?;
 
-    let proto_file = "contracts/projects/ml_server/ml_server.proto";
+    let proto_file = "contracts/projects/ml_feed/ml_feed.proto";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     tonic_build::configure()
