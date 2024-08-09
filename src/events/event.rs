@@ -9,16 +9,11 @@ use crate::{
     events::warehouse_events::{Empty, WarehouseEvent},
 };
 use candid::Principal;
-use hyper::client::HttpConnector;
 use ic_agent::Agent;
 use log::{error, info};
 use reqwest::Client;
 use serde_json::Value;
-use tokio::sync::OnceCell;
 use std::time::Duration;
-use yup_oauth2::{authenticator::Authenticator, hyper_rustls::HttpsConnector, ServiceAccountAuthenticator};
-
-static AUTH: OnceCell<Authenticator<HttpsConnector<HttpConnector>>> = OnceCell::const_new();
 
 pub struct Event {
     pub event: WarehouseEvent,
