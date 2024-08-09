@@ -14,7 +14,6 @@ use log::{error, info};
 use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
-use yup_oauth2::ServiceAccountAuthenticator;
 
 pub struct Event {
     pub event: WarehouseEvent,
@@ -25,9 +24,10 @@ impl Event {
         Self { event }
     }
 
-    pub fn stream_to_bigquery(&self) {
+    pub fn stream_to_bigquery(&self, app_state: &AppState) {
         let event_str = self.event.event.clone();
         let params_str = self.event.params.clone();
+        let app_state = app_state.clone();
 
         tokio::spawn(async move {
             let timestamp = chrono::Utc::now().to_rfc3339();
@@ -45,7 +45,7 @@ impl Event {
                 ]
             });
 
-            let res = stream_to_bigquery(data).await;
+            let res = stream_to_bigquery(&app_state, data).await;
             if res.is_err() {
                 error!("Error sending data to BigQuery: {}", res.err().unwrap());
             }
@@ -233,28 +233,8 @@ pub async fn upload_gcs(uid: &str, canister_id: &str, post_id: u64) -> Result<()
     Ok(())
 }
 
-pub async fn get_access_token() -> String {
-    let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
-
-    // Load your service account key
-    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
-
-    let auth = ServiceAccountAuthenticator::builder(sa_key)
-        .build()
-        .await
-        .unwrap();
-
-    let scopes = &["https://www.googleapis.com/auth/bigquery.insertdata"];
-    let token = auth.token(scopes).await.unwrap();
-
-    match token.token() {
-        Some(t) => t.to_string(),
-        _ => panic!("No access token found"),
-    }
-}
-
-async fn stream_to_bigquery(data: Value) -> Result<(), Box<dyn std::error::Error>> {
-    let token = get_access_token().await;
+async fn stream_to_bigquery(app_state: &AppState, data: Value) -> Result<(), Box<dyn std::error::Error>> {
+    let token = app_state.get_access_token(&["https://www.googleapis.com/auth/bigquery.insertdata"]).await;
     let client = Client::new();
     let request_url = BIGQUERY_INGESTION_URL.to_string();
     let response = client

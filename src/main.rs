@@ -12,7 +12,7 @@ use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
-use report::report_approved_handler;
+use offchain_service::report_approved_handler;
 use reqwest::Url;
 use tower::make::Shared;
 use tower::steer::Steer;
@@ -27,8 +27,8 @@ use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::backup_job_handler;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
-use crate::report::off_chain::off_chain_server::OffChainServer;
-use crate::report::{off_chain, OffChainService};
+use crate::offchain_service::off_chain::off_chain_server::OffChainServer;
+use crate::offchain_service::{off_chain, OffChainService};
 use error::*;
 
 mod app_state;
@@ -38,7 +38,7 @@ mod config;
 mod consts;
 mod error;
 mod events;
-mod report;
+mod offchain_service;
 mod types;
 
 use app_state::AppState;
@@ -73,6 +73,7 @@ async fn main() -> Result<()> {
 
     let reflection_service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(warehouse_events::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(off_chain::FILE_DESCRIPTOR_SET)
         .build()
         .unwrap();
 
@@ -85,7 +86,9 @@ async fn main() -> Result<()> {
             check_auth_grpc,
         )))
         .add_service(tonic_web::enable(OffChainServer::with_interceptor(
-            OffChainService {},
+            OffChainService {
+                shared_state: shared_state.clone(),
+            },
             check_auth_grpc,
         )))
         .add_service(reflection_service)

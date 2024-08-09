@@ -6,7 +6,9 @@ use serde_json::json;
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
+use crate::events::push_notifications::dispatch_notif;
 use crate::AppState;
+use serde_json::Value;
 
 pub mod warehouse_events {
     tonic::include_proto!("warehouse_events");
@@ -15,6 +17,7 @@ pub mod warehouse_events {
 }
 
 pub mod event;
+pub mod push_notifications;
 
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
@@ -31,13 +34,18 @@ impl WarehouseEvents for WarehouseEventsService {
         let request = request.into_inner();
         let event = event::Event::new(request);
 
-        event.stream_to_bigquery();
+        let params: Value = serde_json::from_str(&event.event.params).expect("Invalid JSON");
+        let event_type: &str = &event.event.event;
+
+        event.stream_to_bigquery(&shared_state.clone());
 
         event.upload_to_gcs();
 
         event.update_watch_history(&shared_state.clone());
 
         event.update_success_history(&shared_state.clone());
+
+        let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
 
         Ok(tonic::Response::new(Empty {}))
     }
