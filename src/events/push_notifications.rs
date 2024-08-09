@@ -35,17 +35,18 @@ async fn notify_principal(target_principal: &str, notif: Notification) -> Result
         .send()
         .await;
 
-    if response.is_err() {
+    if response.is_ok() && response.as_ref().unwrap().status().is_success() {
+        log::info!("Notification sent successfully");
+    } else {
         log::error!("Error sending notification: {:?}", response);
         return Err(anyhow::anyhow!("Error sending notification").into());
-    } else {
-        log::info!("Notification sent successfully");
     }
+
     Ok(())
 }
 
 pub async fn subscribe_device_to_topic(target_principal: &str, topic: &str) -> Result<()> {
-    println!("Subscribing\n{}\nto topic\n{}", target_principal, topic);
+    log::error!("Subscribing\n{}\nto topic\n{}", target_principal, topic);
     let client = reqwest::Client::new();
     let url = format!("https://iid.googleapis.com/iid/v1/{}/rel/topics/{}", target_principal, topic);
     let token = get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"]).await;
@@ -56,12 +57,13 @@ pub async fn subscribe_device_to_topic(target_principal: &str, topic: &str) -> R
         .send()
         .await;
 
-    if response.is_err() {
+    if response.is_ok() && response.as_ref().unwrap().status().is_success() {
+        log::info!("Subscribed to topic successfully");
+    } else {
         log::error!("Error subscribing to topic: {:?}", response);
         return Err(anyhow::anyhow!("Error subscribing to topic").into());
-    } else {
-        log::info!("Subscribed to topic successfully");
     }
+
     Ok(())
 }
 
