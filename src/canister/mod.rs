@@ -15,6 +15,7 @@ mod generated;
 
 pub mod reclaim_canisters;
 pub mod snapshot;
+pub mod upload_user_video;
 pub mod utils;
 pub use generated::*;
 

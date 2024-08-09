@@ -7,6 +7,7 @@ use auth::check_auth_grpc_test;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
+use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
@@ -65,6 +66,7 @@ async fn main() -> Result<()> {
         .route("/canisters_list", get(canisters_list_handler))
         .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
+        .route("/import-video", post(upload_user_video_handler))
         .with_state(shared_state.clone())
         .map_err(axum::BoxError::from)
         .boxed_clone();

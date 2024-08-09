@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = { version = "0.6.20", features = ["macros"] }
+axum = { version = "0.6.20", features = ["macros", "json"] }
 candid = "0.10.6"
 chrono = { version = "0.4.34", features = ["serde"] }
 futures = "0.3.30"
@@ -50,6 +50,7 @@ exponential-backoff = "1.2.0"
 cloud-storage = { version = "0.11.1", default-features = false, features = [
     "rustls-tls",
 ] }
+k256 = { version = "0.13.3", features = ["jwk"] }
 time = "0.3.36"
 
 [build-dependencies]
