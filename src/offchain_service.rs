@@ -1,15 +1,12 @@
 use std::{collections::HashMap, env, fmt::format, sync::Arc};
 
 use crate::{
-    app_state::AppState,
-    canister::individual_user_template::{PostStatus, Result5},
-    consts::GOOGLE_CHAT_REPORT_SPACE_URL,
-    AppError,
+    app_state::AppState, canister::individual_user_template::{PostStatus, Result5}, consts::GOOGLE_CHAT_REPORT_SPACE_URL, events::push_notifications::subscribe_device_to_topic, AppError
 };
 use anyhow::{Context, Result};
 use axum::{extract::State, Json};
 use axum_extra::TypedHeader;
-use candid::Principal;
+use candid::{types::principal, Principal};
 use headers::{
     authorization::{Basic, Bearer},
     Authorization,
@@ -23,7 +20,7 @@ use yup_oauth2::{
     ServiceAccountAuthenticator,
 };
 
-use crate::report::off_chain::{Empty, ReportPostRequest};
+use crate::offchain_service::off_chain::{Empty, ReportPostRequest, BindDeviceToPrincipalRequest};
 use off_chain::off_chain_server::OffChain;
 
 pub mod off_chain {
@@ -32,7 +29,9 @@ pub mod off_chain {
         tonic::include_file_descriptor_set!("off_chain_descriptor");
 }
 
-pub struct OffChainService {}
+pub struct OffChainService {
+    pub shared_state: Arc<AppState>,
+}
 
 #[tonic::async_trait]
 impl OffChain for OffChainService {
@@ -103,6 +102,26 @@ impl OffChain for OffChainService {
             return Err(tonic::Status::new(
                 tonic::Code::Unknown,
                 "Error sending data to Google Chat",
+            ));
+        }
+
+        Ok(tonic::Response::new(Empty {}))
+    }
+
+    async fn bind_device_to_principal(
+        &self,
+        request: tonic::Request<BindDeviceToPrincipalRequest>,
+    ) -> core::result::Result<tonic::Response<Empty>, tonic::Status> {
+        let request = request.into_inner();
+        let device_id = request.device_id;
+        let principal_id = request.principal_id;
+
+        let result = subscribe_device_to_topic(&device_id, &principal_id, &self.shared_state).await;
+        if let Err(e) = result {
+            log::error!("Error subscribing principal to topic: {:?}", e);
+            return Err(tonic::Status::new(
+                tonic::Code::Unknown,
+                "Error subscribing principal to topic",
             ));
         }
 
