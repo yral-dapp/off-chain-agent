@@ -71,39 +71,43 @@ pub async fn init_google_sa_key_access_token(conf: &AppConfig) -> String {
 }
 
 pub async fn init_agent() -> Agent {
-    let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
-
-    let identity = match ic_agent::identity::BasicIdentity::from_pem(
-        stringreader::StringReader::new(pk.as_str()),
-    ) {
-        Ok(identity) => identity,
-        Err(err) => {
-            panic!("Unable to create identity, error: {:?}", err);
-        }
-    };
-
-    // let identity = match ic_agent::identity::Secp256k1Identity::from_pem_file(
-    //     "/Users/komalsai/Downloads/generated-id.pem",
-    // ) {
-    //     Ok(identity) => identity,
-    //     Err(err) => {
-    //         panic!("Unable to create identity, error: {:?}", err);
-    //     }
-    // };
-
-    let agent = match Agent::builder()
-        .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
-        .with_identity(identity)
-        .build()
+    #[cfg(not(feature = "local-bin"))]
     {
-        Ok(agent) => agent,
-        Err(err) => {
-            panic!("Unable to create agent, error: {:?}", err);
-        }
-    };
+        let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
-    // ‼️‼️comment below line in mainnet‼️‼️
-    // agent.fetch_root_key().await.unwrap();
+        let identity = match ic_agent::identity::BasicIdentity::from_pem(
+            stringreader::StringReader::new(pk.as_str()),
+        ) {
+            Ok(identity) => identity,
+            Err(err) => {
+                panic!("Unable to create identity, error: {:?}", err);
+            }
+        };
 
-    agent
+        let agent = match Agent::builder()
+            .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
+            .with_identity(identity)
+            .build()
+        {
+            Ok(agent) => agent,
+            Err(err) => {
+                panic!("Unable to create agent, error: {:?}", err);
+            }
+        };
+
+        agent
+    }
+
+    #[cfg(feature = "local-bin")]
+    {
+        let agent = Agent::builder()
+            .with_url("http://localhost:4943")
+            .build()
+            .unwrap();
+
+        // ‼️‼️comment below line in mainnet‼️‼️
+        agent.fetch_root_key().await.unwrap();
+
+        agent
+    }
 }
