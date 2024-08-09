@@ -22,8 +22,7 @@ pub struct ApiResponse<T> {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct UploadUserVideoRequestBody {
-    url: String,
-    payload: DelegatedIdentityWire,
+    delegated_identity_wire: DelegatedIdentityWire,
     post_details: PostDetails,
 }
 
@@ -106,7 +105,7 @@ pub async fn upload_user_video_impl(
     payload: UploadUserVideoRequestBody,
 ) -> Result<(), Box<dyn Error>> {
     let yral_metadata_client = &app_state.yral_metadata_client;
-    let identity: DelegatedIdentity = DelegatedIdentity::try_from(payload.payload)?;
+    let identity: DelegatedIdentity = DelegatedIdentity::try_from(payload.delegated_identity_wire)?;
     let user_principal = identity.sender()?;
 
     let agent = Agent::builder()
