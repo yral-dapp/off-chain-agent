@@ -1,4 +1,4 @@
-use crate::events::event::get_access_token;
+use crate::{app_state::AppState};
 use serde_json::Value;
 use anyhow::{Context, Result};
 
@@ -10,10 +10,10 @@ struct Notification {
     // data: String,
 }
 
-async fn notify_principal(target_principal: &str, notif: Notification) -> Result<(), Box<dyn std::error::Error>> {
+async fn notify_principal(target_principal: &str, notif: Notification, app_state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let url = "https://fcm.googleapis.com/v1/projects/hot-or-not-feed-intelligence/messages:send";
-    let token = get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"]).await;
+    let token = app_state.get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"]).await;
 
     let data = format!(
         r#"{{
@@ -45,11 +45,11 @@ async fn notify_principal(target_principal: &str, notif: Notification) -> Result
     Ok(())
 }
 
-pub async fn subscribe_device_to_topic(target_principal: &str, topic: &str) -> Result<()> {
+pub async fn subscribe_device_to_topic(target_principal: &str, topic: &str, app_state: &AppState) -> Result<()> {
     log::error!("Subscribing\n{}\nto topic\n{}", target_principal, topic);
     let client = reqwest::Client::new();
     let url = format!("https://iid.googleapis.com/iid/v1/{}/rel/topics/{}", target_principal, topic);
-    let token = get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"]).await;
+    let token = app_state.get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"]).await;
 
     let response = client.post(url)
         .header("Authorization", format!("Bearer {}", token))
@@ -67,7 +67,7 @@ pub async fn subscribe_device_to_topic(target_principal: &str, topic: &str) -> R
     Ok(())
 }
 
-pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn dispatch_notif(event_type: &str, params: Value, app_state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
     match event_type {
         // LikeVideo
         "like_video" => {
@@ -85,7 +85,7 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
                 }),
                 image: "https://imagedelivery.net/abXI9nS4DYYtyR1yFFtziA/gob.42/public".to_string(),
             };
-            notify_principal(target_principal, notif).await?;
+            notify_principal(target_principal, notif, app_state).await?;
         }
         // ShareVideo
         "share_video" => {
@@ -97,7 +97,7 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
                 body: format!("{} shared your video", sharer_name),
                 image: "https://imagedelivery.net/abXI9nS4DYYtyR1yFFtziA/gob.42/public".to_string(),
             };
-            notify_principal(target_principal, notif).await?;
+            notify_principal(target_principal, notif, app_state).await?;
         }
         // VideoWatched
         "video_viewed" => {
@@ -115,7 +115,7 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
                 }),
                 image: "https://imagedelivery.net/abXI9nS4DYYtyR1yFFtziA/gob.42/public".to_string(),
             };
-            notify_principal(target_principal, notif).await?;
+            notify_principal(target_principal, notif, app_state).await?;
         }
         // VideoUploadUnsuccessful
         "video_upload_unsuccessful" => {
@@ -125,7 +125,7 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
                 body: "Your video upload was unsuccessful".to_string(),
                 image: "https://imagedelivery.net/abXI9nS4DYYtyR1yFFtziA/gob.42/public".to_string(),
             };
-            notify_principal(target_principal, notif).await?;
+            notify_principal(target_principal, notif, app_state).await?;
         }
         // VideoUploadSuccessful
         "video_upload_successful" => {
@@ -135,7 +135,7 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
                 body: "Your video upload was successful".to_string(),
                 image: "https://imagedelivery.net/abXI9nS4DYYtyR1yFFtziA/gob.42/public".to_string(),
             };
-            notify_principal(target_principal, notif).await?;
+            notify_principal(target_principal, notif, app_state).await?;
         }
         _ => {
             log::error!("Event not found");

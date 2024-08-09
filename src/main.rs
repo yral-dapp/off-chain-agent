@@ -56,7 +56,6 @@ async fn main() -> Result<()> {
         .init();
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
-    let _ = events::event::init_auth().await;
 
     // build our application with a route
     let http = Router::new()
@@ -85,7 +84,9 @@ async fn main() -> Result<()> {
             check_auth_grpc,
         )))
         .add_service(tonic_web::enable(OffChainServer::with_interceptor(
-            OffChainService {},
+            OffChainService {
+                shared_state: shared_state.clone(),
+            },
             check_auth_grpc,
         )))
         .add_service(reflection_service)

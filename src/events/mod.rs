@@ -34,7 +34,7 @@ impl WarehouseEvents for WarehouseEventsService {
         let params: Value = serde_json::from_str(&event.event.params).expect("Invalid JSON");
         let event_type: &str = &event.event.event;
 
-        event.stream_to_bigquery();
+        event.stream_to_bigquery(&shared_state.clone());
 
         event.upload_to_gcs();
 
@@ -42,7 +42,7 @@ impl WarehouseEvents for WarehouseEventsService {
 
         event.update_success_history(&shared_state.clone());
 
-        let _ = dispatch_notif(event_type, params).await;
+        let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
 
         Ok(tonic::Response::new(Empty {}))
     }

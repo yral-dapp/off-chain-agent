@@ -29,7 +29,9 @@ pub mod off_chain {
         tonic::include_file_descriptor_set!("off_chain_descriptor");
 }
 
-pub struct OffChainService {}
+pub struct OffChainService {
+    pub shared_state: Arc<AppState>,
+}
 
 #[tonic::async_trait]
 impl OffChain for OffChainService {
@@ -114,7 +116,7 @@ impl OffChain for OffChainService {
         let device_id = request.device_id;
         let principal_id = request.principal_id;
 
-        let result = subscribe_device_to_topic(&device_id, &principal_id).await;
+        let result = subscribe_device_to_topic(&device_id, &principal_id, &self.shared_state).await;
         if let Err(e) = result {
             log::error!("Error subscribing principal to topic: {:?}", e);
             return Err(tonic::Status::new(

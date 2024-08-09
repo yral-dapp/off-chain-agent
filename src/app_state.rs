@@ -5,12 +5,14 @@ use candid::Principal;
 use ic_agent::Agent;
 use std::env;
 use yral_metadata_client::MetadataClient;
-use yup_oauth2::ServiceAccountAuthenticator;
+use yup_oauth2::{authenticator::Authenticator, hyper_rustls::HttpsConnector, ServiceAccountAuthenticator};
+use hyper::client::HttpConnector;
 
 #[derive(Clone)]
 pub struct AppState {
     pub agent: ic_agent::Agent,
     pub yral_metadata_client: MetadataClient<true>,
+    pub auth: Authenticator<HttpsConnector<HttpConnector>>,
 }
 
 impl AppState {
@@ -18,7 +20,18 @@ impl AppState {
         AppState {
             yral_metadata_client: init_yral_metadata_client(&app_config),
             agent: init_agent().await,
+            auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
+        }
+    }
+
+    pub async fn get_access_token(&self, scopes: &[&str]) -> String {
+        let auth = &self.auth;
+        let token = auth.token(scopes).await.unwrap();
+    
+        match token.token() {
+            Some(t) => t.to_string(),
+            _ => panic!("No access token found"),
         }
     }
 
@@ -48,26 +61,6 @@ impl AppState {
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
     MetadataClient::with_base_url(YRAL_METADATA_URL.clone())
         .with_jwt_token(conf.yral_metadata_token.clone())
-}
-
-pub async fn init_google_sa_key_access_token(conf: &AppConfig) -> String {
-    let sa_key_file = conf.google_sa_key.clone();
-
-    // Load service account key
-    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY");
-
-    let auth = ServiceAccountAuthenticator::builder(sa_key)
-        .build()
-        .await
-        .unwrap();
-
-    let scopes = &["https://www.googleapis.com/auth/bigquery.insertdata"];
-    let token = auth.token(scopes).await.unwrap();
-
-    match token.token() {
-        Some(t) => t.to_string(),
-        _ => panic!("No access token found"),
-    }
 }
 
 pub async fn init_agent() -> Agent {
@@ -110,4 +103,16 @@ pub async fn init_agent() -> Agent {
 
         agent
     }
+}
+
+pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
+    let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
+
+    // Load your service account key
+    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
+
+    ServiceAccountAuthenticator::builder(sa_key)
+        .build()
+        .await
+        .unwrap()
 }
