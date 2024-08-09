@@ -1,15 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::env;
+use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{Query, State};
-use candid::Deserialize;
+use candid::{Deserialize, Principal};
 use futures::StreamExt;
 use log::{error, info};
 use reqwest::Client;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tonic::metadata::MetadataValue;
 use tonic::transport::Channel;
 use tonic::Request;
@@ -29,6 +30,56 @@ pub mod warehouse_events {
 
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
+}
+
+pub struct VideoUploadSuccessful {
+    pub shared_state: Arc<AppState>,
+}
+
+impl VideoUploadSuccessful {
+    pub async fn send_event(
+        &self,
+        user_principal: Principal,
+        user_canister_id: Principal,
+        username: String,
+        video_uid: String,
+        hashtags_len: usize,
+        is_nsfw: bool,
+        enable_hot_or_not: bool,
+        post_id: u64,
+    ) -> Result<(), Box<dyn Error>> {
+        // video_upload_successful - analytics
+        let event_name = "video_upload_successful";
+
+        let ware_house_events_service = WarehouseEventsService {
+            shared_state: self.shared_state.clone(),
+        };
+
+        let params = &json!({
+            "user_id": user_principal,
+            "publisher_user_id": user_principal,
+            "display_name": username,
+            "canister_id": user_canister_id,
+            "creator_category": "NA",
+            "hashtag_count": hashtags_len,
+            "is_NSFW": is_nsfw,
+            "is_hotorNot": enable_hot_or_not,
+            "is_filter_used": false,
+            "video_id": video_uid,
+            "post_id": post_id,
+        });
+
+        let warehouse_event = WarehouseEvent {
+            event: event_name.into(),
+            params: params.to_string(),
+        };
+
+        let request = tonic::Request::new(warehouse_event);
+
+        ware_house_events_service.send_event(request).await?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
