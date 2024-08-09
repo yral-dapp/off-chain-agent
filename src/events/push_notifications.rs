@@ -69,8 +69,7 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
     match event_type {
         // LikeVideo
         "like_video" => {
-            // let target_principal = params["publisher_user_id"].as_str().unwrap();
-            let target_principal = "qd72i-rom2e-dycfz-dlylp-rfux5-5k56f-h4u3a-yz4xl-lcvkk-hatrh-zae";
+            let target_principal = params["publisher_user_id"].as_str().unwrap();
             let like_count = params["like_count"].as_u64().unwrap();
             let liker_name = params["display_name"].as_str().unwrap_or("A YRAL user");
             let notif = Notification {
@@ -101,7 +100,6 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
         // VideoWatched
         "video_viewed" => {
             let target_principal = params["publisher_user_id"].as_str().unwrap();
-            // let target_principal = "qd72i-rom2e-dycfz-dlylp-rfux5-5k56f-h4u3a-yz4xl-lcvkk-hatrh-zae";
             let viewer_name = params["display_name"].as_str().unwrap_or("A YRAL user");
             let view_count = params["view_count"].as_u64().unwrap();
             let notif = Notification {
@@ -120,7 +118,6 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
         // VideoUploadUnsuccessful
         "video_upload_unsuccessful" => {
             let target_principal = params["user_id"].as_str().unwrap();
-            // let target_principal = "qd72i-rom2e-dycfz-dlylp-rfux5-5k56f-h4u3a-yz4xl-lcvkk-hatrh-zae";
             let notif = Notification {
                 title: "Upload Failed".to_string(),
                 body: "Your video upload was unsuccessful".to_string(),
@@ -131,7 +128,6 @@ pub async fn dispatch_notif(event_type: &str, params: Value) -> Result<(), Box<d
         // VideoUploadSuccessful
         "video_upload_successful" => {
             let target_principal = params["user_id"].as_str().unwrap();
-            // let target_principal = "qd72i-rom2e-dycfz-dlylp-rfux5-5k56f-h4u3a-yz4xl-lcvkk-hatrh-zae";
             let notif = Notification {
                 title: "Upload Successful".to_string(),
                 body: "Your video upload was successful".to_string(),
