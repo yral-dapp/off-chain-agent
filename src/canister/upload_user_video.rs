@@ -7,7 +7,6 @@ use ic_agent::{
 };
 use k256::{elliptic_curve::JwkEcKey, SecretKey};
 use serde::{Deserialize, Serialize};
-use yral_metadata_client::MetadataClient;
 
 use crate::{app_state::AppState, events::VideoUploadSuccessful};
 
@@ -94,7 +93,7 @@ where
 pub async fn upload_user_video_handler(
     State(app_state): State<Arc<AppState>>,
     Json(payload): Json<UploadUserVideoRequestBody>,
-) -> Json<ApiResponse<()>> {
+) -> Json<ApiResponse<u64>> {
     let upload_video_result = upload_user_video_impl(app_state.clone(), payload).await;
 
     Json(ApiResponse::from(upload_video_result))
@@ -103,7 +102,7 @@ pub async fn upload_user_video_handler(
 pub async fn upload_user_video_impl(
     app_state: Arc<AppState>,
     payload: UploadUserVideoRequestBody,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<u64, Box<dyn Error>> {
     let yral_metadata_client = &app_state.yral_metadata_client;
     let identity: DelegatedIdentity = DelegatedIdentity::try_from(payload.delegated_identity_wire)?;
     let user_principal = identity.sender()?;
@@ -150,7 +149,7 @@ pub async fn upload_user_video_impl(
                 );
             }
 
-            Ok(())
+            Ok(post_id)
         }
         Result_::Err(e) => Err(e.into()),
     }
