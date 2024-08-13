@@ -2,11 +2,13 @@ use crate::consts::YRAL_METADATA_URL;
 use crate::{canister::individual_user_template::IndividualUserTemplate, config::AppConfig};
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
+use hyper::client::HttpConnector;
 use ic_agent::Agent;
 use std::env;
 use yral_metadata_client::MetadataClient;
-use yup_oauth2::{authenticator::Authenticator, hyper_rustls::HttpsConnector, ServiceAccountAuthenticator};
-use hyper::client::HttpConnector;
+use yup_oauth2::{
+    authenticator::Authenticator, hyper_rustls::HttpsConnector, ServiceAccountAuthenticator,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -28,7 +30,7 @@ impl AppState {
     pub async fn get_access_token(&self, scopes: &[&str]) -> String {
         let auth = &self.auth;
         let token = auth.token(scopes).await.unwrap();
-    
+
         match token.token() {
             Some(t) => t.to_string(),
             _ => panic!("No access token found"),
@@ -94,12 +96,12 @@ pub async fn init_agent() -> Agent {
     #[cfg(feature = "local-bin")]
     {
         let agent = Agent::builder()
-            .with_url("http://localhost:4943")
+            .with_url("https://ic0.app")
             .build()
             .unwrap();
 
         // ‼️‼️comment below line in mainnet‼️‼️
-        agent.fetch_root_key().await.unwrap();
+        // agent.fetch_root_key().await.unwrap();
 
         agent
     }

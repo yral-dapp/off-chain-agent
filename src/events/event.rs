@@ -57,13 +57,14 @@ impl Event {
             let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
 
             tokio::spawn(async move {
+                let timestamp = chrono::Utc::now().to_rfc3339();
                 tokio::time::sleep(Duration::from_secs(30)).await;
 
                 let uid = params["video_id"].as_str().unwrap();
                 let canister_id = params["canister_id"].as_str().unwrap();
                 let post_id = params["post_id"].as_u64().unwrap();
 
-                let res = upload_gcs(uid, canister_id, post_id).await;
+                let res = upload_gcs(uid, canister_id, post_id, timestamp).await;
                 if res.is_err() {
                     log::error!("Error uploading video to GCS: {:?}", res.err());
                 }
@@ -202,7 +203,12 @@ impl Event {
     }
 }
 
-pub async fn upload_gcs(uid: &str, canister_id: &str, post_id: u64) -> Result<(), anyhow::Error> {
+pub async fn upload_gcs(
+    uid: &str,
+    canister_id: &str,
+    post_id: u64,
+    timestamp_str: String,
+) -> Result<(), anyhow::Error> {
     let url = format!(
         "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
         uid
@@ -225,6 +231,7 @@ pub async fn upload_gcs(uid: &str, canister_id: &str, post_id: u64) -> Result<()
     let mut hashmap = HashMap::new();
     hashmap.insert("canister_id".to_string(), canister_id.to_string());
     hashmap.insert("post_id".to_string(), post_id.to_string());
+    hashmap.insert("timestamp".to_string(), timestamp_str);
     res_obj.metadata = Some(hashmap);
 
     // update
@@ -233,8 +240,13 @@ pub async fn upload_gcs(uid: &str, canister_id: &str, post_id: u64) -> Result<()
     Ok(())
 }
 
-async fn stream_to_bigquery(app_state: &AppState, data: Value) -> Result<(), Box<dyn std::error::Error>> {
-    let token = app_state.get_access_token(&["https://www.googleapis.com/auth/bigquery.insertdata"]).await;
+async fn stream_to_bigquery(
+    app_state: &AppState,
+    data: Value,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let token = app_state
+        .get_access_token(&["https://www.googleapis.com/auth/bigquery.insertdata"])
+        .await;
     let client = Client::new();
     let request_url = BIGQUERY_INGESTION_URL.to_string();
     let response = client
