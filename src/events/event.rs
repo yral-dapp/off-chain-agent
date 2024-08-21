@@ -58,7 +58,7 @@ impl Event {
 
             tokio::spawn(async move {
                 let timestamp = chrono::Utc::now().to_rfc3339();
-                tokio::time::sleep(Duration::from_secs(30)).await;
+                tokio::time::sleep(Duration::from_secs(60)).await;
 
                 let uid = params["video_id"].as_str().unwrap();
                 let canister_id = params["canister_id"].as_str().unwrap();
