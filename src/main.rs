@@ -25,7 +25,7 @@ use yup_oauth2::ServiceAccountAuthenticator;
 use crate::auth::{check_auth_grpc, AuthBearer};
 use crate::canister::canisters_list_handler;
 use crate::canister::reclaim_canisters::reclaim_canisters_handler;
-use crate::canister::snapshot::backup_job_handler;
+use crate::canister::snapshot::{backup_job_handler, backup_job_handler_without_auth};
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
 use crate::offchain_service::off_chain::off_chain_server::OffChainServer;
@@ -64,6 +64,7 @@ async fn main() -> Result<()> {
         .route("/", get(hello_work_handler))
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
+        .route("/start_backup_without_auth",get(backup_job_handler_without_auth))
         .route("/canisters_list", get(canisters_list_handler))
         .route("/canisters_list_old", get(canisters_list_old_handler))
         .route("/reclaim_canisters", get(reclaim_canisters_handler))

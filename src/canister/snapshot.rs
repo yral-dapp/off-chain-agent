@@ -145,6 +145,136 @@ pub async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static 
     Html("Ok")
 }
 
+
+pub async fn backup_job_handler_without_auth() -> Html<&'static str> {
+
+    tokio::spawn(async {
+        let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+
+        let identity = match ic_agent::identity::BasicIdentity::from_pem(
+            stringreader::StringReader::new(pk.as_str()),
+        ) {
+            Ok(identity) => identity,
+            Err(err) => {
+                println!("Unable to create identity, error: {:?}", err);
+                return Html("Unable to create identity");
+            }
+        };
+
+        let agent = match Agent::builder()
+            .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
+            .with_identity(identity)
+            .build()
+        {
+            Ok(agent) => agent,
+            Err(err) => {
+                println!("Unable to create agent, error: {:?}", err);
+                return Html("Unable to create agent");
+            }
+        };
+        // ‼️‼️comment below line in mainnet‼️‼️
+        // agent.fetch_root_key().await.unwrap();
+
+        // let canister_ids_list = match get_canisters_list(&agent).await {
+        //     Ok(canister_ids_list) => canister_ids_list,
+        //     Err(err) => {
+        //         println!("Unable to get canister list, error: {:?}", err);
+        //         return Html("Unable to get canister list");
+        //     }
+        // };
+
+        // Debug point
+        let raw_list = vec![
+            "dyuzm-uqaaa-aaaal-agt7q-cai",
+            "uohib-byaaa-aaaak-qd6vq-cai",
+            "vfvsa-lqaaa-aaaag-qetmq-cai",
+            "c3llc-vqaaa-aaaap-achaq-cai",
+            "dyngx-iyaaa-aaaak-qhkjq-cai",
+        ];
+        let canister_ids_list: Vec<Principal> = raw_list
+            .iter()
+            .map(|x| Principal::from_text(x).unwrap())
+            .collect();
+
+        // canister_ids_list = canister_ids_list[5000..6500].to_vec();
+
+        const PARALLEL_REQUESTS: usize = 100;
+
+        let now = Instant::now();
+
+        let futures = canister_ids_list.iter().map(|canister_id| async {
+            let agent_c = agent.clone();
+            let canister_id_c = *canister_id;
+            download_snapshot(&agent_c, &canister_id_c).await
+        });
+
+        let stream = futures::stream::iter(futures)
+            .boxed()
+            .buffer_unordered(PARALLEL_REQUESTS);
+
+        let results = stream.collect::<Vec<Option<String>>>().await;
+
+        // find the failed canister ids
+        let failed_canister_ids = results
+            .iter()
+            .filter(|x| x.is_some())
+            .map(|x| x.as_ref().unwrap().to_string())
+            .collect::<Vec<String>>();
+
+        let elapsed = now.elapsed();
+
+        println!(
+            "final success {:?}/{:?} in {:?}",
+            canister_ids_list.len() - failed_canister_ids.len(),
+            canister_ids_list.len(),
+            elapsed
+        );
+
+        println!("failed_canister_ids -  {:?}", failed_canister_ids);
+
+        // Run retry for failed canister ids
+        let failed_canister_principals = failed_canister_ids
+            .iter()
+            .map(|x| Principal::from_text(x).unwrap())
+            .collect::<Vec<Principal>>();
+
+        let now = Instant::now();
+
+        let futures = failed_canister_principals.iter().map(|canister_id| async {
+            let agent_c = agent.clone();
+            let canister_id_c = *canister_id;
+            download_snapshot(&agent_c, &canister_id_c).await
+        });
+
+        let stream = futures::stream::iter(futures)
+            .boxed()
+            .buffer_unordered(PARALLEL_REQUESTS);
+
+        let results = stream.collect::<Vec<Option<String>>>().await;
+
+        // find the failed canister ids
+        let failed_canister_ids = results
+            .iter()
+            .filter(|x| x.is_some())
+            .map(|x| x.as_ref().unwrap().to_string())
+            .collect::<Vec<String>>();
+
+        let elapsed = now.elapsed();
+
+        println!(
+            "retry success {:?}/{:?} in {:?}",
+            failed_canister_principals.len() - failed_canister_ids.len(),
+            failed_canister_principals.len(),
+            elapsed
+        );
+
+        println!("retry failed_canister_ids -  {:?}", failed_canister_ids);
+
+        Html("Ok")
+    });
+    Html("Ok")
+}
+
 async fn download_snapshot(agent: &Agent, canister_id: &Principal) -> Option<String> {
     // Save snapshot
 
