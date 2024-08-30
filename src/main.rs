@@ -64,9 +64,11 @@ async fn main() -> Result<()> {
         .route("/", get(hello_work_handler))
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
-        .route("/start_backup_without_auth",get(backup_job_handler_without_auth))
+        .route(
+            "/start_backup_without_auth",
+            get(backup_job_handler_without_auth),
+        )
         .route("/canisters_list", get(canisters_list_handler))
-        .route("/canisters_list_old", get(canisters_list_old_handler))
         .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
         .route("/import-video", post(upload_user_video_handler))
