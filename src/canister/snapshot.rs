@@ -1,10 +1,12 @@
 use crate::auth::AuthBearer;
+use axum::extract::Query;
 use axum::response::Html;
 use candid::encode_args;
 use futures::prelude::*;
 use ic_agent::{export::Principal, Agent};
 use s3::creds::Credentials;
 use s3::{Bucket, Region};
+use std::collections::HashMap;
 use std::env;
 use std::time::Instant;
 
@@ -145,9 +147,7 @@ pub async fn backup_job_handler(AuthBearer(token): AuthBearer) -> Html<&'static 
     Html("Ok")
 }
 
-
 pub async fn backup_job_handler_without_auth() -> Html<&'static str> {
-
     tokio::spawn(async {
         let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
@@ -474,4 +474,137 @@ async fn download_snapshot(agent: &Agent, canister_id: &Principal) -> Option<Str
 
     // print response data headers
     // println!("headers {:?}", response_data.headers());
+}
+
+pub async fn get_snapshot(agent: &Agent, canister_id: &Principal) -> Option<String> {
+    // Save snapshot
+
+    let response = match agent
+        .update(canister_id, "save_snapshot_json")
+        .with_arg(encode_args(()).unwrap())
+        .call_and_wait()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            println!(
+                "Unable to call the method save_snapshot_json, error: {:?}, canister_id {:?}",
+                err,
+                canister_id.to_string()
+            );
+            return Some(canister_id.to_string());
+        }
+    };
+
+    let snapshot_size = match candid::decode_one(&response) {
+        Ok(result) => {
+            let result: u32 = result;
+            // println!("len {:?}", result);
+            result
+        }
+        Err(err) => {
+            println!(
+                "Unable to decode the response save_snapshot_json, error: {:?}, canister_id {:?}",
+                err,
+                canister_id.to_string()
+            );
+            return Some(canister_id.to_string());
+        }
+    };
+
+    // Download snapshot
+
+    let mut snapshot_bytes = vec![];
+    let chunk_size = 1000 * 1000;
+    let num_iters = (snapshot_size as f32 / chunk_size as f32).ceil() as u32;
+
+    for i in 0..num_iters {
+        let start = i * chunk_size;
+        let mut end = (i + 1) * chunk_size;
+        if end > snapshot_size {
+            end = snapshot_size;
+        }
+
+        let response = match agent
+            .update(canister_id, "download_snapshot")
+            .with_arg(encode_args((start as u64, (end - start) as u64)).unwrap())
+            .call_and_wait()
+            .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                println!(
+                    "Unable to call the method download_snapshot, error: {:?}, canister_id {:?}",
+                    err,
+                    canister_id.to_string()
+                );
+                return Some(canister_id.to_string());
+            }
+        };
+
+        let snapshot_chunk = match candid::decode_one(&response) {
+            Ok(result) => {
+                let result: Vec<u8> = result;
+                // println!("{:?}", result.len());
+                result
+            }
+            Err(err) => {
+                println!(
+                        "Unable to decode the response download_snapshot, error: {:?}, canister_id {:?}",
+                        err,
+                        canister_id.to_string()
+                    );
+                return Some(canister_id.to_string());
+            }
+        };
+
+        snapshot_bytes.extend(snapshot_chunk);
+    }
+
+    // return snapshot_bytes as JSON string
+    let snapshot_bytes = String::from_utf8(snapshot_bytes).unwrap();
+    Some(snapshot_bytes)
+}
+
+pub async fn get_snapshot_canister(
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<String, String> {
+    // read canister_id from params
+    let canister_id = params.get("canister_id").unwrap().clone();
+    let canister_id_principal = Principal::from_text(canister_id.as_str()).unwrap();
+
+    let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
+
+    let identity = match ic_agent::identity::BasicIdentity::from_pem(
+        stringreader::StringReader::new(pk.as_str()),
+    ) {
+        Ok(identity) => identity,
+        Err(err) => {
+            println!("Unable to create identity, error: {:?}", err);
+            return Err("Unable to create identity".to_string());
+        }
+    };
+
+    let agent = match Agent::builder()
+        .with_url("https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app") // https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/
+        .with_identity(identity)
+        .build()
+    {
+        Ok(agent) => agent,
+        Err(err) => {
+            println!("Unable to create agent, error: {:?}", err);
+            return Err("Unable to create agent".to_string());
+        }
+    };
+
+    // get_snapshot
+    let snapshot = match get_snapshot(&agent, &canister_id_principal).await {
+        Some(snapshot) => snapshot,
+        None => {
+            println!("Unable to get snapshot");
+            return Err("Unable to get snapshot".to_string());
+        }
+    };
+
+    Ok(snapshot)
 }
