@@ -7,7 +7,6 @@ use auth::check_auth_grpc_test;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
-use canister::canisters_list_old_handler;
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use env_logger::{Builder, Target};

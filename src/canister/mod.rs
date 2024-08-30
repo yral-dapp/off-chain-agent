@@ -8,7 +8,6 @@ use axum::{
 };
 use ic_agent::Agent;
 use serde::Serialize;
-use utils::get_canisters_list_all_old;
 
 use self::utils::get_canisters_list_all;
 #[allow(clippy::all)]
