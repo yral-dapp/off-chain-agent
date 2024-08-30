@@ -71,6 +71,10 @@ async fn main() -> Result<()> {
         .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
         .route("/import-video", post(upload_user_video_handler))
+        .route(
+            "/get-snapshot",
+            get(canister::snapshot::get_snapshot_canister),
+        )
         .with_state(shared_state.clone())
         .map_err(axum::BoxError::from)
         .boxed_clone();
