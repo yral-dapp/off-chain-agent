@@ -3,10 +3,12 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
-use auth::check_auth_grpc_test;
+use auth::{check_auth_grpc_offchain_mlfeed, check_auth_grpc_test};
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
+use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
+use canister::mlfeed_cache::OffChainCanisterService;
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use env_logger::{Builder, Target};
@@ -60,7 +62,6 @@ async fn main() -> Result<()> {
 
     // build our application with a route
     let http = Router::new()
-        .route("/", get(hello_work_handler))
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
         .route(
@@ -99,6 +100,12 @@ async fn main() -> Result<()> {
             },
             check_auth_grpc,
         )))
+        .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
+            OffChainCanisterService {
+                shared_state: shared_state.clone(),
+            },
+            check_auth_grpc_offchain_mlfeed,
+        )))
         .add_service(reflection_service)
         .into_service()
         .map_response(|r| r.map(axum::body::boxed))
@@ -126,18 +133,6 @@ async fn main() -> Result<()> {
         .unwrap();
 
     Ok(())
-}
-
-async fn hello_work_handler(AuthBearer(token): AuthBearer) -> Html<&'static str> {
-    if token
-        != env::var("CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY")
-            .expect("$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY is not set")
-    {
-        return Html("Unauthorized");
-    }
-    log::info!("Hello, World!");
-
-    Html("Hello, World!")
 }
 
 async fn health_handler() -> (StatusCode, &'static str) {

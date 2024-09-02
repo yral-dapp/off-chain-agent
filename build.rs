@@ -101,6 +101,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .out_dir(out_dir)
         .compile(&[proto_file], &["proto"])?;
 
+    // offchain_canister
+    let proto_file = "contracts/projects/off_chain/offchain_canister.proto";
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+    tonic_build::configure()
+        .build_client(false)
+        .build_server(true)
+        .file_descriptor_set_path(out_dir.join("offchain_canister_descriptor.bin"))
+        .out_dir(out_dir)
+        .compile(&[proto_file], &["proto"])?;
+
     let proto_file = "contracts/projects/ml_feed/ml_feed.proto";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
