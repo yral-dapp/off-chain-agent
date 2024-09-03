@@ -29,6 +29,8 @@ jobs:
       - name: Check env variable by printing length of MLFEED_JWT_PUBLIC_KEY
         run: |
           echo "The length is: ${#PUBLIC_KEY_FOR_CALLING_ML_FEED_SERVER_FROM_OFFCHAIN_AGENT_SERVER} and ${#ENCODED_JWT_TOKEN_FOR_CALLING_ML_FEED_SERVER_FROM_OFFCHAIN_AGENT_SERVER}"
+        env:
+          ENCODED_JWT_TOKEN_FOR_CALLING_ML_FEED_SERVER_FROM_OFFCHAIN_AGENT_SERVER: ${{ secrets.ENCODED_JWT_TOKEN_FOR_CALLING_ML_FEED_SERVER_FROM_OFFCHAIN_AGENT_SERVER }}
 
       - name: Install prereqs
         run: |
