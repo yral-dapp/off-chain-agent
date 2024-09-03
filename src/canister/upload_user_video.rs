@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{app_state::AppState, events::VideoUploadSuccessful};
 
-use super::individual_user_template::{IndividualUserTemplate, PostDetailsFromFrontend, Result_};
+use super::individual_user_template::{
+    IndividualUserTemplate, PostDetailsFromFrontend, Result1, Result_,
+};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
@@ -122,7 +124,7 @@ pub async fn upload_user_video_impl(
         .await?;
 
     match upload_video_res {
-        Result_::Ok(post_id) => {
+        Result1::Ok(post_id) => {
             let upload_video_event = VideoUploadSuccessful {
                 shared_state: app_state.clone(),
             };
@@ -151,6 +153,6 @@ pub async fn upload_user_video_impl(
 
             Ok(post_id)
         }
-        Result_::Err(e) => Err(e.into()),
+        Result1::Err(e) => Err(e.into()),
     }
 }

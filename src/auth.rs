@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 
 use axum::extract::FromRequestParts;
@@ -5,6 +6,8 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::{async_trait, Json};
 use http::request::Parts;
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tonic::metadata::MetadataValue;
 use tonic::{Request, Status};
@@ -68,5 +71,41 @@ pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
 }
 
 pub fn check_auth_grpc_test(req: Request<()>) -> Result<Request<()>, Status> {
+    Ok(req)
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct MLFeedClaims {
+    pub sub: String,
+    pub company: String,
+}
+
+pub fn check_auth_grpc_offchain_mlfeed(req: Request<()>) -> Result<Request<()>, Status> {
+    let token = req
+        .metadata()
+        .get("authorization")
+        .ok_or(Status::unauthenticated("No valid auth token"))?
+        .to_str()
+        .map_err(|_| Status::unauthenticated("Invalid auth token"))?
+        .trim_start_matches("Bearer ");
+
+    let mlfeed_public_key =
+        env::var("MLFEED_JWT_PUBLIC_KEY").expect("MLFEED_JWT_PUBLIC_KEY is required");
+
+    let decoding_key = DecodingKey::from_ed_pem(mlfeed_public_key.as_bytes())
+        .expect("failed to create decoding key");
+
+    let mut validation = Validation::new(Algorithm::EdDSA);
+    validation.required_spec_claims = HashSet::new();
+    validation.validate_exp = false;
+
+    let token_message =
+        decode::<MLFeedClaims>(token, &decoding_key, &validation).expect("failed to decode token");
+
+    let claims = token_message.claims;
+    if claims.sub != "yral-ml-feed-server" || claims.company != "gobazzinga" {
+        return Err(Status::unauthenticated("Invalid auth token"));
+    }
+
     Ok(req)
 }

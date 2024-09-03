@@ -96,12 +96,11 @@ pub async fn init_agent() -> Agent {
     #[cfg(feature = "local-bin")]
     {
         let agent = Agent::builder()
-            .with_url("https://ic0.app")
+            .with_url("http://127.0.0.1:4943")
             .build()
             .unwrap();
 
-        // ‼️‼️comment below line in mainnet‼️‼️
-        // agent.fetch_root_key().await.unwrap();
+        agent.fetch_root_key().await.unwrap();
 
         agent
     }

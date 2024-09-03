@@ -13,6 +13,7 @@ use self::utils::get_canisters_list_all;
 #[allow(clippy::all)]
 mod generated;
 
+pub mod mlfeed_cache;
 pub mod reclaim_canisters;
 pub mod snapshot;
 pub mod upload_user_video;
