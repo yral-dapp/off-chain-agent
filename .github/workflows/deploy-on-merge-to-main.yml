@@ -49,9 +49,7 @@ jobs:
           flyctl secrets set "ML_SERVER_JWT_TOKEN=$ML_SERVER_JWT_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN=$CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set HOTORNOT_CF_ACCOUNT_ID="a209c523d2d9646cc56227dbe6ce3ede" --app "icp-off-chain-agent" --stage
-          flyctl secrets set MLFEED_JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
-          MCowBQYDK2VwAyEA1Lpv21H9dsqetmqzeNunPvCNLZM4XpsZPSquHSO7OYw=
-          -----END PUBLIC KEY-----" --app "icp-off-chain-agent" --stage
+          flyctl secrets set MLFEED_JWT_PUBLIC_KEY="MCowBQYDK2VwAyEA1Lpv21H9dsqetmqzeNunPvCNLZM4XpsZPSquHSO7OYw=" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
