@@ -38,6 +38,7 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Set cloudflare token
         run: |
+          echo "temp printing public key. this is safe since its public key - $MLFEED_JWT_PUBLIC_KEY and ${{ env.PUBLIC_KEY_FOR_CALLING_ML_FEED_SERVER_FROM_OFFCHAIN_AGENT_SERVER }}"
           flyctl secrets set "MLFEED_JWT_PUBLIC_KEY=$MLFEED_JWT_PUBLIC_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_R2_ACCESS_KEY_TEMP=$CF_R2_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_R2_SECRET_ACCESS_KEY_TEMP=$CF_R2_SECRET_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
