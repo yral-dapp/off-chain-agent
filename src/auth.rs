@@ -89,8 +89,10 @@ pub fn check_auth_grpc_offchain_mlfeed(req: Request<()>) -> Result<Request<()>, 
         .map_err(|_| Status::unauthenticated("Invalid auth token"))?
         .trim_start_matches("Bearer ");
 
-    let mlfeed_public_key =
+    let mut mlfeed_public_key =
         env::var("MLFEED_JWT_PUBLIC_KEY").expect("MLFEED_JWT_PUBLIC_KEY is required");
+
+    mlfeed_public_key = format!("-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----", mlfeed_public_key);
 
     let decoding_key = DecodingKey::from_ed_pem(mlfeed_public_key.as_bytes())
         .expect("failed to create decoding key");
