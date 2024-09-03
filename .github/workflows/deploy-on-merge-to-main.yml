@@ -38,6 +38,7 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Set cloudflare token
         run: |
+          flyctl secrets set "MLFEED_JWT_PUBLIC_KEY=$MLFEED_JWT_PUBLIC_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_R2_ACCESS_KEY_TEMP=$CF_R2_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_R2_SECRET_ACCESS_KEY_TEMP=$CF_R2_SECRET_ACCESS_KEY_TEMP" --app "icp-off-chain-agent" --stage
           flyctl secrets set "CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY=$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" --app "icp-off-chain-agent" --stage
@@ -63,6 +64,7 @@ jobs:
           UPSTASH_VECTOR_READ_WRITE_TOKEN: ${{ secrets.UPSTASH_VECTOR_READ_WRITE_TOKEN }}
           ML_SERVER_JWT_TOKEN: ${{ secrets.ML_SERVER_JWT_TOKEN }}
           CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN: ${{ secrets.CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN }}
+          MLFEED_JWT_PUBLIC_KEY: ${{ env.PUBLIC_KEY_FOR_CALLING_ML_FEED_SERVER_FROM_OFFCHAIN_AGENT_SERVER }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only
         env:
