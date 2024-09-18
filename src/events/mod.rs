@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use std::error::Error;
 use candid::Principal;
 use serde_json::json;
+use std::error::Error;
+use std::sync::Arc;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
-use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::events::push_notifications::dispatch_notif;
+use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::AppState;
 use serde_json::Value;
 
@@ -44,6 +44,8 @@ impl WarehouseEvents for WarehouseEventsService {
         event.update_watch_history(&shared_state.clone());
 
         event.update_success_history(&shared_state.clone());
+
+        event.stream_to_firestore(&shared_state.clone());
 
         let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
 
@@ -100,7 +102,6 @@ impl VideoUploadSuccessful {
         Ok(())
     }
 }
-
 
 // #[derive(Debug, Serialize, Deserialize)]
 // struct CFStreamResult {

@@ -2,6 +2,7 @@ use crate::consts::YRAL_METADATA_URL;
 use crate::{canister::individual_user_template::IndividualUserTemplate, config::AppConfig};
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
+use firestore::{FirestoreDb, FirestoreDbOptions};
 use hyper::client::HttpConnector;
 use ic_agent::Agent;
 use std::env;
@@ -15,6 +16,7 @@ pub struct AppState {
     pub agent: ic_agent::Agent,
     pub yral_metadata_client: MetadataClient<true>,
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
+    pub firestoredb: FirestoreDb,
 }
 
 impl AppState {
@@ -24,6 +26,7 @@ impl AppState {
             agent: init_agent().await,
             auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
+            firestoredb: init_firestoredb().await,
         }
     }
 
@@ -116,4 +119,13 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
         .build()
         .await
         .unwrap()
+}
+
+pub async fn init_firestoredb() -> FirestoreDb {
+    let options = FirestoreDbOptions::new("hot-or-not-feed-intelligence".to_string())
+        .with_database_id("ic-pump-fun".to_string());
+
+    FirestoreDb::with_options(options)
+        .await
+        .expect("failed to create firestore db")
 }

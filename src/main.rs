@@ -1,9 +1,8 @@
-use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
-use auth::{check_auth_grpc_offchain_mlfeed, check_auth_grpc_test};
+use auth::check_auth_grpc_offchain_mlfeed;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{response::Html, routing::get, Router};
@@ -15,15 +14,11 @@ use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
-use reqwest::Url;
 use tower::make::Shared;
 use tower::steer::Steer;
 use tower::ServiceExt;
-use yral_metadata_client::consts::DEFAULT_API_URL;
-use yral_metadata_client::MetadataClient;
-use yup_oauth2::ServiceAccountAuthenticator;
 
-use crate::auth::{check_auth_grpc, AuthBearer};
+use crate::auth::check_auth_grpc;
 use crate::canister::canisters_list_handler;
 use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::{backup_job_handler, backup_job_handler_without_auth};
@@ -44,10 +39,6 @@ mod offchain_service;
 mod types;
 
 use app_state::AppState;
-// struct AppState {
-//     yral_metadata_client: MetadataClient<true>,
-//     google_sa_key_access_token: String,
-// }
 
 #[tokio::main]
 async fn main() -> Result<()> {
