@@ -239,7 +239,10 @@ impl Event {
                     .fluent()
                     .insert()
                     .into("tokens-list")
-                    .document_id(format!("{}-{}", &data.user_id, &data.token_symbol))
+                    .document_id(format!(
+                        "{}-{}-{}",
+                        &data.user_id, &data.token_symbol, &data.created_at
+                    ))
                     .object(&data)
                     .execute()
                     .await;
