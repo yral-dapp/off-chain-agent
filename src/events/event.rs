@@ -9,11 +9,26 @@ use crate::{
     events::warehouse_events::{Empty, WarehouseEvent},
 };
 use candid::Principal;
+use chrono::{DateTime, Utc};
+use firestore::errors::FirestoreError;
 use ic_agent::Agent;
 use log::{error, info};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct TokenListItem {
+    user_id: String,
+    name: String,
+    token_name: String,
+    token_symbol: String,
+    logo: String,
+    description: String,
+    #[serde(with = "firestore::serialize_as_timestamp")]
+    created_at: DateTime<Utc>,
+}
 
 pub struct Event {
     pub event: WarehouseEvent,
@@ -200,6 +215,39 @@ impl Event {
             //     );
             // }
         });
+    }
+
+    pub fn stream_to_firestore(&self, app_state: &AppState) {
+        if self.event.event == "token_creation_completed" {
+            let app_state = app_state.clone();
+            let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
+
+            tokio::spawn(async move {
+                let data = TokenListItem {
+                    user_id: params["user_id"].as_str().unwrap().to_string(),
+                    name: params["name"].as_str().unwrap().to_string(),
+                    token_name: params["token_name"].as_str().unwrap().to_string(),
+                    token_symbol: params["token_symbol"].as_str().unwrap().to_string(),
+                    logo: params["logo"].as_str().unwrap().to_string(),
+                    description: params["description"].as_str().unwrap().to_string(),
+                    created_at: Utc::now(),
+                };
+
+                let db = app_state.firestoredb.clone();
+
+                let res: Result<TokenListItem, FirestoreError> = db
+                    .fluent()
+                    .insert()
+                    .into("tokens-list")
+                    .document_id(format!("{}-{}", &data.user_id, &data.token_symbol))
+                    .object(&data)
+                    .execute()
+                    .await;
+                if res.is_err() {
+                    log::error!("Error uploading to Firestore : {:?}", res.err());
+                }
+            });
+        }
     }
 }
 

@@ -10,12 +10,14 @@ use axum::{response::Html, routing::get, Router};
 use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
 use canister::mlfeed_cache::OffChainCanisterService;
 use canister::upload_user_video::upload_user_video_handler;
+use chrono::{DateTime, Utc};
 use config::AppConfig;
 use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
 use reqwest::Url;
+use serde::{Deserialize, Serialize};
 use tower::make::Shared;
 use tower::steer::Steer;
 use tower::ServiceExt;
@@ -44,10 +46,6 @@ mod offchain_service;
 mod types;
 
 use app_state::AppState;
-// struct AppState {
-//     yral_metadata_client: MetadataClient<true>,
-//     google_sa_key_access_token: String,
-// }
 
 #[tokio::main]
 async fn main() -> Result<()> {

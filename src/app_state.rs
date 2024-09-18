@@ -2,7 +2,7 @@ use crate::consts::YRAL_METADATA_URL;
 use crate::{canister::individual_user_template::IndividualUserTemplate, config::AppConfig};
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
-use firestore::FirestoreDb;
+use firestore::{FirestoreDb, FirestoreDbOptions};
 use hyper::client::HttpConnector;
 use ic_agent::Agent;
 use std::env;
