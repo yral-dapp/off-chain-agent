@@ -28,6 +28,7 @@ struct TokenListItem {
     description: String,
     #[serde(with = "firestore::serialize_as_timestamp")]
     created_at: DateTime<Utc>,
+    link: String,
 }
 
 pub struct Event {
@@ -231,6 +232,7 @@ impl Event {
                     logo: params["logo"].as_str().unwrap().to_string(),
                     description: params["description"].as_str().unwrap().to_string(),
                     created_at: Utc::now(),
+                    link: params["link"].as_str().unwrap().to_string(),
                 };
 
                 let db = app_state.firestoredb.clone();
