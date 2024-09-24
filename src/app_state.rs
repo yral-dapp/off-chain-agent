@@ -3,12 +3,13 @@ use crate::{canister::individual_user_template::IndividualUserTemplate, config::
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
-use hyper::client::HttpConnector;
+use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
+use yup_oauth2::hyper_rustls::HttpsConnector;
 use std::env;
 use yral_metadata_client::MetadataClient;
 use yup_oauth2::{
-    authenticator::Authenticator, hyper_rustls::HttpsConnector, ServiceAccountAuthenticator,
+    authenticator::Authenticator, ServiceAccountAuthenticator,
 };
 
 #[derive(Clone)]

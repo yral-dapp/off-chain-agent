@@ -67,18 +67,16 @@ async fn main() -> Result<()> {
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),
         )
-        .with_state(shared_state.clone())
-        .map_err(axum::BoxError::from)
-        .boxed_clone();
+        .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(warehouse_events::FILE_DESCRIPTOR_SET)
         .register_encoded_file_descriptor_set(off_chain::FILE_DESCRIPTOR_SET)
-        .build()
+        .build_v1()
         .unwrap();
 
-    let grpc = tonic::transport::Server::builder()
-        .accept_http1(true)
+    let mut grpc = tonic::service::Routes::builder();
+    grpc
         .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
             WarehouseEventsService {
                 shared_state: shared_state.clone(),
@@ -97,14 +95,12 @@ async fn main() -> Result<()> {
             },
             check_auth_grpc_offchain_mlfeed,
         )))
-        .add_service(reflection_service)
-        .into_service()
-        .map_response(|r| r.map(axum::body::boxed))
-        .boxed_clone();
+        .add_service(reflection_service);
+    let grpc_axum = grpc.routes().into_axum_router();
 
     let http_grpc = Steer::new(
-        vec![http, grpc],
-        |req: &http::Request<hyper::Body>, _svcs: &[_]| {
+        vec![http, grpc_axum],
+        |req: &axum::extract::Request, _svcs: &[_]| {
             if req.headers().get(CONTENT_TYPE).map(|v| v.as_bytes()) != Some(b"application/grpc") {
                 0
             } else {
@@ -115,13 +111,13 @@ async fn main() -> Result<()> {
 
     // run it
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50051));
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .unwrap();
 
     log::info!("listening on {}", addr);
 
-    axum::Server::bind(&addr)
-        .serve(Shared::new(http_grpc))
-        .await
-        .unwrap();
+    axum::serve(listener, Shared::new(http_grpc)).await.unwrap();
 
     Ok(())
 }
