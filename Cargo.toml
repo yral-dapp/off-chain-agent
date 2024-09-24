@@ -25,6 +25,7 @@ tower = { version = "0.5.1", features = ["full"] }
 hyper = { version = "1.1.0", features = ["full"] }
 hyper-util = { version = "0.1.8", features = ["client", "client-legacy"] }
 http = "1.0.0"
+http-body-util = "0.1.2"
 axum-extra = { version = "0.9.4", features = ["typed-header"] }
 headers = "0.4.0"
 tonic-reflection = "0.12.2"
@@ -54,7 +55,9 @@ cloud-storage = { version = "0.11.1", default-features = false, features = [
 k256 = { version = "0.13.3", features = ["jwk"] }
 time = "0.3.36"
 firestore = "0.43.1"
-yral-canisters-client = { git = "https://github.com/go-bazzinga/yral-common.git", rev = "2cc21e76b4702b3d533b91da05b3940b093dc549", features = ["backend"] }
+yral-canisters-client = { git = "https://github.com/go-bazzinga/yral-common.git", rev = "2cc21e76b4702b3d533b91da05b3940b093dc549", features = ["backend", "sns-governance", "sns-ledger", "sns-root"] }
+yral-qstash-types = { git = "https://github.com/go-bazzinga/yral-common.git", rev = "2cc21e76b4702b3d533b91da05b3940b093dc549" }
+base64 = "0.22.1"
 
 [build-dependencies]
 tonic-build = "0.12"

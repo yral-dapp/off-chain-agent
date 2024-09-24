@@ -2039,9 +2039,9 @@ dependencies = [
 
 [[package]]
 name = "k256"
-version = "0.13.3"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "956ff9b67e26e1a6a866cb758f12c6f8746208489e3e4a4b5580802f2f0a587b"
+checksum = "f6e3919bbaa2945715f0bb6d3934a173d1e9a59ac23767fbaaef277265a7411b"
 dependencies = [
  "cfg-if",
  "ecdsa",
@@ -2341,6 +2341,7 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-extra",
+ "base64 0.22.1",
  "candid",
  "chrono",
  "cloud-storage",
@@ -2351,6 +2352,7 @@ dependencies = [
  "futures",
  "headers",
  "http 1.1.0",
+ "http-body-util",
  "hyper 1.4.1",
  "hyper-util",
  "ic-agent 0.38.1",
@@ -2377,6 +2379,7 @@ dependencies = [
  "tower 0.5.1",
  "yral-canisters-client",
  "yral-metadata-client",
+ "yral-qstash-types",
  "yup-oauth2",
 ]
 
@@ -4481,7 +4484,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -4753,6 +4756,26 @@ dependencies = [
  "serde",
  "thiserror",
  "yral-identity",
+]
+
+[[package]]
+name = "yral-qstash-types"
+version = "0.1.0"
+source = "git+https://github.com/go-bazzinga/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
+dependencies = [
+ "candid",
+ "serde",
+ "yral-types",
+]
+
+[[package]]
+name = "yral-types"
+version = "0.1.0"
+source = "git+https://github.com/go-bazzinga/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
+dependencies = [
+ "ic-agent 0.38.1",
+ "k256",
+ "serde",
 ]
 
 [[package]]

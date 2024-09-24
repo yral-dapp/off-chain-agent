@@ -14,6 +14,7 @@ use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
+use qstash::qstash_router;
 use tower::make::Shared;
 use tower::steer::Steer;
 
@@ -35,6 +36,7 @@ mod consts;
 mod error;
 mod events;
 mod offchain_service;
+mod qstash;
 mod types;
 
 use app_state::AppState;
@@ -51,6 +53,7 @@ async fn main() -> Result<()> {
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
 
     // build our application with a route
+    let qstash_routes = qstash_router(shared_state.clone());
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
@@ -66,6 +69,7 @@ async fn main() -> Result<()> {
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),
         )
+        .merge(qstash_routes)
         .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
