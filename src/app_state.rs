@@ -1,11 +1,12 @@
+use crate::config::AppConfig;
 use crate::consts::YRAL_METADATA_URL;
-use crate::{canister::individual_user_template::IndividualUserTemplate, config::AppConfig};
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
 use std::env;
+use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
 use yup_oauth2::hyper_rustls::HttpsConnector;
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};

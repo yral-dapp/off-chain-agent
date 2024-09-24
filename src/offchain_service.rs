@@ -1,9 +1,8 @@
 use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
-    app_state::AppState, canister::individual_user_template::PostStatus,
-    consts::GOOGLE_CHAT_REPORT_SPACE_URL, events::push_notifications::subscribe_device_to_topic,
-    AppError,
+    app_state::AppState, consts::GOOGLE_CHAT_REPORT_SPACE_URL,
+    events::push_notifications::subscribe_device_to_topic, AppError,
 };
 use anyhow::{Context, Result};
 use axum::extract::State;
@@ -12,6 +11,7 @@ use http::HeaderMap;
 use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
+use yral_canisters_client::individual_user_template::PostStatus;
 use yup_oauth2::ServiceAccountAuthenticator;
 
 use crate::offchain_service::off_chain::{BindDeviceToPrincipalRequest, Empty, ReportPostRequest};

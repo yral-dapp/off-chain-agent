@@ -6,8 +6,7 @@ use crate::{
 };
 use candid::Principal;
 use off_chain::{off_chain_canister_server::OffChainCanister, MlFeedCacheItem};
-
-use super::individual_user_template::Result16;
+use yral_canisters_client::individual_user_template::Result23;
 
 pub mod off_chain {
     tonic::include_proto!("offchain_canister");
@@ -42,7 +41,7 @@ impl OffChainCanister for OffChainCanisterService {
                 tonic::Status::internal(format!("Error updating ml feed cache: {:?}", e))
             })?;
 
-        if let Result16::Err(err) = res {
+        if let Result23::Err(err) = res {
             log::error!("Error updating ml feed cache: {:?}", err);
             return Err(tonic::Status::internal(format!(
                 "Error updating ml feed cache: {:?}",
@@ -54,9 +53,9 @@ impl OffChainCanister for OffChainCanisterService {
     }
 }
 
-impl From<MlFeedCacheItem> for super::individual_user_template::MlFeedCacheItem {
+impl From<MlFeedCacheItem> for yral_canisters_client::individual_user_template::MlFeedCacheItem {
     fn from(item: MlFeedCacheItem) -> Self {
-        super::individual_user_template::MlFeedCacheItem {
+        yral_canisters_client::individual_user_template::MlFeedCacheItem {
             post_id: item.post_id,
             canister_id: Principal::from_text(item.canister_id).unwrap(),
             video_id: item.video_id,

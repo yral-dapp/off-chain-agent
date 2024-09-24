@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{app_state::AppState, events::VideoUploadSuccessful};
 
-use super::individual_user_template::{IndividualUserTemplate, PostDetailsFromFrontend, Result1};
+use yral_canisters_client::individual_user_template::{
+    IndividualUserTemplate, PostDetailsFromFrontend, Result1,
+};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ApiResponse<T> {

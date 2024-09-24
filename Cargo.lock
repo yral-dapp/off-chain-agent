@@ -160,6 +160,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-lock"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff6e472cdea888a4bd64f342f09b3f50e1886d32afe8df3d663c01140b811b18"
+dependencies = [
+ "event-listener",
+ "event-listener-strategy",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "async-stream"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -487,7 +498,7 @@ dependencies = [
  "digest 0.9.0",
  "ff 0.12.1",
  "group 0.12.1",
- "pairing",
+ "pairing 0.22.0",
  "rand_core",
  "subtle",
 ]
@@ -515,6 +526,19 @@ name = "cached"
 version = "0.46.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7c8c50262271cdf5abc979a5f76515c234e764fa025d1ba4862c0f0bcda0e95"
+dependencies = [
+ "ahash 0.8.11",
+ "hashbrown 0.14.5",
+ "instant",
+ "once_cell",
+ "thiserror",
+]
+
+[[package]]
+name = "cached"
+version = "0.52.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8466736fe5dbcaf8b8ee24f9bbefe43c884dc3e9ff7178da70f55bffca1133c"
 dependencies = [
  "ahash 0.8.11",
  "hashbrown 0.14.5",
@@ -648,6 +672,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fd119d74b830634cea2a0f58bbd0d54540518a14397557951e79340abc28c0"
 
 [[package]]
+name = "concurrent-queue"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "config"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -748,6 +781,12 @@ checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.8.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22ec99545bb0ed0ea7bb9b8e1e9122ea386ff8a48c0922e43f36d45ab09e0e80"
 
 [[package]]
 name = "crunchy"
@@ -1054,6 +1093,27 @@ checksum = "534c5cf6194dfab3db3242765c03bbe257cf92f22b38f6bc0c58d59108a820ba"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "event-listener"
+version = "5.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
+dependencies = [
+ "concurrent-queue",
+ "parking",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "event-listener-strategy"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
+dependencies = [
+ "event-listener",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -1654,30 +1714,28 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f32c4711ca94eee9b7966116698b69ca99e7e24cba68c1f3dd86f2ed70218a7e"
+checksum = "555eda283b8ba1a996d44d80b6c9a6d38a6cbb81797a7b7bbee134fdde64ce48"
 dependencies = [
  "backoff",
- "cached",
+ "cached 0.46.1",
  "candid",
  "ed25519-consensus",
  "futures-util",
  "hex",
- "http 0.2.12",
- "http-body 0.4.6",
+ "http 1.1.0",
+ "http-body 1.0.1",
  "ic-certification",
- "ic-transport-types 0.33.0",
- "ic-verify-bls-signature",
+ "ic-transport-types 0.34.0",
+ "ic-verify-bls-signature 0.1.0",
  "k256",
  "leb128",
  "p256",
- "pem 2.0.1",
  "pkcs8",
  "rand",
  "rangemap",
- "reqwest 0.11.27",
- "ring 0.16.20",
+ "ring 0.17.8",
  "rustls-webpki 0.101.7",
  "sec1",
  "serde",
@@ -1694,12 +1752,13 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.34.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "555eda283b8ba1a996d44d80b6c9a6d38a6cbb81797a7b7bbee134fdde64ce48"
+checksum = "a4c2407d2c529d91d2956bd9d7536f2f497dbab747701f15eb35f41c52b472f2"
 dependencies = [
+ "async-lock",
  "backoff",
- "cached",
+ "cached 0.52.0",
  "candid",
  "ed25519-consensus",
  "futures-util",
@@ -1707,16 +1766,18 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "ic-certification",
- "ic-transport-types 0.34.0",
- "ic-verify-bls-signature",
+ "ic-transport-types 0.38.1",
+ "ic-verify-bls-signature 0.5.0",
  "k256",
  "leb128",
  "p256",
+ "pem 3.0.4",
  "pkcs8",
  "rand",
  "rangemap",
+ "reqwest 0.12.7",
  "ring 0.17.8",
- "rustls-webpki 0.101.7",
+ "rustls-webpki 0.102.8",
  "sec1",
  "serde",
  "serde_bytes",
@@ -1744,9 +1805,9 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d595b9f72e5952bcb22e5cda37ae1c8d6579a24aaa224b63b8d245f386bdcbb2"
+checksum = "7c06d3c1292368c813f8104d9d8294bda5577ea6fe4501a65997d0b7f155f15f"
 dependencies = [
  "candid",
  "hex",
@@ -1761,9 +1822,9 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.34.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c06d3c1292368c813f8104d9d8294bda5577ea6fe4501a65997d0b7f155f15f"
+checksum = "8a49e37736106da0dc2416935ffaf53abc6afc9e758314b7afc85fcebfb2e943"
 dependencies = [
  "candid",
  "hex",
@@ -1784,8 +1845,36 @@ checksum = "583b1c03380cf86059160cc6c91dcbf56c7b5f141bf3a4f06bc79762d775fac4"
 dependencies = [
  "bls12_381",
  "lazy_static",
- "pairing",
+ "pairing 0.22.0",
  "sha2 0.9.9",
+]
+
+[[package]]
+name = "ic-verify-bls-signature"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d420b25c0091059f6c3c23a21427a81915e6e0aca3b79e0d403ed767f286a3b9"
+dependencies = [
+ "hex",
+ "ic_bls12_381",
+ "lazy_static",
+ "pairing 0.23.0",
+ "rand",
+ "sha2 0.10.8",
+]
+
+[[package]]
+name = "ic_bls12_381"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
+dependencies = [
+ "digest 0.10.7",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "pairing 0.23.0",
+ "rand_core",
+ "subtle",
 ]
 
 [[package]]
@@ -2253,11 +2342,9 @@ dependencies = [
  "axum",
  "axum-extra",
  "candid",
- "candid_parser",
  "chrono",
  "cloud-storage",
  "config",
- "convert_case",
  "env_logger",
  "exponential-backoff",
  "firestore",
@@ -2266,7 +2353,7 @@ dependencies = [
  "http 1.1.0",
  "hyper 1.4.1",
  "hyper-util",
- "ic-agent 0.33.0",
+ "ic-agent 0.38.1",
  "indicatif",
  "jsonwebtoken 9.3.0",
  "k256",
@@ -2288,6 +2375,7 @@ dependencies = [
  "tonic-reflection",
  "tonic-web",
  "tower 0.5.1",
+ "yral-canisters-client",
  "yral-metadata-client",
  "yup-oauth2",
 ]
@@ -2352,6 +2440,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pairing"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81fec4625e73cf41ef4bb6846cafa6d44736525f442ba45e407c4a000a13996f"
+dependencies = [
+ "group 0.13.0",
+]
+
+[[package]]
+name = "parking"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
+
+[[package]]
 name = "parking_lot"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2395,16 +2498,6 @@ dependencies = [
  "base64 0.13.1",
  "once_cell",
  "regex",
-]
-
-[[package]]
-name = "pem"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b13fe415cdf3c8e44518e18a7c95a13431d9bdf6d15367d82b23c377fdd441a"
-dependencies = [
- "base64 0.21.7",
- "serde",
 ]
 
 [[package]]
@@ -2902,6 +2995,7 @@ dependencies = [
  "async-compression",
  "base64 0.22.1",
  "bytes",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "h2 0.4.6",
@@ -4609,6 +4703,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56c1936c4cc7a1c9ab21a1ebb602eb942ba868cbd44a99cb7cdc5892335e1c85"
 dependencies = [
  "linked-hash-map",
+]
+
+[[package]]
+name = "yral-canisters-client"
+version = "0.1.0"
+source = "git+https://github.com/go-bazzinga/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
+dependencies = [
+ "anyhow",
+ "candid",
+ "candid_parser",
+ "convert_case",
+ "ic-agent 0.38.1",
+ "serde",
+ "serde_bytes",
+ "serde_json",
 ]
 
 [[package]]

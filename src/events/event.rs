@@ -1,10 +1,7 @@
 use std::{collections::HashMap, time::UNIX_EPOCH};
 
 use crate::{
-    app_state::AppState,
-    canister::individual_user_template::{SuccessHistoryItemV1, SystemTime, WatchHistoryItem},
-    consts::BIGQUERY_INGESTION_URL,
-    events::warehouse_events::WarehouseEvent,
+    app_state::AppState, consts::BIGQUERY_INGESTION_URL, events::warehouse_events::WarehouseEvent,
 };
 use candid::Principal;
 use chrono::{DateTime, Utc};
@@ -14,6 +11,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
+use yral_canisters_client::individual_user_template::{
+    SuccessHistoryItemV1, SystemTime, WatchHistoryItem,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct TokenListItem {

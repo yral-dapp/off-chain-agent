@@ -10,7 +10,7 @@ axum = { version = "0.7.6", features = ["macros", "json"] }
 candid = "0.10.6"
 chrono = { version = "0.4.34", features = ["serde"] }
 futures = "0.3.30"
-ic-agent = "0.33.0"
+ic-agent = "0.38.1"
 rust-s3 = { version = "0.33.0", features = [
     "tokio-rustls-tls",
 ], default-features = false }
@@ -54,13 +54,10 @@ cloud-storage = { version = "0.11.1", default-features = false, features = [
 k256 = { version = "0.13.3", features = ["jwk"] }
 time = "0.3.36"
 firestore = "0.43.1"
+yral-canisters-client = { git = "https://github.com/go-bazzinga/yral-common.git", rev = "2cc21e76b4702b3d533b91da05b3940b093dc549", features = ["backend"] }
 
 [build-dependencies]
-serde = { version = "1.0", features = ["derive"] }
 tonic-build = "0.12"
-candid_parser = "0.1.1"
-serde_json = "1.0.110"
-convert_case = "0.6.0"
 
 [[bin]]
 name = "icp-off-chain-agent"
