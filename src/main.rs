@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use auth::check_auth_grpc_offchain_mlfeed;
 use axum::http::StatusCode;
 use axum::routing::post;
-use axum::{response::Html, routing::get, Router};
+use axum::{routing::get, Router};
 use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
 use canister::mlfeed_cache::OffChainCanisterService;
 use canister::upload_user_video::upload_user_video_handler;
@@ -16,7 +16,6 @@ use log::LevelFilter;
 use offchain_service::report_approved_handler;
 use tower::make::Shared;
 use tower::steer::Steer;
-use tower::ServiceExt;
 
 use crate::auth::check_auth_grpc;
 use crate::canister::canisters_list_handler;
@@ -76,26 +75,25 @@ async fn main() -> Result<()> {
         .unwrap();
 
     let mut grpc = tonic::service::Routes::builder();
-    grpc
-        .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
-            WarehouseEventsService {
-                shared_state: shared_state.clone(),
-            },
-            check_auth_grpc,
-        )))
-        .add_service(tonic_web::enable(OffChainServer::with_interceptor(
-            OffChainService {
-                shared_state: shared_state.clone(),
-            },
-            check_auth_grpc,
-        )))
-        .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
-            OffChainCanisterService {
-                shared_state: shared_state.clone(),
-            },
-            check_auth_grpc_offchain_mlfeed,
-        )))
-        .add_service(reflection_service);
+    grpc.add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
+        WarehouseEventsService {
+            shared_state: shared_state.clone(),
+        },
+        check_auth_grpc,
+    )))
+    .add_service(tonic_web::enable(OffChainServer::with_interceptor(
+        OffChainService {
+            shared_state: shared_state.clone(),
+        },
+        check_auth_grpc,
+    )))
+    .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
+        OffChainCanisterService {
+            shared_state: shared_state.clone(),
+        },
+        check_auth_grpc_offchain_mlfeed,
+    )))
+    .add_service(reflection_service);
     let grpc_axum = grpc.routes().into_axum_router();
 
     let http_grpc = Steer::new(
@@ -111,9 +109,7 @@ async fn main() -> Result<()> {
 
     // run it
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50051));
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
     log::info!("listening on {}", addr);
 

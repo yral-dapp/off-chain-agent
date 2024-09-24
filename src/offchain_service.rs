@@ -1,26 +1,20 @@
-use std::{collections::HashMap, env, fmt::format, sync::Arc};
+use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
-    app_state::AppState, canister::individual_user_template::{PostStatus, Result5}, consts::GOOGLE_CHAT_REPORT_SPACE_URL, events::push_notifications::subscribe_device_to_topic, AppError
+    app_state::AppState, canister::individual_user_template::PostStatus,
+    consts::GOOGLE_CHAT_REPORT_SPACE_URL, events::push_notifications::subscribe_device_to_topic,
+    AppError,
 };
 use anyhow::{Context, Result};
-use axum::{extract::State, Json};
-use axum_extra::TypedHeader;
-use candid::{types::principal, Principal};
-use headers::{
-    authorization::{Basic, Bearer},
-    Authorization,
-};
+use axum::extract::State;
+use candid::Principal;
 use http::HeaderMap;
 use jsonwebtoken::DecodingKey;
 use reqwest::Client;
 use serde_json::{json, Value};
-use yup_oauth2::{
-    ApplicationDefaultCredentialsFlowOpts, AuthorizedUserAuthenticator, DeviceFlowAuthenticator,
-    ServiceAccountAuthenticator,
-};
+use yup_oauth2::ServiceAccountAuthenticator;
 
-use crate::offchain_service::off_chain::{Empty, ReportPostRequest, BindDeviceToPrincipalRequest};
+use crate::offchain_service::off_chain::{BindDeviceToPrincipalRequest, Empty, ReportPostRequest};
 use off_chain::off_chain_server::OffChain;
 
 pub mod off_chain {
@@ -163,7 +157,7 @@ pub async fn send_message_gchat(request_url: &str, data: Value) -> Result<()> {
 
     if response.is_err() {
         log::error!("Error sending data to Google Chat: {:?}", response);
-        return Err(anyhow::anyhow!("Error sending data to Google Chat").into());
+        return Err(anyhow::anyhow!("Error sending data to Google Chat"));
     }
 
     let body = response.unwrap().text().await.unwrap();
@@ -271,15 +265,14 @@ pub async fn report_approved_handler(
 
     let user = state.individual_user(canister_principal);
 
-    let res = user
-        .update_post_status(post_id, PostStatus::BannedDueToUserReporting)
+    user.update_post_status(post_id, PostStatus::BannedDueToUserReporting)
         .await?;
 
     // send confirmation to Google Chat
     let confirmation_msg = json!({
         "text": format!("Successfully banned post : {}/{}", canister_id, post_id)
     });
-    let _ = send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
+    send_message_gchat(GOOGLE_CHAT_REPORT_SPACE_URL, confirmation_msg).await?;
 
     Ok(())
 }

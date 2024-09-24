@@ -5,7 +5,6 @@ use crate::{
     canister::mlfeed_cache::off_chain::{Empty, UpdateMlFeedCacheRequest},
 };
 use candid::Principal;
-use log::log;
 use off_chain::{off_chain_canister_server::OffChainCanister, MlFeedCacheItem};
 
 use super::individual_user_template::Result16;
@@ -61,7 +60,7 @@ impl From<MlFeedCacheItem> for super::individual_user_template::MlFeedCacheItem 
             post_id: item.post_id,
             canister_id: Principal::from_text(item.canister_id).unwrap(),
             video_id: item.video_id,
-            creator_principal_id: if item.creator_principal_id.len() == 0 {
+            creator_principal_id: if item.creator_principal_id.is_empty() {
                 None
             } else {
                 Some(Principal::from_text(item.creator_principal_id).unwrap())

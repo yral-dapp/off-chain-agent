@@ -184,7 +184,7 @@ pub async fn backup_job_handler_without_auth() -> Html<&'static str> {
         // };
 
         // Debug point
-        let raw_list = vec![
+        let raw_list = [
             "dyuzm-uqaaa-aaaal-agt7q-cai",
             "uohib-byaaa-aaaak-qd6vq-cai",
             "vfvsa-lqaaa-aaaag-qetmq-cai",

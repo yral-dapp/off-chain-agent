@@ -92,7 +92,10 @@ pub fn check_auth_grpc_offchain_mlfeed(req: Request<()>) -> Result<Request<()>, 
     let mut mlfeed_public_key =
         env::var("MLFEED_JWT_PUBLIC_KEY").expect("MLFEED_JWT_PUBLIC_KEY is required");
 
-    mlfeed_public_key = format!("-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----", mlfeed_public_key);
+    mlfeed_public_key = format!(
+        "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----",
+        mlfeed_public_key
+    );
 
     let decoding_key = DecodingKey::from_ed_pem(mlfeed_public_key.as_bytes())
         .expect("failed to create decoding key");

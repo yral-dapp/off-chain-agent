@@ -5,12 +5,10 @@ use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
-use yup_oauth2::hyper_rustls::HttpsConnector;
 use std::env;
 use yral_metadata_client::MetadataClient;
-use yup_oauth2::{
-    authenticator::Authenticator, ServiceAccountAuthenticator,
-};
+use yup_oauth2::hyper_rustls::HttpsConnector;
+use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
 
 #[derive(Clone)]
 pub struct AppState {
