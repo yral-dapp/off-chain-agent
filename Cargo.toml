@@ -55,8 +55,8 @@ cloud-storage = { version = "0.11.1", default-features = false, features = [
 k256 = { version = "0.13.3", features = ["jwk"] }
 time = "0.3.36"
 firestore = "0.43.1"
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "2cc21e76b4702b3d533b91da05b3940b093dc549", features = ["backend", "sns-governance", "sns-ledger", "sns-root"] }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "2cc21e76b4702b3d533b91da05b3940b093dc549" }
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "be0420fe2b3cdabe0f65bdb03e8859b7946bd509", features = ["backend", "sns-governance", "sns-ledger", "sns-root"] }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "be0420fe2b3cdabe0f65bdb03e8859b7946bd509" }
 base64 = "0.22.1"
 
 [build-dependencies]
