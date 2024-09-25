@@ -8,9 +8,6 @@ use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
 use std::env;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
-use yral_canisters_client::sns_governance::SnsGovernance;
-use yral_canisters_client::sns_ledger::SnsLedger;
-use yral_canisters_client::sns_root::SnsRoot;
 use yral_metadata_client::MetadataClient;
 use yup_oauth2::hyper_rustls::HttpsConnector;
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
@@ -66,18 +63,6 @@ impl AppState {
 
     pub fn individual_user(&self, user_canister: Principal) -> IndividualUserTemplate<'_> {
         IndividualUserTemplate(user_canister, &self.agent)
-    }
-
-    pub fn sns_root(&self, canister: Principal) -> SnsRoot<'_> {
-        SnsRoot(canister, &self.agent)
-    }
-
-    pub fn sns_governance(&self, canister: Principal) -> SnsGovernance<'_> {
-        SnsGovernance(canister, &self.agent)
-    }
-
-    pub fn sns_ledger(&self, canister: Principal) -> SnsLedger<'_> {
-        SnsLedger(canister, &self.agent)
     }
 }
 

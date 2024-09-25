@@ -18,9 +18,10 @@ use verify::verify_qstash_message;
 use yral_canisters_client::{
     sns_governance::{
         Account, Amount, Command, Command1, Disburse, DissolveState, ListNeurons, ManageNeuron,
+        SnsGovernance,
     },
-    sns_ledger::{Account as LedgerAccount, TransferArg, TransferResult},
-    sns_root::ListSnsCanistersArg,
+    sns_ledger::{Account as LedgerAccount, SnsLedger, TransferArg, TransferResult},
+    sns_root::{ListSnsCanistersArg, SnsRoot},
 };
 use yral_qstash_types::ClaimTokensRequest;
 
@@ -49,7 +50,19 @@ async fn claim_tokens_from_first_neuron(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ClaimTokensRequest>,
 ) -> Result<Response, StatusCode> {
-    let root_canister = state.sns_root(req.token_root);
+    let identity: DelegatedIdentity = req
+        .identity
+        .try_into()
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let user_principal = identity
+        .sender()
+        .expect("Delegated identity without principal?!");
+
+    let mut agent = state.agent.clone();
+    // we need to set identity for disburse and icrc-1 transfer
+    agent.set_identity(identity);
+
+    let root_canister = SnsRoot(req.token_root, &agent);
     let sns_cans = root_canister
         .list_sns_canisters(ListSnsCanistersArg {})
         .await
@@ -60,15 +73,8 @@ async fn claim_tokens_from_first_neuron(
     let Some(ledger_principal) = sns_cans.ledger else {
         return Err(StatusCode::BAD_REQUEST);
     };
-    let identity: DelegatedIdentity = req
-        .identity
-        .try_into()
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
-    let user_principal = identity
-        .sender()
-        .expect("Delegated identity without principal?!");
 
-    let governance = state.sns_governance(governance_principal);
+    let governance = SnsGovernance(governance_principal, &agent);
     let neurons = governance
         .list_neurons(ListNeurons {
             of_principal: Some(user_principal),
@@ -142,7 +148,7 @@ async fn claim_tokens_from_first_neuron(
 
     // Transfer to canister
     let user_canister = req.user_canister;
-    let ledger = state.sns_ledger(ledger_principal);
+    let ledger = SnsLedger(ledger_principal, &agent);
     // User has 50% of the overall amount
     // 20% of this 50% is 10% of the overall amount
     // 10% of the overall amount is reserveed for the canister
