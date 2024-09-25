@@ -1,6 +1,6 @@
-use crate::{app_state::AppState};
+use crate::app_state::AppState;
+use anyhow::Result;
 use serde_json::Value;
-use anyhow::{Context, Result};
 
 struct Notification {
     title: String,
@@ -10,10 +10,16 @@ struct Notification {
     // data: String,
 }
 
-async fn notify_principal(target_principal: &str, notif: Notification, app_state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+async fn notify_principal(
+    target_principal: &str,
+    notif: Notification,
+    app_state: &AppState,
+) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let url = "https://fcm.googleapis.com/v1/projects/hot-or-not-feed-intelligence/messages:send";
-    let token = app_state.get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"]).await;
+    let token = app_state
+        .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
+        .await;
 
     let data = format!(
         r#"{{
@@ -28,7 +34,8 @@ async fn notify_principal(target_principal: &str, notif: Notification, app_state
         target_principal, notif.title, notif.body
     );
 
-    let response = client.post(url)
+    let response = client
+        .post(url)
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(data)
@@ -45,13 +52,23 @@ async fn notify_principal(target_principal: &str, notif: Notification, app_state
     Ok(())
 }
 
-pub async fn subscribe_device_to_topic(target_principal: &str, topic: &str, app_state: &AppState) -> Result<()> {
+pub async fn subscribe_device_to_topic(
+    target_principal: &str,
+    topic: &str,
+    app_state: &AppState,
+) -> Result<()> {
     log::error!("Subscribing\n{}\nto topic\n{}", target_principal, topic);
     let client = reqwest::Client::new();
-    let url = format!("https://iid.googleapis.com/iid/v1/{}/rel/topics/{}", target_principal, topic);
-    let token = app_state.get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"]).await;
+    let url = format!(
+        "https://iid.googleapis.com/iid/v1/{}/rel/topics/{}",
+        target_principal, topic
+    );
+    let token = app_state
+        .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
+        .await;
 
-    let response = client.post(url)
+    let response = client
+        .post(url)
         .header("Authorization", format!("Bearer {}", token))
         .header("access_token_auth", "true")
         .send()
@@ -61,13 +78,17 @@ pub async fn subscribe_device_to_topic(target_principal: &str, topic: &str, app_
         log::info!("Subscribed to topic successfully");
     } else {
         log::error!("Error subscribing to topic: {:?}", response);
-        return Err(anyhow::anyhow!("Error subscribing to topic").into());
+        return Err(anyhow::anyhow!("Error subscribing to topic"));
     }
 
     Ok(())
 }
 
-pub async fn dispatch_notif(event_type: &str, params: Value, app_state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn dispatch_notif(
+    event_type: &str,
+    params: Value,
+    app_state: &AppState,
+) -> Result<(), Box<dyn std::error::Error>> {
     match event_type {
         // LikeVideo
         "like_video" => {

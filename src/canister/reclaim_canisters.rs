@@ -1,14 +1,9 @@
-use std::{borrow::Borrow, env, sync::Arc, time::SystemTime};
+use std::{env, sync::Arc, time::SystemTime};
 
-use axum::{
-    extract::State,
-    response::{Html, Response},
-};
+use axum::{extract::State, response::Html};
 use candid::{encode_args, Principal};
 use futures::prelude::*;
-use http::StatusCode;
 use ic_agent::Agent;
-use serde::Serialize;
 
 use crate::{auth::AuthBearer, consts::RECYCLE_THRESHOLD_SECS, types::SessionType, AppState};
 
@@ -84,7 +79,7 @@ pub async fn reclaim_canisters_handler(
 
             let shortlisted_canisters = results
                 .into_iter()
-                .filter_map(|x| x)
+                .flatten()
                 .collect::<Vec<(Principal, Principal)>>();
 
             let canister_ids = shortlisted_canisters
@@ -264,7 +259,7 @@ async fn filter_canister(
 
     // If the last access time is more than RECYCLE_THRESHOLD_SECS, return the canister_id
     if response_decoded.elapsed().unwrap().as_secs() > RECYCLE_THRESHOLD_SECS {
-        return Some((user_id.clone(), canister_id.clone()));
+        return Some((*user_id, *canister_id));
     }
 
     None

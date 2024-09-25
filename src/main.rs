@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use auth::check_auth_grpc_offchain_mlfeed;
 use axum::http::StatusCode;
 use axum::routing::post;
-use axum::{response::Html, routing::get, Router};
+use axum::{routing::get, Router};
 use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
 use canister::mlfeed_cache::OffChainCanisterService;
 use canister::upload_user_video::upload_user_video_handler;
@@ -14,9 +14,9 @@ use env_logger::{Builder, Target};
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
+use qstash::qstash_router;
 use tower::make::Shared;
 use tower::steer::Steer;
-use tower::ServiceExt;
 
 use crate::auth::check_auth_grpc;
 use crate::canister::canisters_list_handler;
@@ -36,6 +36,7 @@ mod consts;
 mod error;
 mod events;
 mod offchain_service;
+mod qstash;
 mod types;
 
 use app_state::AppState;
@@ -52,6 +53,7 @@ async fn main() -> Result<()> {
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
 
     // build our application with a route
+    let qstash_routes = qstash_router(shared_state.clone());
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
@@ -67,44 +69,40 @@ async fn main() -> Result<()> {
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),
         )
-        .with_state(shared_state.clone())
-        .map_err(axum::BoxError::from)
-        .boxed_clone();
+        .nest("/qstash", qstash_routes)
+        .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(warehouse_events::FILE_DESCRIPTOR_SET)
         .register_encoded_file_descriptor_set(off_chain::FILE_DESCRIPTOR_SET)
-        .build()
+        .build_v1()
         .unwrap();
 
-    let grpc = tonic::transport::Server::builder()
-        .accept_http1(true)
-        .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
-            WarehouseEventsService {
-                shared_state: shared_state.clone(),
-            },
-            check_auth_grpc,
-        )))
-        .add_service(tonic_web::enable(OffChainServer::with_interceptor(
-            OffChainService {
-                shared_state: shared_state.clone(),
-            },
-            check_auth_grpc,
-        )))
-        .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
-            OffChainCanisterService {
-                shared_state: shared_state.clone(),
-            },
-            check_auth_grpc_offchain_mlfeed,
-        )))
-        .add_service(reflection_service)
-        .into_service()
-        .map_response(|r| r.map(axum::body::boxed))
-        .boxed_clone();
+    let mut grpc = tonic::service::Routes::builder();
+    grpc.add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
+        WarehouseEventsService {
+            shared_state: shared_state.clone(),
+        },
+        check_auth_grpc,
+    )))
+    .add_service(tonic_web::enable(OffChainServer::with_interceptor(
+        OffChainService {
+            shared_state: shared_state.clone(),
+        },
+        check_auth_grpc,
+    )))
+    .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
+        OffChainCanisterService {
+            shared_state: shared_state.clone(),
+        },
+        check_auth_grpc_offchain_mlfeed,
+    )))
+    .add_service(reflection_service);
+    let grpc_axum = grpc.routes().into_axum_router();
 
     let http_grpc = Steer::new(
-        vec![http, grpc],
-        |req: &http::Request<hyper::Body>, _svcs: &[_]| {
+        vec![http, grpc_axum],
+        |req: &axum::extract::Request, _svcs: &[_]| {
             if req.headers().get(CONTENT_TYPE).map(|v| v.as_bytes()) != Some(b"application/grpc") {
                 0
             } else {
@@ -115,13 +113,11 @@ async fn main() -> Result<()> {
 
     // run it
     let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50051));
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
     log::info!("listening on {}", addr);
 
-    axum::Server::bind(&addr)
-        .serve(Shared::new(http_grpc))
-        .await
-        .unwrap();
+    axum::serve(listener, Shared::new(http_grpc)).await.unwrap();
 
     Ok(())
 }

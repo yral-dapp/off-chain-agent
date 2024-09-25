@@ -1,16 +1,17 @@
+use crate::config::AppConfig;
 use crate::consts::YRAL_METADATA_URL;
-use crate::{canister::individual_user_template::IndividualUserTemplate, config::AppConfig};
+use crate::qstash::QStashState;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
+use hyper_util::client::legacy::connect::HttpConnector;
 use google_cloud_bigquery::client::{Client, ClientConfig};
-use hyper::client::HttpConnector;
 use ic_agent::Agent;
 use std::env;
+use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
-use yup_oauth2::{
-    authenticator::Authenticator, hyper_rustls::HttpsConnector, ServiceAccountAuthenticator,
-};
+use yup_oauth2::hyper_rustls::HttpsConnector;
+use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -18,6 +19,7 @@ pub struct AppState {
     pub yral_metadata_client: MetadataClient<true>,
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
     pub firestoredb: FirestoreDb,
+    pub qstash: QStashState,
     pub bigquery_client: Client,
 }
 
@@ -29,6 +31,7 @@ impl AppState {
             auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
             firestoredb: init_firestoredb().await,
+            qstash: init_qstash(),
             bigquery_client: init_bigquery_client().await,
         }
     }
@@ -131,6 +134,13 @@ pub async fn init_firestoredb() -> FirestoreDb {
     FirestoreDb::with_options(options)
         .await
         .expect("failed to create firestore db")
+}
+
+pub fn init_qstash() -> QStashState {
+    let qstash_key =
+        env::var("QSTASH_CURRENT_SIGNING_KEY").expect("QSTASH_CURRENT_SIGNING_KEY is required");
+
+    QStashState::init(qstash_key)
 }
 
 pub async fn init_bigquery_client() -> Client {

@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{app_state::AppState, events::VideoUploadSuccessful};
 
-use super::individual_user_template::{
-    IndividualUserTemplate, PostDetailsFromFrontend, Result1, Result_,
+use yral_canisters_client::individual_user_template::{
+    IndividualUserTemplate, PostDetailsFromFrontend, Result1,
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -145,10 +145,7 @@ pub async fn upload_user_video_impl(
                 .await;
 
             if let Err(e) = upload_event_result {
-                println!(
-                    "Error in sending event upload_video_successful {}",
-                    e.to_string()
-                );
+                println!("Error in sending event upload_video_successful {}", e);
             }
 
             Ok(post_id)

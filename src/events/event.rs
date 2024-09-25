@@ -1,12 +1,7 @@
-use std::{collections::HashMap, env, time::UNIX_EPOCH};
+use std::{collections::HashMap, time::UNIX_EPOCH};
 
 use crate::{
-    app_state::AppState,
-    canister::individual_user_template::{
-        Result10, Result12, SuccessHistoryItemV1, SystemTime, WatchHistoryItem,
-    },
-    consts::BIGQUERY_INGESTION_URL,
-    events::warehouse_events::{Empty, WarehouseEvent},
+    app_state::AppState, consts::BIGQUERY_INGESTION_URL, events::warehouse_events::WarehouseEvent,
 };
 use candid::Principal;
 use chrono::{DateTime, Utc};
@@ -18,6 +13,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
+use yral_canisters_client::individual_user_template::{
+    SuccessHistoryItemV1, SystemTime, WatchHistoryItem,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct TokenListItem {
@@ -156,7 +154,6 @@ impl Event {
                     let res = user_canister.update_watch_history(watch_history_item).await;
                     if res.is_err() {
                         log::error!("Error updating watch history: {:?}", res.err());
-                        return;
                     }
 
                     // // test if the watch history is updated
@@ -203,7 +200,7 @@ impl Event {
             }
         }
 
-        let mut item_type = self.event.event.clone();
+        let item_type = self.event.event.clone();
 
         tokio::spawn(async move {
             let user_canister_id = params["canister_id"].as_str().unwrap();
@@ -228,7 +225,6 @@ impl Event {
                 .await;
             if res.is_err() {
                 log::error!("Error updating success history: {:?}", res.err());
-                return;
             }
 
             // test if the success history is updated
