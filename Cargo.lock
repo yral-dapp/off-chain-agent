@@ -4711,7 +4711,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/go-bazzinga/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
+source = "git+https://github.com/yral-dapp/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
 dependencies = [
  "anyhow",
  "candid",
@@ -4738,7 +4738,7 @@ dependencies = [
 [[package]]
 name = "yral-metadata-client"
 version = "0.1.0"
-source = "git+https://github.com/go-bazzinga/yral-metadata.git#258a51b4c5d1152e3c045b747865eea8b6fd3096"
+source = "git+https://github.com/yral-dapp/yral-metadata.git#258a51b4c5d1152e3c045b747865eea8b6fd3096"
 dependencies = [
  "ic-agent 0.34.0",
  "reqwest 0.12.7",
@@ -4750,7 +4750,7 @@ dependencies = [
 [[package]]
 name = "yral-metadata-types"
 version = "0.1.0"
-source = "git+https://github.com/go-bazzinga/yral-metadata.git#258a51b4c5d1152e3c045b747865eea8b6fd3096"
+source = "git+https://github.com/yral-dapp/yral-metadata.git#258a51b4c5d1152e3c045b747865eea8b6fd3096"
 dependencies = [
  "candid",
  "serde",
@@ -4761,7 +4761,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/go-bazzinga/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
+source = "git+https://github.com/yral-dapp/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
 dependencies = [
  "candid",
  "serde",
@@ -4771,7 +4771,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/go-bazzinga/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
+source = "git+https://github.com/yral-dapp/yral-common.git?rev=2cc21e76b4702b3d533b91da05b3940b093dc549#2cc21e76b4702b3d533b91da05b3940b093dc549"
 dependencies = [
  "ic-agent 0.38.1",
  "k256",
