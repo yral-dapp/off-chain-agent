@@ -183,7 +183,7 @@ async fn claim_tokens_from_first_neuron(
 
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
-        .route("/qstash/claim_tokens", post(claim_tokens_from_first_neuron))
+        .route("/claim_tokens", post(claim_tokens_from_first_neuron))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,

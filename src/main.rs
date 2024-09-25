@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),
         )
-        .merge(qstash_routes)
+        .nest("/qstash", qstash_routes)
         .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
