@@ -47,6 +47,8 @@ impl WarehouseEvents for WarehouseEventsService {
 
         event.stream_to_firestore(&shared_state.clone());
 
+        event.stream_to_bigquery_token_metadata(&shared_state.clone());
+
         let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
 
         Ok(tonic::Response::new(Empty {}))
