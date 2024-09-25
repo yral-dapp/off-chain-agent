@@ -53,7 +53,10 @@ cloud-storage = { version = "0.11.1", default-features = false, features = [
 k256 = { version = "0.13.3", features = ["jwk"] }
 time = "0.3.36"
 firestore = "0.43.1"
-google-cloud-bigquery = "0.13.1"
+google-cloud-bigquery = { version = "0.13.1", default-features = false, features = [
+    "auth",
+    "rustls-tls",
+] }
 
 [build-dependencies]
 serde = { version = "1.0", features = ["derive"] }
