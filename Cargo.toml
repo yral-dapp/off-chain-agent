@@ -58,6 +58,10 @@ firestore = "0.43.1"
 yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "be0420fe2b3cdabe0f65bdb03e8859b7946bd509", features = ["backend", "sns-governance", "sns-ledger", "sns-root"] }
 yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "be0420fe2b3cdabe0f65bdb03e8859b7946bd509" }
 base64 = "0.22.1"
+google-cloud-bigquery = { version = "0.13.1", default-features = false, features = [
+    "auth",
+    "rustls-tls",
+] }
 
 [build-dependencies]
 tonic-build = "0.12"

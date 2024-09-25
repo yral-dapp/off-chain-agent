@@ -5,6 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
 use hyper_util::client::legacy::connect::HttpConnector;
+use google_cloud_bigquery::client::{Client, ClientConfig};
 use ic_agent::Agent;
 use std::env;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
@@ -19,6 +20,7 @@ pub struct AppState {
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
     pub firestoredb: FirestoreDb,
     pub qstash: QStashState,
+    pub bigquery_client: Client,
 }
 
 impl AppState {
@@ -30,6 +32,7 @@ impl AppState {
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
             firestoredb: init_firestoredb().await,
             qstash: init_qstash(),
+            bigquery_client: init_bigquery_client().await,
         }
     }
 
@@ -102,11 +105,11 @@ pub async fn init_agent() -> Agent {
     #[cfg(feature = "local-bin")]
     {
         let agent = Agent::builder()
-            .with_url("http://127.0.0.1:4943")
+            .with_url("https://ic0.app")
             .build()
             .unwrap();
 
-        agent.fetch_root_key().await.unwrap();
+        // agent.fetch_root_key().await.unwrap();
 
         agent
     }
@@ -138,4 +141,9 @@ pub fn init_qstash() -> QStashState {
         env::var("QSTASH_CURRENT_SIGNING_KEY").expect("QSTASH_CURRENT_SIGNING_KEY is required");
 
     QStashState::init(qstash_key)
+}
+
+pub async fn init_bigquery_client() -> Client {
+    let (config, _) = ClientConfig::new_with_auth().await.unwrap();
+    Client::new(config).await.unwrap()
 }

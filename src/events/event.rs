@@ -6,7 +6,9 @@ use crate::{
 use candid::Principal;
 use chrono::{DateTime, Utc};
 use firestore::errors::FirestoreError;
-use log::error;
+use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
+use ic_agent::Agent;
+use log::{error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -26,6 +28,19 @@ struct TokenListItem {
     #[serde(with = "firestore::serialize_as_timestamp")]
     created_at: DateTime<Utc>,
     link: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ICPumpTokenMetadata {
+    pub canister_id: String,
+    pub description: String,
+    pub host: String,
+    pub link: String,
+    pub logo: String,
+    pub token_name: String,
+    pub token_symbol: String,
+    pub user_id: String,
+    pub created_at: String,
 }
 
 pub struct Event {
@@ -63,6 +78,31 @@ impl Event {
                 error!("Error sending data to BigQuery: {}", res.err().unwrap());
             }
         });
+    }
+
+    pub fn stream_to_bigquery_token_metadata(&self, app_state: &AppState) {
+        if self.event.event == "token_creation_completed" {
+            let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
+            let app_state = app_state.clone();
+
+            tokio::spawn(async move {
+                let timestamp = chrono::Utc::now().to_rfc3339();
+
+                let data = ICPumpTokenMetadata {
+                    canister_id: params["canister_id"].as_str().unwrap().to_string(),
+                    description: params["description"].as_str().unwrap().to_string(),
+                    host: params["host"].as_str().unwrap().to_string(),
+                    link: params["link"].as_str().unwrap().to_string(),
+                    logo: params["logo"].as_str().unwrap().to_string(),
+                    token_name: params["token_name"].as_str().unwrap().to_string(),
+                    token_symbol: params["token_symbol"].as_str().unwrap().to_string(),
+                    user_id: params["user_id"].as_str().unwrap().to_string(),
+                    created_at: timestamp,
+                };
+
+                let _ = stream_to_bigquery_token_metadata_impl(&app_state, data).await;
+            });
+        }
     }
 
     pub fn upload_to_gcs(&self) {
@@ -319,4 +359,36 @@ fn system_time_to_custom(time: std::time::SystemTime) -> SystemTime {
         nanos_since_epoch: duration.subsec_nanos(),
         secs_since_epoch: duration.as_secs(),
     }
+}
+
+pub async fn stream_to_bigquery_token_metadata_impl(
+    app_state: &AppState,
+    data: ICPumpTokenMetadata,
+) -> Result<(), anyhow::Error> {
+    let bq_client = app_state.bigquery_client.clone();
+
+    let data1 = Row {
+        insert_id: None,
+        json: data,
+    };
+    let request = InsertAllRequest {
+        rows: vec![data1],
+        ..Default::default()
+    };
+    let result = bq_client
+        .tabledata()
+        .insert(
+            "hot-or-not-feed-intelligence",
+            "icpumpfun",
+            "token_metadata",
+            &request,
+        )
+        .await?;
+
+    if let Some(errors) = result.insert_errors {
+        log::error!("Error streaming to BigQuery: {:?}", errors);
+        return Err(anyhow::anyhow!("Error streaming to BigQuery"));
+    }
+
+    Ok(())
 }
