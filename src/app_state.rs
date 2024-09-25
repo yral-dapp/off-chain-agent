@@ -3,6 +3,7 @@ use crate::{canister::individual_user_template::IndividualUserTemplate, config::
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
+use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper::client::HttpConnector;
 use ic_agent::Agent;
 use std::env;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub yral_metadata_client: MetadataClient<true>,
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
     pub firestoredb: FirestoreDb,
+    pub bigquery_client: Client,
 }
 
 impl AppState {
@@ -27,6 +29,7 @@ impl AppState {
             auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
             firestoredb: init_firestoredb().await,
+            bigquery_client: init_bigquery_client().await,
         }
     }
 
@@ -99,11 +102,11 @@ pub async fn init_agent() -> Agent {
     #[cfg(feature = "local-bin")]
     {
         let agent = Agent::builder()
-            .with_url("http://127.0.0.1:4943")
+            .with_url("https://ic0.app")
             .build()
             .unwrap();
 
-        agent.fetch_root_key().await.unwrap();
+        // agent.fetch_root_key().await.unwrap();
 
         agent
     }
@@ -128,4 +131,9 @@ pub async fn init_firestoredb() -> FirestoreDb {
     FirestoreDb::with_options(options)
         .await
         .expect("failed to create firestore db")
+}
+
+pub async fn init_bigquery_client() -> Client {
+    let (config, _) = ClientConfig::new_with_auth().await.unwrap();
+    Client::new(config).await.unwrap()
 }
