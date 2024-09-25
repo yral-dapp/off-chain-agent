@@ -18,7 +18,7 @@ struct Claims {
     sub: String,
     exp: usize,
     iat: usize,
-    nbf: usize,
+    nbf: isize,
     jti: String,
     body: String,
 }
@@ -36,11 +36,12 @@ pub async fn verify_qstash_message(
 
     let jwt = jsonwebtoken::decode::<Claims>(sig_str, &state.decoding_key, &state.validation)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let (parts, body) = request.into_parts();
+
     let sig_body_hash = URL_SAFE
         .decode(jwt.claims.body)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
-
-    let (parts, body) = request.into_parts();
 
     let body_raw = body
         .collect()

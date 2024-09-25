@@ -37,6 +37,7 @@ impl QStashState {
         let decoding_key = DecodingKey::from_secret(verification_key.as_bytes());
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_issuer(&["Upstash"]);
+        validation.set_audience(&[""]);
         Self {
             decoding_key: Arc::new(decoding_key),
             validation: Arc::new(validation),
