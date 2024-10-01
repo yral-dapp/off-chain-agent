@@ -18,3 +18,6 @@ pub const GOOGLE_CHAT_REPORT_SPACE_URL: &str =
 pub const UPSTASH_VECTOR_REST_URL: &str = "http://misty-night-5155-fly-vector.upstash.io";
 
 pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
+
+// TODO: change this
+pub const CLOUDFLARE_ICPUMP_R2_PUBLIC_URL: &str = "https://icpump-r2.ic0.app";

@@ -1,12 +1,21 @@
-use std::{collections::HashMap, time::UNIX_EPOCH};
+use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
 
 use crate::{
-    app_state::AppState, consts::BIGQUERY_INGESTION_URL, events::warehouse_events::WarehouseEvent,
+    app_state::AppState,
+    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ICPUMP_R2_PUBLIC_URL},
+    events::{utils::get_icpump_insert_query_created_at, warehouse_events::WarehouseEvent},
+    AppError,
 };
+use axum::extract::State;
 use candid::Principal;
 use chrono::{DateTime, Utc};
-use firestore::errors::FirestoreError;
-use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
+use firestore::{errors::FirestoreError, struct_path::path, FirestoreQueryDirection};
+use futures::{stream::BoxStream, StreamExt};
+use google_cloud_bigquery::http::{
+    job::query::QueryRequest,
+    tabledata::insert_all::{InsertAllRequest, Row},
+};
+use http::HeaderMap;
 use ic_agent::Agent;
 use log::{error, info};
 use reqwest::Client;
@@ -16,6 +25,8 @@ use std::time::Duration;
 use yral_canisters_client::individual_user_template::{
     SuccessHistoryItemV1, SystemTime, WatchHistoryItem,
 };
+
+use super::utils::get_icpump_insert_query;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct TokenListItem {
@@ -100,7 +111,7 @@ impl Event {
                     created_at: timestamp,
                 };
 
-                let _ = stream_to_bigquery_token_metadata_impl(&app_state, data).await;
+                let _ = stream_to_bigquery_token_metadata_impl_v2(&app_state, data).await;
             });
         }
     }
@@ -389,6 +400,153 @@ pub async fn stream_to_bigquery_token_metadata_impl(
         log::error!("Error streaming to BigQuery: {:?}", errors);
         return Err(anyhow::anyhow!("Error streaming to BigQuery"));
     }
+
+    Ok(())
+}
+
+pub async fn stream_to_bigquery_token_metadata_impl_v2(
+    app_state: &AppState,
+    data: ICPumpTokenMetadata,
+) -> Result<(), anyhow::Error> {
+    let bucket = app_state.icpump_r2_bucket.clone();
+
+    let link = data.link.clone();
+    let key_id = link.split("/").collect::<Vec<&str>>();
+    let root_id = key_id[3];
+
+    let image = image_base64::from_base64(data.logo.clone());
+
+    bucket.put_object(root_id, image.as_slice()).await?;
+
+    let logo_link = format!("{}/{}", CLOUDFLARE_ICPUMP_R2_PUBLIC_URL, root_id);
+
+    let bq_client = app_state.bigquery_client.clone();
+
+    let query_str = get_icpump_insert_query(
+        data.canister_id.clone(),
+        data.description.clone(),
+        data.host.clone(),
+        data.link.clone(),
+        logo_link,
+        data.token_name.clone(),
+        data.token_symbol.clone(),
+        data.user_id.clone(),
+    );
+
+    let request = QueryRequest {
+        query: query_str.to_string(),
+        ..Default::default()
+    };
+
+    match bq_client
+        .query::<google_cloud_bigquery::query::row::Row>("hot-or-not-feed-intelligence", request)
+        .await
+    {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            log::error!("Error streaming to BigQuery: {:?}", e);
+            Err(anyhow::anyhow!("Error streaming to BigQuery"))
+        }
+    }
+}
+
+// TEMP API to backfill data. one time operation. to be removed later
+pub async fn backfill_icpump_data_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<(), AppError> {
+    let start = headers
+        .get("start")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
+    let limit = headers
+        .get("limit")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(30);
+
+    tokio::spawn(async move {
+        let fs_db = state.firestoredb.clone();
+        let bucket = state.icpump_r2_bucket.clone();
+        let bq_client = state.bigquery_client.clone();
+
+        const COLLECTION_NAME: &'static str = "tokens-list";
+
+        let object_stream: BoxStream<TokenListItem> = fs_db
+            .fluent()
+            .select()
+            .from(COLLECTION_NAME)
+            .order_by([(
+                path!(TokenListItem::created_at),
+                FirestoreQueryDirection::Descending,
+            )])
+            .offset(start)
+            .limit(limit)
+            .obj()
+            .stream_query()
+            .await
+            .expect("failed to stream");
+
+        let as_vec: Vec<TokenListItem> = object_stream.collect().await;
+
+        if as_vec.is_empty() {
+            return;
+        }
+
+        let as_vec_len = as_vec.len();
+
+        let mut cnt = 0;
+        for item in as_vec {
+            let link = item.link.clone();
+            let key_id = link.split("/").collect::<Vec<&str>>();
+            let root_id = key_id[3];
+
+            let image = image_base64::from_base64(item.logo.clone());
+
+            let _ = bucket.put_object(root_id, image.as_slice()).await;
+
+            let logo_link = format!("{}/{}", CLOUDFLARE_ICPUMP_R2_PUBLIC_URL, root_id);
+
+            let query_str = get_icpump_insert_query_created_at(
+                "".to_string(), // not required
+                item.description,
+                "".to_string(),
+                item.link,
+                logo_link,
+                item.token_name,
+                item.token_symbol,
+                item.user_id,
+                item.created_at.to_rfc3339(),
+            );
+
+            let request = QueryRequest {
+                query: query_str.to_string(),
+                ..Default::default()
+            };
+
+            let _ = match bq_client
+                .query::<google_cloud_bigquery::query::row::Row>(
+                    "hot-or-not-feed-intelligence",
+                    request,
+                )
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    log::error!("Error streaming to BigQuery backfill: {:?}", e);
+                    Err(anyhow::anyhow!("Error streaming to BigQuery backfill"))
+                }
+            };
+
+            cnt += 1;
+            if cnt % 10 == 0 {
+                log::info!("Backfilling {} items", cnt);
+            }
+        }
+
+        log::info!("Backfill completed for {} items", as_vec_len);
+    });
 
     Ok(())
 }

@@ -4,9 +4,11 @@ use crate::qstash::QStashState;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
-use hyper_util::client::legacy::connect::HttpConnector;
 use google_cloud_bigquery::client::{Client, ClientConfig};
+use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
+use s3::creds::Credentials;
+use s3::{Bucket, Region};
 use std::env;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
@@ -21,6 +23,7 @@ pub struct AppState {
     pub firestoredb: FirestoreDb,
     pub qstash: QStashState,
     pub bigquery_client: Client,
+    pub icpump_r2_bucket: Bucket,
 }
 
 impl AppState {
@@ -33,6 +36,7 @@ impl AppState {
             firestoredb: init_firestoredb().await,
             qstash: init_qstash(),
             bigquery_client: init_bigquery_client().await,
+            icpump_r2_bucket: init_icpump_r2_bucket().await,
         }
     }
 
@@ -146,4 +150,36 @@ pub fn init_qstash() -> QStashState {
 pub async fn init_bigquery_client() -> Client {
     let (config, _) = ClientConfig::new_with_auth().await.unwrap();
     Client::new(config).await.unwrap()
+}
+
+pub async fn init_icpump_r2_bucket() -> Bucket {
+    // TODO: Modify vars
+
+    let keys = Credentials::new(
+        Some(
+            env::var("CF_R2_ICPUMP_ACCESS_KEY_TEMP")
+                .expect("CF_R2_ICPUMP_ACCESS_KEY_TEMP is not set")
+                .as_str(),
+        ),
+        Some(
+            env::var("CF_R2_ICPUMP_SECRET_ACCESS_KEY_TEMP")
+                .expect("CF_R2_ICPUMP_SECRET_ACCESS_KEY_TEMP is not set")
+                .as_str(),
+        ),
+        None,
+        None,
+        None,
+    )
+    .expect("Unable to create credentials");
+
+    Bucket::new(
+        "icpump-exp", // TODO: Modify
+        Region::R2 {
+            account_id: env::var("HOTORNOT_CF_ACCOUNT_ID") // TODO: might be changed
+                .expect("HOTORNOT_CF_ACCOUNT_ID is not set"),
+        },
+        keys,
+    )
+    .unwrap()
+    .with_path_style()
 }
