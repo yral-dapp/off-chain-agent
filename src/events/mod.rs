@@ -18,6 +18,7 @@ pub mod warehouse_events {
 
 pub mod event;
 pub mod push_notifications;
+pub mod queries;
 
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
