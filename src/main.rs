@@ -39,6 +39,7 @@ mod events;
 mod offchain_service;
 mod qstash;
 mod types;
+pub mod utils;
 
 use app_state::AppState;
 

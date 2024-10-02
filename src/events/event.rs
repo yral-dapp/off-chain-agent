@@ -1,9 +1,10 @@
-use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
+use std::{collections::HashMap, env, sync::Arc, time::UNIX_EPOCH};
 
 use crate::{
     app_state::AppState,
-    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ICPUMP_R2_PUBLIC_URL},
-    events::{utils::get_icpump_insert_query_created_at, warehouse_events::WarehouseEvent},
+    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
+    events::{queries::get_icpump_insert_query_created_at, warehouse_events::WarehouseEvent},
+    utils::cf_images::upload_base64_image,
     AppError,
 };
 use axum::extract::State;
@@ -16,7 +17,6 @@ use google_cloud_bigquery::http::{
     tabledata::insert_all::{InsertAllRequest, Row},
 };
 use http::HeaderMap;
-use ic_agent::Agent;
 use log::{error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ use yral_canisters_client::individual_user_template::{
     SuccessHistoryItemV1, SystemTime, WatchHistoryItem,
 };
 
-use super::utils::get_icpump_insert_query;
+use super::queries::get_icpump_insert_query;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct TokenListItem {
@@ -111,7 +111,13 @@ impl Event {
                     created_at: timestamp,
                 };
 
-                let _ = stream_to_bigquery_token_metadata_impl_v2(&app_state, data).await;
+                let res = stream_to_bigquery_token_metadata_impl_v2(&app_state, data).await;
+                if res.is_err() {
+                    error!(
+                        "stream_to_bigquery_token_metadata: Error sending data to BigQuery: {}",
+                        res.err().unwrap()
+                    );
+                }
             });
         }
     }
@@ -408,17 +414,28 @@ pub async fn stream_to_bigquery_token_metadata_impl_v2(
     app_state: &AppState,
     data: ICPumpTokenMetadata,
 ) -> Result<(), anyhow::Error> {
-    let bucket = app_state.icpump_r2_bucket.clone();
+    // Upload image to Cloudflare Images and get link
 
     let link = data.link.clone();
     let key_id = link.split("/").collect::<Vec<&str>>();
     let root_id = key_id[3];
 
-    let image = image_base64::from_base64(data.logo.clone());
+    let base64_image_str = data.logo.clone();
+    let base64_image_without_prefix = base64_image_str.replace("data:image/png;base64,", "");
 
-    bucket.put_object(root_id, image.as_slice()).await?;
+    let cf_images_api_token = env::var("CF_IMAGES_API_TOKEN")?;
 
-    let logo_link = format!("{}/{}", CLOUDFLARE_ICPUMP_R2_PUBLIC_URL, root_id);
+    let upload_res = upload_base64_image(
+        CLOUDFLARE_ACCOUNT_ID,
+        cf_images_api_token.as_str(),
+        base64_image_without_prefix.as_str(),
+        root_id,
+    )
+    .await?;
+
+    let logo_link = upload_res.result.variants[0].clone();
+
+    // Stream to BigQuery
 
     let bq_client = app_state.bigquery_client.clone();
 
@@ -468,10 +485,11 @@ pub async fn backfill_icpump_data_handler(
 
     tokio::spawn(async move {
         let fs_db = state.firestoredb.clone();
-        let bucket = state.icpump_r2_bucket.clone();
         let bq_client = state.bigquery_client.clone();
 
         const COLLECTION_NAME: &'static str = "tokens-list";
+
+        // Get data from Firestore
 
         let object_stream: BoxStream<TokenListItem> = fs_db
             .fluent()
@@ -496,17 +514,36 @@ pub async fn backfill_icpump_data_handler(
 
         let as_vec_len = as_vec.len();
 
+        // Stream to BigQuery
+
         let mut cnt = 0;
         for item in as_vec {
             let link = item.link.clone();
             let key_id = link.split("/").collect::<Vec<&str>>();
             let root_id = key_id[3];
 
-            let image = image_base64::from_base64(item.logo.clone());
+            let base64_image_str = item.logo.clone();
+            let base64_image_without_prefix =
+                base64_image_str.replace("data:image/png;base64,", "");
 
-            let _ = bucket.put_object(root_id, image.as_slice()).await;
+            let cf_images_api_token = env::var("CF_IMAGES_API_TOKEN").unwrap();
 
-            let logo_link = format!("{}/{}", CLOUDFLARE_ICPUMP_R2_PUBLIC_URL, root_id);
+            let upload_res = match upload_base64_image(
+                CLOUDFLARE_ACCOUNT_ID,
+                cf_images_api_token.as_str(),
+                base64_image_without_prefix.as_str(),
+                root_id,
+            )
+            .await
+            {
+                Ok(res) => res,
+                Err(e) => {
+                    log::error!("Error uploading image to Cloudflare: {:?}", e);
+                    continue;
+                }
+            };
+
+            let logo_link = upload_res.result.variants[0].clone();
 
             let query_str = get_icpump_insert_query_created_at(
                 "".to_string(), // not required
