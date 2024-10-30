@@ -8,6 +8,7 @@ use axum::routing::post;
 use axum::{routing::get, Router};
 use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
 use canister::mlfeed_cache::OffChainCanisterService;
+use canister::upgrade_user_token_sns_canister::upgrade_user_token_sns_canister_handler;
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use env_logger::{Builder, Target};
@@ -68,6 +69,10 @@ async fn main() -> Result<()> {
         .route("/report-approved", post(report_approved_handler))
         .route("/backfill-icpump", post(backfill_icpump_data_handler))
         .route("/import-video", post(upload_user_video_handler))
+        .route(
+            "/upgrade_user_token_sns_canister/:governance_canister_id",
+            post(upgrade_user_token_sns_canister_handler),
+        )
         .route(
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),

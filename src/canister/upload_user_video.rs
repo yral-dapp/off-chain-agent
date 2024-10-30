@@ -8,18 +8,11 @@ use ic_agent::{
 use k256::{elliptic_curve::JwkEcKey, SecretKey};
 use serde::{Deserialize, Serialize};
 
-use crate::{app_state::AppState, events::VideoUploadSuccessful};
+use crate::{app_state::AppState, events::VideoUploadSuccessful, utils::api_response::ApiResponse};
 
 use yral_canisters_client::individual_user_template::{
     IndividualUserTemplate, PostDetailsFromFrontend, Result1,
 };
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct ApiResponse<T> {
-    success: bool,
-    error: Option<String>,
-    data: Option<T>,
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct UploadUserVideoRequestBody {
@@ -70,26 +63,6 @@ impl TryFrom<DelegatedIdentityWire> for DelegatedIdentity {
     }
 
     type Error = String;
-}
-
-impl<T> From<Result<T, Box<dyn Error>>> for ApiResponse<T>
-where
-    T: Sized,
-{
-    fn from(value: Result<T, Box<dyn Error>>) -> Self {
-        match value {
-            Ok(res) => ApiResponse {
-                success: true,
-                error: None,
-                data: Some(res),
-            },
-            Err(e) => ApiResponse {
-                success: false,
-                error: Some(e.to_string()),
-                data: None,
-            },
-        }
-    }
 }
 
 pub async fn upload_user_video_handler(
