@@ -68,6 +68,6 @@ jobs:
           QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
           CF_IMAGES_API_TOKEN: ${{ secrets.CLOUDFLARE_IMAGES_READ_AND_WRITE_API_TOKEN }}
       - name: Deploy a docker container to fly.io
-        run: flyctl deploy --remote-only --depot=false
+        run: flyctl deploy --remote-only -c fly-prod.toml
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
