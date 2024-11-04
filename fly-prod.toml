@@ -13,16 +13,11 @@ kill_timeout = '5s'
 [env]
 PORT = '8080'
 
-[processes]
-# The command below is used to launch a Rails server; be sure to
-# replace with the command you're using to launch your server.
-web = "./icp-off-chain-agent"
-# cron = "supercronic /app/crontab"
 
 [[services]]
 internal_port = 50051
 protocol = "tcp"
-processes = ["web"]
+processes = ["app"]
 
 [[services.ports]]
 handlers = ["tls"]
