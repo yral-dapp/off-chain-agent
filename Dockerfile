@@ -24,4 +24,4 @@ EXPOSE 50051
 # # You might need to change this depending on where your crontab is located
 # COPY crontab crontab
 
-# CMD ["./icp-off-chain-agent"]
+CMD ["./icp-off-chain-agent"]
