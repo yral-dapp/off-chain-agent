@@ -30,6 +30,8 @@ pub fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec<Vec<u
     let output_pattern = output_dir.join("output-%04d.jpg");
 
     let status = Command::new("ffmpeg")
+        .arg("-loglevel")
+        .arg("error")
         .arg("-i")
         .arg(video_path)
         .arg("-vf")
