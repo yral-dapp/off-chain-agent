@@ -6,7 +6,8 @@ COPY ./target/x86_64-unknown-linux-musl/release/icp-off-chain-agent .
 
 RUN apt-get update \
     && apt-get install -y ca-certificates \
-    && apt-get -y install curl
+    && apt-get -y install curl \
+    && apt-get -y install ffmpeg
 
 EXPOSE 50051
 

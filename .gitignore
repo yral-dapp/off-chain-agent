@@ -1,3 +1,4 @@
 /target
 /.direnv
 gha-creds-*.json
+.DS_Store
