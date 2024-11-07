@@ -289,7 +289,7 @@ impl Event {
 
                 // link is in the format token/info/NEW_ID/USER_PRICIPAL
                 let parts: Vec<&str> = data.link.split('/').collect();
-                let document_id = parts[2]; // Get the NEW_ID part
+                let document_id = parts[3]; // Get the NEW_ID part
 
                 let db = app_state.firestoredb.clone();
 
