@@ -287,7 +287,7 @@ impl Event {
                     link: params["link"].as_str().unwrap().to_string(),
                 };
 
-                // link is in the format token/info/NEW_ID/USER_PRICIPAL
+                // link is in the format /token/info/NEW_ID/USER_PRICIPAL
                 let parts: Vec<&str> = data.link.split('/').collect();
                 let document_id = parts[3]; // Get the NEW_ID part
 
