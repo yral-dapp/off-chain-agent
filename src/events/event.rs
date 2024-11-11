@@ -39,6 +39,12 @@ struct TokenListItem {
     #[serde(with = "firestore::serialize_as_timestamp")]
     created_at: DateTime<Utc>,
     link: String,
+    #[serde(default)]
+    is_nsfw: bool,
+    #[serde(default)]
+    nsfw_ec: String,
+    #[serde(default)]
+    nsfw_gore: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -285,6 +291,9 @@ impl Event {
                     description: params["description"].as_str().unwrap().to_string(),
                     created_at: Utc::now(),
                     link: params["link"].as_str().unwrap().to_string(),
+                    is_nsfw: params["is_nsfw"].as_bool().unwrap(),
+                    nsfw_ec: params["nsfw_ec"].as_str().unwrap().to_string(),
+                    nsfw_gore: params["nsfw_gore"].as_str().unwrap().to_string(),
                 };
 
                 // link is in the format /token/info/NEW_ID/USER_PRICIPAL
