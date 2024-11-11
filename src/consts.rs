@@ -16,3 +16,5 @@ pub const GOOGLE_CHAT_REPORT_SPACE_URL: &str =
     "https://chat.googleapis.com/v1/spaces/AAAA1yDLYO4/messages";
 
 pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
+
+pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
