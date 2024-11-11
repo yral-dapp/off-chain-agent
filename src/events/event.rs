@@ -58,6 +58,8 @@ pub struct ICPumpTokenMetadata {
     pub token_symbol: String,
     pub user_id: String,
     pub created_at: String,
+    #[serde(default)]
+    is_nsfw: bool,
 }
 
 pub struct Event {
@@ -115,6 +117,7 @@ impl Event {
                     token_symbol: params["token_symbol"].as_str().unwrap().to_string(),
                     user_id: params["user_id"].as_str().unwrap().to_string(),
                     created_at: timestamp,
+                    is_nsfw: params["is_nsfw"].as_bool().unwrap(),
                 };
 
                 let res = stream_to_bigquery_token_metadata_impl_v2(&app_state, data).await;
@@ -426,6 +429,7 @@ pub async fn stream_to_bigquery_token_metadata_impl_v2(
         data.token_name.clone(),
         data.token_symbol.clone(),
         data.user_id.clone(),
+        data.is_nsfw,
     );
 
     let request = QueryRequest {
