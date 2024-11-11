@@ -51,7 +51,7 @@ pub fn get_icpump_insert_query(
     \"{}\",
     \"{}\",
     \"{}\",
-    \"{}\",
+    {},
     CURRENT_TIMESTAMP(),
     token_name_embedding.embedding,
     token_description_embedding.embedding
