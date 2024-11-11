@@ -39,6 +39,12 @@ struct TokenListItem {
     #[serde(with = "firestore::serialize_as_timestamp")]
     created_at: DateTime<Utc>,
     link: String,
+    #[serde(default)]
+    is_nsfw: bool,
+    #[serde(default)]
+    nsfw_ec: String,
+    #[serde(default)]
+    nsfw_gore: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -52,6 +58,8 @@ pub struct ICPumpTokenMetadata {
     pub token_symbol: String,
     pub user_id: String,
     pub created_at: String,
+    #[serde(default)]
+    is_nsfw: bool,
 }
 
 pub struct Event {
@@ -109,6 +117,7 @@ impl Event {
                     token_symbol: params["token_symbol"].as_str().unwrap().to_string(),
                     user_id: params["user_id"].as_str().unwrap().to_string(),
                     created_at: timestamp,
+                    is_nsfw: params["is_nsfw"].as_bool().unwrap(),
                 };
 
                 let res = stream_to_bigquery_token_metadata_impl_v2(&app_state, data).await;
@@ -285,6 +294,9 @@ impl Event {
                     description: params["description"].as_str().unwrap().to_string(),
                     created_at: Utc::now(),
                     link: params["link"].as_str().unwrap().to_string(),
+                    is_nsfw: params["is_nsfw"].as_bool().unwrap(),
+                    nsfw_ec: params["nsfw_ec"].as_str().unwrap().to_string(),
+                    nsfw_gore: params["nsfw_gore"].as_str().unwrap().to_string(),
                 };
 
                 // link is in the format /token/info/NEW_ID/USER_PRICIPAL
@@ -417,6 +429,7 @@ pub async fn stream_to_bigquery_token_metadata_impl_v2(
         data.token_name.clone(),
         data.token_symbol.clone(),
         data.user_id.clone(),
+        data.is_nsfw,
     );
 
     let request = QueryRequest {

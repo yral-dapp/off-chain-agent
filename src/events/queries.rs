@@ -7,9 +7,10 @@ pub fn get_icpump_insert_query(
     token_name: String,
     token_symbol: String,
     user_id: String,
+    is_nsfw: bool,
 ) -> String {
     format!("
-    INSERT INTO `hot-or-not-feed-intelligence.icpumpfun.token_metadata_v1` (canister_id, description, host, link, logo, token_name, token_symbol, user_id, created_at, token_name_embedding, token_description_embedding)
+    INSERT INTO `hot-or-not-feed-intelligence.icpumpfun.token_metadata_v1` (canister_id, description, host, link, logo, token_name, token_symbol, user_id, is_nsfw, created_at, token_name_embedding, token_description_embedding)
     WITH token_description_embedding AS (
       SELECT
           ARRAY(
@@ -50,11 +51,12 @@ pub fn get_icpump_insert_query(
     \"{}\",
     \"{}\",
     \"{}\",
+    {},
     CURRENT_TIMESTAMP(),
     token_name_embedding.embedding,
     token_description_embedding.embedding
     FROM `token_name_embedding`, `token_description_embedding`;
-    ", description, token_name, canister_id, description, host, link, logo, token_name, token_symbol, user_id)
+    ", description, token_name, canister_id, description, host, link, logo, token_name, token_symbol, user_id, is_nsfw)
 }
 
 // used for backfilling data
