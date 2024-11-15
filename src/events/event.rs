@@ -39,6 +39,12 @@ struct TokenListItem {
     #[serde(with = "firestore::serialize_as_timestamp")]
     created_at: DateTime<Utc>,
     link: String,
+    #[serde(default)]
+    is_nsfw: bool,
+    #[serde(default)]
+    nsfw_ec: String,
+    #[serde(default)]
+    nsfw_gore: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -52,6 +58,8 @@ pub struct ICPumpTokenMetadata {
     pub token_symbol: String,
     pub user_id: String,
     pub created_at: String,
+    #[serde(default)]
+    is_nsfw: bool,
 }
 
 pub struct Event {
@@ -109,6 +117,7 @@ impl Event {
                     token_symbol: params["token_symbol"].as_str().unwrap().to_string(),
                     user_id: params["user_id"].as_str().unwrap().to_string(),
                     created_at: timestamp,
+                    is_nsfw: params["is_nsfw"].as_bool().unwrap(),
                 };
 
                 let res = stream_to_bigquery_token_metadata_impl_v2(&app_state, data).await;
@@ -285,7 +294,14 @@ impl Event {
                     description: params["description"].as_str().unwrap().to_string(),
                     created_at: Utc::now(),
                     link: params["link"].as_str().unwrap().to_string(),
+                    is_nsfw: params["is_nsfw"].as_bool().unwrap(),
+                    nsfw_ec: params["nsfw_ec"].as_str().unwrap().to_string(),
+                    nsfw_gore: params["nsfw_gore"].as_str().unwrap().to_string(),
                 };
+
+                // link is in the format /token/info/NEW_ID/USER_PRICIPAL
+                let parts: Vec<&str> = data.link.split('/').collect();
+                let document_id = parts[3]; // Get the NEW_ID part
 
                 let db = app_state.firestoredb.clone();
 
@@ -293,10 +309,7 @@ impl Event {
                     .fluent()
                     .insert()
                     .into("tokens-list")
-                    .document_id(format!(
-                        "{}-{}-{}",
-                        &data.user_id, &data.token_symbol, &data.created_at
-                    ))
+                    .document_id(document_id)
                     .object(&data)
                     .execute()
                     .await;
@@ -378,38 +391,6 @@ fn system_time_to_custom(time: std::time::SystemTime) -> SystemTime {
     }
 }
 
-pub async fn stream_to_bigquery_token_metadata_impl(
-    app_state: &AppState,
-    data: ICPumpTokenMetadata,
-) -> Result<(), anyhow::Error> {
-    let bq_client = app_state.bigquery_client.clone();
-
-    let data1 = Row {
-        insert_id: None,
-        json: data,
-    };
-    let request = InsertAllRequest {
-        rows: vec![data1],
-        ..Default::default()
-    };
-    let result = bq_client
-        .tabledata()
-        .insert(
-            "hot-or-not-feed-intelligence",
-            "icpumpfun",
-            "token_metadata",
-            &request,
-        )
-        .await?;
-
-    if let Some(errors) = result.insert_errors {
-        log::error!("Error streaming to BigQuery: {:?}", errors);
-        return Err(anyhow::anyhow!("Error streaming to BigQuery"));
-    }
-
-    Ok(())
-}
-
 pub async fn stream_to_bigquery_token_metadata_impl_v2(
     app_state: &AppState,
     data: ICPumpTokenMetadata,
@@ -448,6 +429,7 @@ pub async fn stream_to_bigquery_token_metadata_impl_v2(
         data.token_name.clone(),
         data.token_symbol.clone(),
         data.user_id.clone(),
+        data.is_nsfw,
     );
 
     let request = QueryRequest {
@@ -465,125 +447,4 @@ pub async fn stream_to_bigquery_token_metadata_impl_v2(
             Err(anyhow::anyhow!("Error streaming to BigQuery"))
         }
     }
-}
-
-// TEMP API to backfill data. one time operation. to be removed later
-pub async fn backfill_icpump_data_handler(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Result<(), AppError> {
-    let start = headers
-        .get("start")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(0);
-    let limit = headers
-        .get("limit")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(30);
-
-    tokio::spawn(async move {
-        let fs_db = state.firestoredb.clone();
-        let bq_client = state.bigquery_client.clone();
-
-        const COLLECTION_NAME: &'static str = "tokens-list";
-
-        // Get data from Firestore
-
-        let object_stream: BoxStream<TokenListItem> = fs_db
-            .fluent()
-            .select()
-            .from(COLLECTION_NAME)
-            .order_by([(
-                path!(TokenListItem::created_at),
-                FirestoreQueryDirection::Descending,
-            )])
-            .offset(start)
-            .limit(limit)
-            .obj()
-            .stream_query()
-            .await
-            .expect("failed to stream");
-
-        let as_vec: Vec<TokenListItem> = object_stream.collect().await;
-
-        if as_vec.is_empty() {
-            return;
-        }
-
-        let as_vec_len = as_vec.len();
-
-        // Stream to BigQuery
-
-        let mut cnt = 0;
-        for item in as_vec {
-            let link = item.link.clone();
-            let key_id = link.split("/").collect::<Vec<&str>>();
-            let root_id = key_id[3];
-
-            let base64_image_str = item.logo.clone();
-            let base64_image_without_prefix =
-                base64_image_str.replace("data:image/png;base64,", "");
-
-            let cf_images_api_token = env::var("CF_IMAGES_API_TOKEN").unwrap();
-
-            let upload_res = match upload_base64_image(
-                CLOUDFLARE_ACCOUNT_ID,
-                cf_images_api_token.as_str(),
-                base64_image_without_prefix.as_str(),
-                root_id,
-            )
-            .await
-            {
-                Ok(res) => res,
-                Err(e) => {
-                    log::error!("Error uploading image to Cloudflare: {:?}", e);
-                    continue;
-                }
-            };
-
-            let logo_link = upload_res.result.variants[0].clone();
-
-            let query_str = get_icpump_insert_query_created_at(
-                "".to_string(), // not required
-                item.description,
-                "".to_string(),
-                item.link,
-                logo_link,
-                item.token_name,
-                item.token_symbol,
-                item.user_id,
-                item.created_at.to_rfc3339(),
-            );
-
-            let request = QueryRequest {
-                query: query_str.to_string(),
-                ..Default::default()
-            };
-
-            let _ = match bq_client
-                .query::<google_cloud_bigquery::query::row::Row>(
-                    "hot-or-not-feed-intelligence",
-                    request,
-                )
-                .await
-            {
-                Ok(_) => Ok(()),
-                Err(e) => {
-                    log::error!("Error streaming to BigQuery backfill: {:?}", e);
-                    Err(anyhow::anyhow!("Error streaming to BigQuery backfill"))
-                }
-            };
-
-            cnt += 1;
-            if cnt % 10 == 0 {
-                log::info!("Backfilling {} items", cnt);
-            }
-        }
-
-        log::info!("Backfill completed for {} items", as_vec_len);
-    });
-
-    Ok(())
 }

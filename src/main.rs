@@ -12,7 +12,6 @@ use canister::upgrade_user_token_sns_canister::upgrade_user_token_sns_canister_h
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use env_logger::{Builder, Target};
-use events::event::backfill_icpump_data_handler;
 use events::nsfw::extract_frames_and_upload;
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
@@ -68,7 +67,6 @@ async fn main() -> Result<()> {
         .route("/canisters_list", get(canisters_list_handler))
         .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
-        .route("/backfill-icpump", post(backfill_icpump_data_handler))
         .route("/import-video", post(upload_user_video_handler))
         .route(
             "/upgrade_user_token_sns_canister/:governance_canister_id",

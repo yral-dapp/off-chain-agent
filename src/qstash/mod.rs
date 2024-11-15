@@ -1,6 +1,6 @@
 mod verify;
 
-use std::{sync::Arc, time::Duration};
+use std::{str::FromStr, sync::Arc, time::Duration};
 
 use axum::{
     extract::State,
@@ -9,23 +9,25 @@ use axum::{
     routing::post,
     Json, Router,
 };
-use candid::Nat;
+use candid::{Decode, Encode, Nat, Principal};
 use http::StatusCode;
 use ic_agent::{identity::DelegatedIdentity, Identity};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
+use serde_bytes::ByteBuf;
 use tower::ServiceBuilder;
 use verify::verify_qstash_message;
 use yral_canisters_client::{
+    individual_user_template::{DeployedCdaoCanisters, IndividualUserTemplate},
     sns_governance::{
         Account, Amount, Command, Command1, Disburse, DissolveState, ListNeurons, ManageNeuron,
         SnsGovernance,
     },
     sns_ledger::{Account as LedgerAccount, SnsLedger, TransferArg, TransferResult},
-    sns_root::{ListSnsCanistersArg, SnsRoot},
+    sns_swap::{self, NewSaleTicketRequest, RefreshBuyerTokensRequest, SnsSwap},
 };
-use yral_qstash_types::ClaimTokensRequest;
+use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 
-use crate::app_state::AppState;
+use crate::{app_state::AppState, consts::ICP_LEDGER_CANISTER_ID};
 
 pub mod client;
 
@@ -48,6 +50,117 @@ impl QStashState {
     }
 }
 
+async fn verify_token_root(
+    agent: &ic_agent::Agent,
+    user_canister: Principal,
+    token_root: Principal,
+) -> Result<DeployedCdaoCanisters, StatusCode> {
+    let individual_user = IndividualUserTemplate(user_canister, agent);
+    let tokens = individual_user
+        .deployed_cdao_canisters()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    tokens
+        .into_iter()
+        .find(|t| t.root == token_root)
+        .ok_or(StatusCode::BAD_REQUEST)
+}
+
+async fn get_user_canister(
+    metadata: &yral_metadata_client::MetadataClient<true>,
+    user_principal: Principal,
+) -> Result<Principal, StatusCode> {
+    let meta = metadata
+        .get_user_metadata(user_principal)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    Ok(meta.user_canister_id)
+}
+
+fn principal_to_subaccount(principal: Principal) -> ByteBuf {
+    let mut subaccount = [0u8; 32];
+    let principal = principal.as_slice();
+    subaccount[0] = principal.len().try_into().unwrap();
+    subaccount[1..1 + principal.len()].copy_from_slice(principal);
+
+    subaccount.to_vec().into()
+}
+
+async fn participate_in_swap(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ParticipateInSwapRequest>,
+) -> Result<Response, StatusCode> {
+    let user_canister = get_user_canister(&state.yral_metadata_client, req.user_principal).await?;
+    let cdao_cans = verify_token_root(&state.agent, user_canister, req.token_root).await?;
+
+    let agent = &state.agent;
+    let swap = SnsSwap(cdao_cans.swap, agent);
+
+    let new_sale_ticket = swap
+        .new_sale_ticket(NewSaleTicketRequest {
+            amount_icp_e8s: 100_000,
+            subaccount: None,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    match new_sale_ticket.result {
+        Some(sns_swap::Result2::Ok(_)) => (),
+        Some(sns_swap::Result2::Err(sns_swap::Err2 { error_type: 1, .. })) => {
+            let resp = Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .header("Retry-After", "100")
+                .body("Swap is not available".into())
+                .unwrap();
+            return Ok(resp);
+        }
+        _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+
+    // transfer icp
+    let admin_principal = agent.get_principal().unwrap();
+    let subaccount = principal_to_subaccount(admin_principal);
+    let transfer_args = TransferArg {
+        memo: Some(vec![0].into()),
+        amount: Nat::from(1000000_u64),
+        fee: None,
+        from_subaccount: None,
+        to: LedgerAccount {
+            owner: cdao_cans.swap,
+            subaccount: Some(subaccount),
+        },
+        created_at_time: None,
+    };
+    let res: Vec<u8> = agent
+        .update(
+            &Principal::from_str(ICP_LEDGER_CANISTER_ID).unwrap(),
+            "icrc1_transfer",
+        )
+        .with_arg(Encode!(&transfer_args).unwrap())
+        .call_and_wait()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let transfer_result: TransferResult = Decode!(&res, TransferResult).unwrap();
+    if let TransferResult::Err(_) = transfer_result {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    swap.refresh_buyer_tokens(RefreshBuyerTokensRequest {
+        buyer: admin_principal.to_string(),
+        confirmation_text: None,
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let res = Response::builder()
+        .status(StatusCode::OK)
+        .body("Participated in swap".into())
+        .unwrap();
+    Ok(res)
+}
+
 async fn claim_tokens_from_first_neuron(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ClaimTokensRequest>,
@@ -64,17 +177,10 @@ async fn claim_tokens_from_first_neuron(
     // we need to set identity for disburse and icrc-1 transfer
     agent.set_identity(identity);
 
-    let root_canister = SnsRoot(req.token_root, &agent);
-    let sns_cans = root_canister
-        .list_sns_canisters(ListSnsCanistersArg {})
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let Some(governance_principal) = sns_cans.governance else {
-        return Err(StatusCode::BAD_REQUEST);
-    };
-    let Some(ledger_principal) = sns_cans.ledger else {
-        return Err(StatusCode::BAD_REQUEST);
-    };
+    let user_canister = get_user_canister(&state.yral_metadata_client, user_principal).await?;
+    let cdao_cans = verify_token_root(&agent, user_canister, req.token_root).await?;
+    let governance_principal = cdao_cans.governance;
+    let ledger_principal = cdao_cans.ledger;
 
     let governance = SnsGovernance(governance_principal, &agent);
     let neurons = governance
@@ -149,7 +255,6 @@ async fn claim_tokens_from_first_neuron(
     }
 
     // Transfer to canister
-    let user_canister = req.user_canister;
     let ledger = SnsLedger(ledger_principal, &agent);
     // User has 50% of the overall amount
     // 20% of this 50% is 10% of the overall amount
@@ -192,6 +297,7 @@ async fn claim_tokens_from_first_neuron(
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
+        .route("/participate_in_swap", post(participate_in_swap))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
