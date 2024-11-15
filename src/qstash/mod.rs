@@ -27,6 +27,8 @@ use yral_qstash_types::ClaimTokensRequest;
 
 use crate::app_state::AppState;
 
+pub mod client;
+
 #[derive(Clone)]
 pub struct QStashState {
     decoding_key: Arc<DecodingKey>,
