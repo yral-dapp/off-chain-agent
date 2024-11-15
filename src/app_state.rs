@@ -145,8 +145,9 @@ pub async fn init_firestoredb() -> FirestoreDb {
 }
 
 pub fn init_qstash() -> QStashState {
+    // TODO: change this to normal
     let qstash_key =
-        env::var("QSTASH_CURRENT_SIGNING_KEY").expect("QSTASH_CURRENT_SIGNING_KEY is required");
+        env::var("QSTASH_CURRENT_SIGNING_KEY_V1").expect("QSTASH_CURRENT_SIGNING_KEY is required");
 
     QStashState::init(qstash_key)
 }
