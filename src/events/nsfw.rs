@@ -96,7 +96,7 @@ pub async fn upload_frames_to_gcs(frames: Vec<Vec<u8>>, video_id: &str) -> Resul
     Ok(())
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct VideoRequest {
     video_id: String,
 }
@@ -116,6 +116,9 @@ pub async fn extract_frames_and_upload(
     // upload_frames_to_gcs(frames, &video_id).await?;
     // // delete output directory
     // fs::remove_dir_all(output_dir)?;
+
+    // print payload
+    println!("Payload s2: {:?}", payload);
 
     // enqueue qstash job to detect nsfw
     let qstash_client = state.qstash_client.clone();
@@ -161,6 +164,8 @@ pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    // print payload
+    println!("Payload s3: {:?}", payload);
     let video_id = payload.video_id;
 
     // let nsfw_info =
