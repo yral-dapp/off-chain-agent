@@ -7,7 +7,7 @@ use crate::{
     utils::cf_images::upload_base64_image,
     AppError,
 };
-use axum::extract::State;
+use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
 use firestore::{errors::FirestoreError, struct_path::path, FirestoreQueryDirection};
@@ -131,21 +131,26 @@ impl Event {
         }
     }
 
-    pub fn upload_to_gcs(&self) {
+    pub fn upload_to_gcs(&self, app_state: &AppState) {
         if self.event.event == "video_upload_successful" {
             let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
+            let qstash_client = app_state.qstash_client.clone();
 
             tokio::spawn(async move {
                 let timestamp = chrono::Utc::now().to_rfc3339();
-                tokio::time::sleep(Duration::from_secs(60 * 10)).await;
 
                 let uid = params["video_id"].as_str().unwrap();
                 let canister_id = params["canister_id"].as_str().unwrap();
                 let post_id = params["post_id"].as_u64().unwrap();
 
-                let res = upload_gcs(uid, canister_id, post_id, timestamp).await;
+                let res = qstash_client
+                    .publish_video(uid, canister_id, post_id, timestamp)
+                    .await;
                 if res.is_err() {
-                    log::error!("Error uploading video to GCS: {:?}", res.err());
+                    error!(
+                        "upload_to_gcs: Error sending data to qstash: {:?}",
+                        res.err()
+                    );
                 }
             });
         }
@@ -181,30 +186,6 @@ impl Event {
                     if res.is_err() {
                         log::error!("Error updating watch history: {:?}", res.err());
                     }
-
-                    // // test if the watch history is updated
-                    // let watch_history = match user_canister.get_watch_history().await {
-                    //     Ok(watch_history) => match watch_history {
-                    //         Result12::Ok(watch_history) => watch_history,
-                    //         Result12::Err(e) => {
-                    //             log::error!("1.Error getting watch history: {:?}", e);
-                    //             return;
-                    //         }
-                    //     },
-                    //     Err(e) => {
-                    //         log::error!("2. Error getting watch history: {:?}", e);
-                    //         return;
-                    //     }
-                    // };
-
-                    // for item in watch_history {
-                    //     log::info!(
-                    //         "Watch history item: {:?} {:?} {:?}",
-                    //         item.cf_video_id,
-                    //         item.post_id,
-                    //         item.publisher_canister_id
-                    //     );
-                    // }
                 }
             });
         }
@@ -252,30 +233,6 @@ impl Event {
             if res.is_err() {
                 log::error!("Error updating success history: {:?}", res.err());
             }
-
-            // test if the success history is updated
-            // let success_history = match user_canister.get_success_history().await {
-            //     Ok(success_history) => match success_history {
-            //         Result10::Ok(success_history) => success_history,
-            //         Result10::Err(e) => {
-            //             log::error!("1.Error getting success history: {:?}", e);
-            //             return;
-            //         }
-            //     },
-            //     Err(e) => {
-            //         log::error!("2. Error getting success history: {:?}", e);
-            //         return;
-            //     }
-            // };
-
-            // for item in success_history {
-            //     log::info!(
-            //         "Success history item: {:?} {:?} {:?}",
-            //         item.cf_video_id,
-            //         item.post_id,
-            //         item.publisher_canister_id
-            //     );
-            // }
         });
     }
 
@@ -319,43 +276,6 @@ impl Event {
             });
         }
     }
-}
-
-pub async fn upload_gcs(
-    uid: &str,
-    canister_id: &str,
-    post_id: u64,
-    timestamp_str: String,
-) -> Result<(), anyhow::Error> {
-    let url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        uid
-    );
-    let name = format!("{}.mp4", uid);
-
-    let file = reqwest::Client::new()
-        .get(&url)
-        .send()
-        .await?
-        .bytes_stream();
-
-    // write to GCS
-    let gcs_client = cloud_storage::Client::default();
-    let mut res_obj = gcs_client
-        .object()
-        .create_streamed("yral-videos", file, None, &name, "video/mp4")
-        .await?;
-
-    let mut hashmap = HashMap::new();
-    hashmap.insert("canister_id".to_string(), canister_id.to_string());
-    hashmap.insert("post_id".to_string(), post_id.to_string());
-    hashmap.insert("timestamp".to_string(), timestamp_str);
-    res_obj.metadata = Some(hashmap);
-
-    // update
-    let _ = gcs_client.object().update(&res_obj).await?;
-
-    Ok(())
 }
 
 async fn stream_to_bigquery(
@@ -447,4 +367,100 @@ pub async fn stream_to_bigquery_token_metadata_impl_v2(
             Err(anyhow::anyhow!("Error streaming to BigQuery"))
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UploadVideoInfo {
+    pub video_id: String,
+    pub canister_id: String,
+    pub post_id: u64,
+    pub timestamp: String,
+}
+
+pub async fn upload_video_gcs(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<UploadVideoInfo>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    // upload_gcs_impl(
+    //     &payload.video_id,
+    //     &payload.canister_id,
+    //     payload.post_id,
+    //     payload.timestamp,
+    // )
+    // .await?;
+
+    // print out the payload
+    println!("Payload: {:?}", payload);
+
+    let qstash_client = state.qstash_client.clone();
+    qstash_client
+        .enqueue_video_frames(&payload.video_id)
+        .await?;
+
+    Ok(Json(
+        serde_json::json!({ "message": "Video uploaded to GCS" }),
+    ))
+}
+
+pub async fn upload_gcs_impl(
+    uid: &str,
+    canister_id: &str,
+    post_id: u64,
+    timestamp_str: String,
+) -> Result<(), anyhow::Error> {
+    let url = format!(
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
+        uid
+    );
+    let name = format!("{}.mp4", uid);
+
+    let file = reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await?
+        .bytes_stream();
+
+    // write to GCS
+    let gcs_client = cloud_storage::Client::default();
+    let mut res_obj = gcs_client
+        .object()
+        .create_streamed("yral-videos", file, None, &name, "video/mp4")
+        .await?;
+
+    let mut hashmap = HashMap::new();
+    hashmap.insert("canister_id".to_string(), canister_id.to_string());
+    hashmap.insert("post_id".to_string(), post_id.to_string());
+    hashmap.insert("timestamp".to_string(), timestamp_str);
+    res_obj.metadata = Some(hashmap);
+
+    // update
+    let _ = gcs_client.object().update(&res_obj).await?;
+
+    Ok(())
+}
+
+pub async fn test_upload_to_qstash(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<UploadVideoInfo>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let qstash_client = state.qstash_client.clone();
+
+    let res = qstash_client
+        .publish_video(
+            &payload.video_id,
+            &payload.canister_id,
+            payload.post_id,
+            payload.timestamp,
+        )
+        .await;
+    if res.is_err() {
+        error!(
+            "upload_to_gcs: Error sending data to qstash: {:?}",
+            res.err()
+        );
+    }
+
+    Ok(Json(
+        serde_json::json!({ "message": "Video uploaded to GCS" }),
+    ))
 }

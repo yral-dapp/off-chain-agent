@@ -33,14 +33,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .out_dir(out_dir)
         .compile(&[proto_file], &["proto"])?;
 
-    let proto_file = "contracts/projects/ml_feed/ml_feed.proto";
+    // GRPC clients
+
+    let ml_feed_proto = "contracts/projects/ml_feed/ml_feed.proto";
+    let nsfw_proto = "contracts/projects/ml/nsfw_detector.proto";
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     tonic_build::configure()
         .build_client(true)
         .build_server(false)
         .out_dir(out_dir)
-        .compile(&[proto_file], &["proto"])?;
+        .compile(&[ml_feed_proto, nsfw_proto], &["proto"])?;
 
     Ok(())
 }

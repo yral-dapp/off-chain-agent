@@ -4,6 +4,7 @@ primary_region = 'sin'
 
 [env]
 PORT = '8080'
+QSTASH_AUTH_TOKEN = 'eyJVc2VySUQiOiI4YWIwODUzNi1jOWEwLTQ3MjUtYTQ3Yi1kMDRiOGZjMWNiZjAiLCJQYXNzd29yZCI6ImVkYzNjYjI0NmNjZDQ4NjZiZDAwNTE2MWVlN2JjM2Y3In0='
 
 [[services]]
 internal_port = 50051

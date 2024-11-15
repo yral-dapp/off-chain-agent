@@ -1,15 +1,25 @@
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
     process::Command,
+    sync::Arc,
 };
 
 use anyhow::Error;
-use axum::{extract::Query, Json};
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use tonic::{metadata::MetadataValue, transport::Channel, Request};
+use yral_canisters_client::individual_user_template::Ok;
 
-use crate::AppError;
+use crate::{app_state::AppState, AppError};
+
+pub mod nsfw_detector {
+    tonic::include_proto!("nsfw_detector");
+}
 
 fn create_output_directory(video_id: &str) -> Result<PathBuf, Error> {
     let video_name = Path::new(video_id)
@@ -59,7 +69,7 @@ pub fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec<Vec<u
 }
 
 pub async fn upload_frames_to_gcs(frames: Vec<Vec<u8>>, video_id: &str) -> Result<(), Error> {
-    let bucket_name = "yral-video-frames-test";
+    let bucket_name = "yral-video-frames";
 
     // Create a vector of futures for concurrent uploads
     let upload_futures = frames.into_iter().enumerate().map(|(i, frame)| {
@@ -87,25 +97,92 @@ pub async fn upload_frames_to_gcs(frames: Vec<Vec<u8>>, video_id: &str) -> Resul
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ExtractFrameRequest {
+pub struct VideoRequest {
     video_id: String,
 }
 
 // extract_frames_and_upload API handler which takes video_id as queryparam in axum
 pub async fn extract_frames_and_upload(
-    Json(payload): Json<ExtractFrameRequest>,
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let video_id = payload.video_id;
-    let video_path = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        video_id
-    );
-    let output_dir = create_output_directory(&video_id)?;
-    let frames = extract_frames(&video_path, output_dir.clone())?;
-    upload_frames_to_gcs(frames, &video_id).await?;
-    // delete output directory
-    fs::remove_dir_all(output_dir)?;
+    // let video_id = payload.video_id;
+    // let video_path = format!(
+    //     "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
+    //     video_id
+    // );
+    // let output_dir = create_output_directory(&video_id)?;
+    // let frames = extract_frames(&video_path, output_dir.clone())?;
+    // upload_frames_to_gcs(frames, &video_id).await?;
+    // // delete output directory
+    // fs::remove_dir_all(output_dir)?;
+
+    // enqueue qstash job to detect nsfw
+    let qstash_client = state.qstash_client.clone();
+    qstash_client
+        .enqueue_video_nsfw_detection(&payload.video_id)
+        .await?;
+
     Ok(Json(
         serde_json::json!({ "message": "Frames extracted and uploaded to GCS" }),
     ))
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
+pub struct NSFWInfo {
+    pub is_nsfw: bool,
+    pub nsfw_ec: String,
+    pub nsfw_gore: String,
+    pub csam_detected: bool,
+}
+
+pub async fn get_video_nsfw_info(video_id: String, channel: Channel) -> Result<NSFWInfo, Error> {
+    let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
+    let token: MetadataValue<_> = format!("Bearer {}", nsfw_grpc_auth_token).parse()?;
+
+    let mut client = nsfw_detector::nsfw_detector_client::NsfwDetectorClient::with_interceptor(
+        channel,
+        move |mut req: Request<()>| {
+            req.metadata_mut().insert("authorization", token.clone());
+            Ok(req)
+        },
+    );
+
+    let req = tonic::Request::new(nsfw_detector::NsfwDetectorRequestVideoId {
+        video_id: video_id.clone(),
+    });
+    let res = client.detect_nsfw_video_id(req).await?;
+
+    let nsfw_info = NSFWInfo::from(res.into_inner());
+    Ok(nsfw_info)
+}
+
+pub async fn nsfw_job(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VideoRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let video_id = payload.video_id;
+
+    // let nsfw_info =
+    //     get_video_nsfw_info(video_id.clone(), state.nsfw_detect_channel.clone()).await?;
+
+    Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
+}
+
+impl From<nsfw_detector::NsfwDetectorResponse> for NSFWInfo {
+    fn from(item: nsfw_detector::NsfwDetectorResponse) -> Self {
+        let is_nsfw = item.csam_detected
+            || matches!(
+                item.nsfw_gore.as_str(),
+                "POSSIBLE" | "LIKELY" | "VERY_LIKELY"
+            )
+            || matches!(item.nsfw_ec.as_str(), "nudity" | "provocative" | "explicit");
+
+        Self {
+            is_nsfw,
+            nsfw_ec: item.nsfw_ec,
+            nsfw_gore: item.nsfw_gore,
+            csam_detected: item.csam_detected,
+        }
+    }
 }

@@ -42,7 +42,7 @@ impl QStashClient {
         canister_id: &str,
         post_id: u64,
         timestamp_str: String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/upload_video_gcs").unwrap();
 
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
@@ -59,6 +59,52 @@ impl QStashClient {
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
             .header("upstash-delay", format!("30s"))
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn enqueue_video_frames(&self, video_id: &str) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/enqueue_video_frames")
+            .unwrap();
+
+        let url = self
+            .base_url
+            .join(&format!("enqueue/video_frames/{}", off_chain_ep))?;
+        let req = serde_json::json!({
+            "video_id": video_id,
+        });
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn enqueue_video_nsfw_detection(&self, video_id: &str) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/enqueue_video_nsfw_detection")
+            .unwrap();
+
+        let url = self
+            .base_url
+            .join(&format!("enqueue/video_nsfw_detection/{}", off_chain_ep))?;
+        let req = serde_json::json!({
+            "video_id": video_id,
+        });
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
             .send()
             .await?;
 

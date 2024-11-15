@@ -41,7 +41,7 @@ impl WarehouseEvents for WarehouseEventsService {
 
         event.stream_to_bigquery(&shared_state.clone());
 
-        event.upload_to_gcs();
+        event.upload_to_gcs(&shared_state.clone());
 
         event.update_watch_history(&shared_state.clone());
 
