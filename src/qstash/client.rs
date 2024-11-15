@@ -47,9 +47,10 @@ impl QStashClient {
 
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
+            "video_id": video_id,
             "canister_id": canister_id,
             "post_id": post_id,
-            "timestamp": timestamp_str
+            "timestamp": timestamp_str,
         });
 
         // upstash-delay is 30 secs
