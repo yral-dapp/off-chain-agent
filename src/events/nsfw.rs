@@ -69,7 +69,7 @@ pub fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec<Vec<u
 }
 
 pub async fn upload_frames_to_gcs(frames: Vec<Vec<u8>>, video_id: &str) -> Result<(), Error> {
-    let bucket_name = "yral-video-frames-v2";
+    let bucket_name = "yral-video-frames";
 
     // Create a vector of futures for concurrent uploads
     let upload_futures = frames.into_iter().enumerate().map(|(i, frame)| {
