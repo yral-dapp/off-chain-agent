@@ -10,10 +10,10 @@ use axum::{
     extract::{Query, State},
     Json,
 };
+use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tonic::{metadata::MetadataValue, transport::Channel, Request};
-use yral_canisters_client::individual_user_template::Ok;
 
 use crate::{app_state::AppState, AppError};
 
@@ -69,7 +69,7 @@ pub fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec<Vec<u
 }
 
 pub async fn upload_frames_to_gcs(frames: Vec<Vec<u8>>, video_id: &str) -> Result<(), Error> {
-    let bucket_name = "yral-video-frames";
+    let bucket_name = "yral-video-frames-v2";
 
     // Create a vector of futures for concurrent uploads
     let upload_futures = frames.into_iter().enumerate().map(|(i, frame)| {
@@ -96,7 +96,7 @@ pub async fn upload_frames_to_gcs(frames: Vec<Vec<u8>>, video_id: &str) -> Resul
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VideoRequest {
     video_id: String,
 }
@@ -106,24 +106,24 @@ pub async fn extract_frames_and_upload(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // let video_id = payload.video_id;
-    // let video_path = format!(
-    //     "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-    //     video_id
-    // );
-    // let output_dir = create_output_directory(&video_id)?;
-    // let frames = extract_frames(&video_path, output_dir.clone())?;
-    // upload_frames_to_gcs(frames, &video_id).await?;
-    // // delete output directory
-    // fs::remove_dir_all(output_dir)?;
-
     // print payload
-    println!("Payload s2: {:?}", payload);
+    println!("Payload s2: {:?}", payload.clone());
+
+    let video_id = payload.video_id;
+    let video_path = format!(
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
+        video_id
+    );
+    let output_dir = create_output_directory(&video_id)?;
+    let frames = extract_frames(&video_path, output_dir.clone())?;
+    upload_frames_to_gcs(frames, &video_id).await?;
+    // delete output directory
+    fs::remove_dir_all(output_dir)?;
 
     // enqueue qstash job to detect nsfw
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .enqueue_video_nsfw_detection(&payload.video_id)
+        .publish_video_nsfw_detection(&video_id)
         .await?;
 
     Ok(Json(
@@ -160,6 +160,15 @@ pub async fn get_video_nsfw_info(video_id: String, channel: Channel) -> Result<N
     Ok(nsfw_info)
 }
 
+#[derive(Serialize)]
+struct VideoNSFWData {
+    video_id: String,
+    gcs_video_id: String,
+    is_nsfw: bool,
+    nsfw_ec: String,
+    nsfw_gore: String,
+}
+
 pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
@@ -168,10 +177,53 @@ pub async fn nsfw_job(
     println!("Payload s3: {:?}", payload);
     let video_id = payload.video_id;
 
-    // let nsfw_info =
-    //     get_video_nsfw_info(video_id.clone(), state.nsfw_detect_channel.clone()).await?;
+    let nsfw_info =
+        get_video_nsfw_info(video_id.clone(), state.nsfw_detect_channel.clone()).await?;
+
+    // print nsfw info
+    println!("NSFW info: {:?}", nsfw_info);
+
+    // push nsfw info to bigquery table using google-cloud-bigquery
+    let bigquery_client = state.bigquery_client.clone();
+    push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
 
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
+}
+
+pub async fn push_nsfw_data_bigquery(
+    bigquery_client: google_cloud_bigquery::client::Client,
+    nsfw_info: NSFWInfo,
+    video_id: String,
+) -> Result<(), Error> {
+    let row_data = VideoNSFWData {
+        video_id: video_id.clone(),
+        gcs_video_id: format!("gs://yral-videos/{}.mp4", video_id),
+        is_nsfw: nsfw_info.is_nsfw,
+        nsfw_ec: nsfw_info.nsfw_ec,
+        nsfw_gore: nsfw_info.nsfw_gore,
+    };
+
+    let row = Row {
+        insert_id: None,
+        json: row_data,
+    };
+
+    let request = InsertAllRequest {
+        rows: vec![row],
+        ..Default::default()
+    };
+
+    bigquery_client
+        .tabledata()
+        .insert(
+            "hot-or-not-feed-intelligence",
+            "yral_ds",
+            "video_nsfw",
+            &request,
+        )
+        .await?;
+
+    Ok(())
 }
 
 impl From<nsfw_detector::NsfwDetectorResponse> for NSFWInfo {

@@ -66,14 +66,12 @@ impl QStashClient {
         Ok(())
     }
 
-    pub async fn enqueue_video_frames(&self, video_id: &str) -> Result<(), anyhow::Error> {
+    pub async fn publish_video_frames(&self, video_id: &str) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_frames")
             .unwrap();
 
-        let url = self
-            .base_url
-            .join(&format!("enqueue/video_frames/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
         });
@@ -89,14 +87,12 @@ impl QStashClient {
         Ok(())
     }
 
-    pub async fn enqueue_video_nsfw_detection(&self, video_id: &str) -> Result<(), anyhow::Error> {
+    pub async fn publish_video_nsfw_detection(&self, video_id: &str) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection")
             .unwrap();
 
-        let url = self
-            .base_url
-            .join(&format!("enqueue/video_nsfw_detection/{}", off_chain_ep))?;
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
         });

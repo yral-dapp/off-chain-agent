@@ -394,7 +394,7 @@ pub async fn upload_video_gcs(
 
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .enqueue_video_frames(&payload.video_id)
+        .publish_video_frames(&payload.video_id)
         .await?;
 
     Ok(Json(
