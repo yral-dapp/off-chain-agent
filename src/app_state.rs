@@ -1,5 +1,6 @@
 use crate::config::AppConfig;
-use crate::consts::YRAL_METADATA_URL;
+use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
+use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
@@ -7,9 +8,8 @@ use firestore::{FirestoreDb, FirestoreDbOptions};
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
-use s3::creds::Credentials;
-use s3::{Bucket, Region};
 use std::env;
+use tonic::transport::{Channel, ClientTlsConfig};
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
 use yup_oauth2::hyper_rustls::HttpsConnector;
@@ -23,6 +23,8 @@ pub struct AppState {
     pub firestoredb: FirestoreDb,
     pub qstash: QStashState,
     pub bigquery_client: Client,
+    pub nsfw_detect_channel: Channel,
+    pub qstash_client: QStashClient,
 }
 
 impl AppState {
@@ -35,6 +37,8 @@ impl AppState {
             firestoredb: init_firestoredb().await,
             qstash: init_qstash(),
             bigquery_client: init_bigquery_client().await,
+            nsfw_detect_channel: init_nsfw_detect_channel().await,
+            qstash_client: init_qstash_client().await,
         }
     }
 
@@ -148,4 +152,19 @@ pub fn init_qstash() -> QStashState {
 pub async fn init_bigquery_client() -> Client {
     let (config, _) = ClientConfig::new_with_auth().await.unwrap();
     Client::new(config).await.unwrap()
+}
+
+pub async fn init_nsfw_detect_channel() -> Channel {
+    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+    Channel::from_static(NSFW_SERVER_URL)
+        .tls_config(tls_config)
+        .expect("Couldn't update TLS config for nsfw agent")
+        .connect()
+        .await
+        .expect("Couldn't connect to nsfw agent")
+}
+
+pub async fn init_qstash_client() -> QStashClient {
+    let auth_token = env::var("QSTASH_AUTH_TOKEN").expect("QSTASH_AUTH_TOKEN is required");
+    QStashClient::new(auth_token.as_str())
 }

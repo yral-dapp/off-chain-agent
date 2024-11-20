@@ -27,7 +27,16 @@ use yral_canisters_client::{
 };
 use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 
-use crate::{app_state::AppState, consts::ICP_LEDGER_CANISTER_ID};
+use crate::{
+    app_state::AppState,
+    consts::ICP_LEDGER_CANISTER_ID,
+    events::{
+        event::upload_video_gcs,
+        nsfw::{extract_frames_and_upload, nsfw_job},
+    },
+};
+
+pub mod client;
 
 #[derive(Clone)]
 pub struct QStashState {
@@ -296,6 +305,9 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
         .route("/participate_in_swap", post(participate_in_swap))
+        .route("/upload_video_gcs", post(upload_video_gcs))
+        .route("/enqueue_video_frames", post(extract_frames_and_upload))
+        .route("/enqueue_video_nsfw_detection", post(nsfw_job))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,

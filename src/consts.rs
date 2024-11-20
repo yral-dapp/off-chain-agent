@@ -18,3 +18,8 @@ pub const GOOGLE_CHAT_REPORT_SPACE_URL: &str =
 pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
 
 pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+
+pub static OFF_CHAIN_AGENT_URL: Lazy<Url> =
+    Lazy::new(|| Url::parse("https://icp-off-chain-agent.fly.dev/").unwrap());
+
+pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
