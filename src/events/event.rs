@@ -381,16 +381,16 @@ pub async fn upload_video_gcs(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UploadVideoInfo>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // upload_gcs_impl(
-    //     &payload.video_id,
-    //     &payload.canister_id,
-    //     payload.post_id,
-    //     payload.timestamp,
-    // )
-    // .await?;
+    upload_gcs_impl(
+        &payload.video_id,
+        &payload.canister_id,
+        payload.post_id,
+        payload.timestamp,
+    )
+    .await?;
 
     // print out the payload
-    println!("Payload: {:?}", payload);
+    // println!("Payload: {:?}", payload);
 
     let qstash_client = state.qstash_client.clone();
     qstash_client
