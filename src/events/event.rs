@@ -3,25 +3,19 @@ use std::{collections::HashMap, env, sync::Arc, time::UNIX_EPOCH};
 use crate::{
     app_state::AppState,
     consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
-    events::{queries::get_icpump_insert_query_created_at, warehouse_events::WarehouseEvent},
+    events::warehouse_events::WarehouseEvent,
     utils::cf_images::upload_base64_image,
     AppError,
 };
 use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
-use firestore::{errors::FirestoreError, struct_path::path, FirestoreQueryDirection};
-use futures::{stream::BoxStream, StreamExt};
-use google_cloud_bigquery::http::{
-    job::query::QueryRequest,
-    tabledata::insert_all::{InsertAllRequest, Row},
-};
-use http::HeaderMap;
-use log::{error, info};
+use firestore::errors::FirestoreError;
+use google_cloud_bigquery::http::job::query::QueryRequest;
+use log::error;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::time::Duration;
 use yral_canisters_client::individual_user_template::{
     SuccessHistoryItemV1, SystemTime, WatchHistoryItem,
 };
@@ -389,9 +383,6 @@ pub async fn upload_video_gcs(
     )
     .await?;
 
-    // print out the payload
-    // println!("Payload: {:?}", payload);
-
     let qstash_client = state.qstash_client.clone();
     qstash_client
         .publish_video_frames(&payload.video_id)
@@ -439,28 +430,29 @@ pub async fn upload_gcs_impl(
     Ok(())
 }
 
-pub async fn test_upload_to_qstash(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<UploadVideoInfo>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    let qstash_client = state.qstash_client.clone();
+// test endpoint , to be removed later
+// pub async fn test_upload_to_qstash(
+//     State(state): State<Arc<AppState>>,
+//     Json(payload): Json<UploadVideoInfo>,
+// ) -> Result<Json<serde_json::Value>, AppError> {
+//     let qstash_client = state.qstash_client.clone();
 
-    let res = qstash_client
-        .publish_video(
-            &payload.video_id,
-            &payload.canister_id,
-            payload.post_id,
-            payload.timestamp,
-        )
-        .await;
-    if res.is_err() {
-        error!(
-            "upload_to_gcs: Error sending data to qstash: {:?}",
-            res.err()
-        );
-    }
+//     let res = qstash_client
+//         .publish_video(
+//             &payload.video_id,
+//             &payload.canister_id,
+//             payload.post_id,
+//             payload.timestamp,
+//         )
+//         .await;
+//     if res.is_err() {
+//         error!(
+//             "upload_to_gcs: Error sending data to qstash: {:?}",
+//             res.err()
+//         );
+//     }
 
-    Ok(Json(
-        serde_json::json!({ "message": "Video uploaded to GCS" }),
-    ))
-}
+//     Ok(Json(
+//         serde_json::json!({ "message": "Video uploaded to GCS" }),
+//     ))
+// }

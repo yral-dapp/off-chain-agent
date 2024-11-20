@@ -5,7 +5,6 @@ use http::{
     HeaderMap, HeaderValue,
 };
 use reqwest::{Client, Url};
-use yral_canisters_client::individual_user_template::Ok;
 
 use crate::consts::OFF_CHAIN_AGENT_URL;
 
@@ -53,13 +52,12 @@ impl QStashClient {
             "timestamp": timestamp_str,
         });
 
-        // upstash-delay is 30 secs
         self.client
             .post(url)
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("upstash-delay", format!("20s")) // TODO: change to 10 mins
+            .header("upstash-delay", format!("600s"))
             .send()
             .await?;
 

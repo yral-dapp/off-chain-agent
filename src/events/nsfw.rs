@@ -6,12 +6,8 @@ use std::{
 };
 
 use anyhow::Error;
-use axum::{
-    extract::{Query, State},
-    Json,
-};
+use axum::{extract::State, Json};
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
-use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tonic::{metadata::MetadataValue, transport::Channel, Request};
 
@@ -106,9 +102,6 @@ pub async fn extract_frames_and_upload(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // print payload
-    println!("Payload s2: {:?}", payload.clone());
-
     let video_id = payload.video_id;
     let video_path = format!(
         "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
@@ -173,15 +166,10 @@ pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // print payload
-    println!("Payload s3: {:?}", payload);
     let video_id = payload.video_id;
 
     let nsfw_info =
         get_video_nsfw_info(video_id.clone(), state.nsfw_detect_channel.clone()).await?;
-
-    // print nsfw info
-    println!("NSFW info: {:?}", nsfw_info);
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();

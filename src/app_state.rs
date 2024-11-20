@@ -8,8 +8,6 @@ use firestore::{FirestoreDb, FirestoreDbOptions};
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
-use s3::creds::Credentials;
-use s3::{Bucket, Region};
 use std::env;
 use tonic::transport::{Channel, ClientTlsConfig};
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;

@@ -158,9 +158,7 @@ pub async fn dispatch_notif(
             };
             notify_principal(target_principal, notif, app_state).await?;
         }
-        _ => {
-            log::error!("Event not found");
-        }
+        _ => {}
     }
     Ok(())
 }

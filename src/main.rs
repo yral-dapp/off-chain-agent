@@ -12,7 +12,6 @@ use canister::upgrade_user_token_sns_canister::upgrade_user_token_sns_canister_h
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use env_logger::{Builder, Target};
-use events::event::test_upload_to_qstash;
 use events::nsfw::extract_frames_and_upload;
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
@@ -78,7 +77,6 @@ async fn main() -> Result<()> {
             get(canister::snapshot::get_snapshot_canister),
         )
         .route("/extract-frames", post(extract_frames_and_upload))
-        .route("/test-qstash", post(test_upload_to_qstash))
         .nest("/qstash", qstash_routes)
         .with_state(shared_state.clone());
 
