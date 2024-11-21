@@ -4,6 +4,9 @@ primary_region = 'sin'
 
 [env]
 PORT = '8080'
+NSFW_JWT_PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAoa9RNu5jVwjGT1NKIVfGyQltL0Nf94gLimPaK+jmpRk=
+-----END PUBLIC KEY-----"""
 
 [[services]]
 internal_port = 50051

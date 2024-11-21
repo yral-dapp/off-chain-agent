@@ -1,4 +1,9 @@
-use std::{collections::HashMap, env, sync::Arc, time::UNIX_EPOCH};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    sync::Arc,
+    time::UNIX_EPOCH,
+};
 
 use crate::{
     app_state::AppState,
@@ -11,8 +16,10 @@ use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
 use firestore::errors::FirestoreError;
-use google_cloud_bigquery::http::job::query::QueryRequest;
+use google_cloud_bigquery::{http::job::query::QueryRequest, query::row::Row};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use log::error;
+use once_cell::sync::Lazy;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -456,3 +463,98 @@ pub async fn upload_gcs_impl(
 //         serde_json::json!({ "message": "Video uploaded to GCS" }),
 //     ))
 // }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct Claims {
+    pub sub: String,
+    pub company: String,
+}
+
+pub static CLAIMS: Lazy<Claims> = Lazy::new(|| Claims {
+    sub: "yral-nsfw".to_string(),
+    company: "gobazzinga".to_string(),
+});
+
+#[derive(Clone)]
+pub struct JwtDetails {
+    pub decoding_key: DecodingKey,
+    pub validation: Validation,
+}
+
+pub fn verify_token(token: &str) -> Result<(), anyhow::Error> {
+    let decoding_key =
+        DecodingKey::from_ed_pem(env::var("NSFW_JWT_PUBLIC_KEY").unwrap().as_bytes())
+            .expect("failed to create decoding key");
+
+    let mut validation = Validation::new(Algorithm::EdDSA);
+    validation.required_spec_claims = HashSet::new();
+
+    let token_message =
+        decode::<Claims>(token, &decoding_key, &validation).map_err(|e| anyhow::anyhow!(e))?;
+
+    if token_message.claims != *CLAIMS {
+        return Err(anyhow::anyhow!("Invalid token"));
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NSFWIngestionPipeline {
+    pub offset: u64,
+    pub limit: u64,
+    pub token: String,
+}
+
+pub async fn ingest_video_to_nsfw_pipeline(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<NSFWIngestionPipeline>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let token = payload.token;
+    // verify token
+    verify_token(&token)?;
+
+    // query bigquery to get video ids
+    let bq_client = state.bigquery_client.clone();
+
+    let request = QueryRequest {
+        query: format!("SELECT uri, (SELECT value FROM UNNEST(metadata) WHERE name = 'timestamp') AS timestamp FROM `hot-or-not-feed-intelligence.yral_ds.video_object_table` WHERE uri NOT IN ( SELECT gcs_video_id FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw` ) ORDER BY timestamp DESC LIMIT {}", payload.limit),
+        ..Default::default()
+    };
+    let mut iter = bq_client
+        .query::<Row>("hot-or-not-feed-intelligence", request)
+        .await
+        .unwrap();
+
+    let mut video_ids = vec![];
+
+    while let Some(row) = iter.next().await.unwrap() {
+        let col1 = row.column::<String>(0);
+        let formatted_video_id = col1.unwrap();
+
+        // video id is in the format gs://yral-videos/{video_id}.mp4
+        // remove the gs://yral-videos/ and .mp4
+        let video_id = formatted_video_id
+            .split("gs://yral-videos/")
+            .last()
+            .unwrap()
+            .split(".mp4")
+            .next()
+            .unwrap();
+        video_ids.push(video_id.to_string());
+    }
+
+    // println!("video_ids: {:?}", video_ids);
+
+    // ingest video_id to qstash_client publish_video_frames
+    // create a vec of futures and await concurrently
+    let qstash_client = state.qstash_client.clone();
+    let futures = video_ids
+        .iter()
+        .map(|video_id| qstash_client.publish_video_frames(video_id));
+    let _ = futures::future::join_all(futures).await;
+
+    Ok(Json(
+        serde_json::json!({ "message": "NSFW pipeline ingestion started" }),
+    ))
+}
