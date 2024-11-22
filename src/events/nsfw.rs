@@ -5,11 +5,13 @@ use std::{
     sync::Arc,
 };
 
+use crate::consts::NSFW_SERVER_URL;
 use anyhow::Error;
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use serde::{Deserialize, Serialize};
-use tonic::{metadata::MetadataValue, transport::Channel, Request};
+use tonic::transport::{Channel, ClientTlsConfig};
+use tonic::{metadata::MetadataValue, Request};
 
 use crate::{app_state::AppState, AppError};
 
@@ -135,7 +137,16 @@ pub struct NSFWInfo {
     pub csam_detected: bool,
 }
 
-pub async fn get_video_nsfw_info(video_id: String, channel: Channel) -> Result<NSFWInfo, Error> {
+pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
+    // create a new connection everytime and depend on fly proxy to load balance
+    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+    let channel = Channel::from_static(NSFW_SERVER_URL)
+        .tls_config(tls_config)
+        .expect("Couldn't update TLS config for nsfw agent")
+        .connect()
+        .await
+        .expect("Couldn't connect to nsfw agent");
+
     let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
     let token: MetadataValue<_> = format!("Bearer {}", nsfw_grpc_auth_token).parse()?;
 
@@ -171,8 +182,7 @@ pub async fn nsfw_job(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id;
 
-    let nsfw_info =
-        get_video_nsfw_info(video_id.clone(), state.nsfw_detect_channel.clone()).await?;
+    let nsfw_info = get_video_nsfw_info(video_id.clone()).await?;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
