@@ -504,6 +504,7 @@ pub struct NSFWIngestionPipeline {
     pub offset: u64,
     pub limit: u64,
     pub token: String,
+    pub batch_size: usize,
 }
 
 pub async fn ingest_video_to_nsfw_pipeline(
@@ -548,13 +549,33 @@ pub async fn ingest_video_to_nsfw_pipeline(
 
     // ingest video_id to qstash_client publish_video_frames
     // create a vec of futures and await concurrently
-    let qstash_client = state.qstash_client.clone();
-    let futures = video_ids
-        .iter()
-        .map(|video_id| qstash_client.publish_video_frames(video_id));
-    let _ = futures::future::join_all(futures).await;
+    tokio::spawn(async move {
+        let qstash_client = state.qstash_client.clone();
+        let batch_size = payload.batch_size;
 
-    Ok(Json(
-        serde_json::json!({ "message": "NSFW pipeline ingestion started" }),
-    ))
+        for chunk in video_ids.chunks(batch_size) {
+            let futures = chunk.iter().map(|video_id| {
+                let qstash_client = qstash_client.clone();
+                async move {
+                    let result = qstash_client.publish_video_frames(video_id).await;
+                    (video_id.clone(), result)
+                }
+            });
+
+            let results = futures::future::join_all(futures).await;
+
+            // Collect failures
+            for (video_id, result) in results {
+                if let Err(e) = result {
+                    error!("Failed to process video {}: {:?}", video_id, e);
+                }
+            }
+        }
+
+        println!("NSFW pipeline ingestion completed");
+    });
+
+    Ok(Json(serde_json::json!({
+        "message": "NSFW pipeline ingestion completed"
+    })))
 }
