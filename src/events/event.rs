@@ -518,7 +518,7 @@ pub async fn ingest_video_to_nsfw_pipeline(
     let bq_client = state.bigquery_client.clone();
 
     let request = QueryRequest {
-        query: format!("SELECT uri, (SELECT value FROM UNNEST(metadata) WHERE name = 'timestamp') AS timestamp FROM `hot-or-not-feed-intelligence.yral_ds.video_object_table` WHERE uri NOT IN ( SELECT gcs_video_id FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw` ) ORDER BY timestamp DESC LIMIT {}", payload.limit),
+        query: format!("SELECT uri, (SELECT value FROM UNNEST(metadata) WHERE name = 'timestamp') AS timestamp, size FROM `hot-or-not-feed-intelligence.yral_ds.video_object_table` WHERE uri NOT IN ( SELECT gcs_video_id FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw` ) AND size > 50 ORDER BY timestamp DESC LIMIT {}", payload.limit),
         ..Default::default()
     };
     let mut iter = bq_client
