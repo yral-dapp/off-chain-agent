@@ -64,7 +64,11 @@ pub fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec<Vec<u
     Ok(frames)
 }
 
-pub async fn upload_frames_to_gcs(frames: Vec<Vec<u8>>, video_id: &str) -> Result<(), Error> {
+pub async fn upload_frames_to_gcs(
+    gcs_client: &cloud_storage::Client,
+    frames: Vec<Vec<u8>>,
+    video_id: &str,
+) -> Result<(), Error> {
     let bucket_name = "yral-video-frames";
 
     // Create a vector of futures for concurrent uploads
@@ -73,7 +77,6 @@ pub async fn upload_frames_to_gcs(frames: Vec<Vec<u8>>, video_id: &str) -> Resul
         let bucket_name = bucket_name.to_string();
 
         async move {
-            let gcs_client = cloud_storage::Client::default();
             gcs_client
                 .object()
                 .create(&bucket_name, frame, &frame_path, "image/jpeg")
@@ -109,7 +112,7 @@ pub async fn extract_frames_and_upload(
     );
     let output_dir = create_output_directory(&video_id)?;
     let frames = extract_frames(&video_path, output_dir.clone())?;
-    upload_frames_to_gcs(frames, &video_id).await?;
+    upload_frames_to_gcs(&state.gcs_client, frames, &video_id).await?;
     // delete output directory
     fs::remove_dir_all(output_dir)?;
 

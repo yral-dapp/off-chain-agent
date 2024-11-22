@@ -9,6 +9,7 @@ use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
 use std::env;
+use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
@@ -25,6 +26,7 @@ pub struct AppState {
     pub bigquery_client: Client,
     pub nsfw_detect_channel: Channel,
     pub qstash_client: QStashClient,
+    pub gcs_client: Arc<cloud_storage::Client>,
 }
 
 impl AppState {
@@ -39,6 +41,7 @@ impl AppState {
             bigquery_client: init_bigquery_client().await,
             nsfw_detect_channel: init_nsfw_detect_channel().await,
             qstash_client: init_qstash_client().await,
+            gcs_client: Arc::new(cloud_storage::Client::default()),
         }
     }
 
