@@ -552,6 +552,8 @@ pub async fn ingest_video_to_nsfw_pipeline(
     tokio::spawn(async move {
         let qstash_client = state.qstash_client.clone();
         let batch_size = payload.batch_size;
+        let mut failed = 0;
+        let mut batch_num = 0;
 
         for chunk in video_ids.chunks(batch_size) {
             let futures = chunk.iter().map(|video_id| {
@@ -568,11 +570,16 @@ pub async fn ingest_video_to_nsfw_pipeline(
             for (video_id, result) in results {
                 if let Err(e) = result {
                     error!("Failed to process video {}: {:?}", video_id, e);
+                    failed += 1;
                 }
             }
+
+            batch_num += 1;
+            println!("Batch {} completed", batch_num);
         }
 
         println!("NSFW pipeline ingestion completed");
+        println!("Failed to process {}/{} videos", failed, video_ids.len());
     });
 
     Ok(Json(serde_json::json!({
