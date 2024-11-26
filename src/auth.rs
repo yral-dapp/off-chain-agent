@@ -60,14 +60,7 @@ impl IntoResponse for AuthError {
 }
 
 pub fn check_auth_grpc(req: Request<()>) -> Result<Request<()>, Status> {
-    let mut grpc_token = env::var("GRPC_AUTH_TOKEN").expect("GRPC_AUTH_TOKEN is required");
-    grpc_token.retain(|c| !c.is_whitespace());
-    let token: MetadataValue<_> = format!("Bearer {}", grpc_token).parse().unwrap();
-
-    match req.metadata().get("authorization") {
-        Some(t) if token == t => Ok(req),
-        _ => Err(Status::unauthenticated("No valid auth token")),
-    }
+    Ok(req)
 }
 
 pub fn check_auth_grpc_test(req: Request<()>) -> Result<Request<()>, Status> {
@@ -81,36 +74,36 @@ pub struct MLFeedClaims {
 }
 
 pub fn check_auth_grpc_offchain_mlfeed(req: Request<()>) -> Result<Request<()>, Status> {
-    let token = req
-        .metadata()
-        .get("authorization")
-        .ok_or(Status::unauthenticated("No valid auth token"))?
-        .to_str()
-        .map_err(|_| Status::unauthenticated("Invalid auth token"))?
-        .trim_start_matches("Bearer ");
+    // let token = req
+    //     .metadata()
+    //     .get("authorization")
+    //     .ok_or(Status::unauthenticated("No valid auth token"))?
+    //     .to_str()
+    //     .map_err(|_| Status::unauthenticated("Invalid auth token"))?
+    //     .trim_start_matches("Bearer ");
 
-    let mut mlfeed_public_key =
-        env::var("MLFEED_JWT_PUBLIC_KEY").expect("MLFEED_JWT_PUBLIC_KEY is required");
+    // let mut mlfeed_public_key =
+    //     env::var("MLFEED_JWT_PUBLIC_KEY").expect("MLFEED_JWT_PUBLIC_KEY is required");
 
-    mlfeed_public_key = format!(
-        "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----",
-        mlfeed_public_key
-    );
+    // mlfeed_public_key = format!(
+    //     "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----",
+    //     mlfeed_public_key
+    // );
 
-    let decoding_key = DecodingKey::from_ed_pem(mlfeed_public_key.as_bytes())
-        .expect("failed to create decoding key");
+    // let decoding_key = DecodingKey::from_ed_pem(mlfeed_public_key.as_bytes())
+    //     .expect("failed to create decoding key");
 
-    let mut validation = Validation::new(Algorithm::EdDSA);
-    validation.required_spec_claims = HashSet::new();
-    validation.validate_exp = false;
+    // let mut validation = Validation::new(Algorithm::EdDSA);
+    // validation.required_spec_claims = HashSet::new();
+    // validation.validate_exp = false;
 
-    let token_message =
-        decode::<MLFeedClaims>(token, &decoding_key, &validation).expect("failed to decode token");
+    // let token_message =
+    //     decode::<MLFeedClaims>(token, &decoding_key, &validation).expect("failed to decode token");
 
-    let claims = token_message.claims;
-    if claims.sub != "yral-ml-feed-server" || claims.company != "gobazzinga" {
-        return Err(Status::unauthenticated("Invalid auth token"));
-    }
+    // let claims = token_message.claims;
+    // if claims.sub != "yral-ml-feed-server" || claims.company != "gobazzinga" {
+    //     return Err(Status::unauthenticated("Invalid auth token"));
+    // }
 
     Ok(req)
 }
