@@ -70,6 +70,6 @@ async fn upgrade_user_token_sns_canister_impl(
 
         Ok(ProposalId { id })
     } else {
-        return Err("Wrong Response For Make Proposal".into());
+        Err(format!("{:?}", proposal_id).into())
     }
 }
