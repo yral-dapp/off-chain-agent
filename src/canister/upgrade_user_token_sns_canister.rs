@@ -18,6 +18,16 @@ pub struct ProposalId {
     id: u64,
 }
 
+impl From<Command1> for ApiResponse<ProposalId> {
+    fn from(value: Command1) -> Self {
+        ApiResponse {
+            success: false,
+            error: Some(format!("{:?}", value)),
+            data: None,
+        }
+    }
+}
+
 pub async fn upgrade_user_token_sns_canister_handler(
     Path(governance_canister_id): Path<String>,
     State(state): State<Arc<AppState>>,
@@ -70,6 +80,6 @@ async fn upgrade_user_token_sns_canister_impl(
 
         Ok(ProposalId { id })
     } else {
-        return Err("Wrong Response For Make Proposal".into());
+        ApiResponse::from(proposal_id)
     }
 }
