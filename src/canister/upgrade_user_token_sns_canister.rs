@@ -7,7 +7,8 @@ use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc};
 use yral_canisters_client::sns_governance::{
-    self, Action, Command1, ListNeurons, ManageNeuron, Proposal, SnsGovernance,
+    self, Action, Command1, Configure, IncreaseDissolveDelay, ListNeurons, ManageNeuron, Operation,
+    Proposal, SnsGovernance, StakeMaturity,
 };
 
 use crate::app_state::AppState;
@@ -48,6 +49,19 @@ async fn upgrade_user_token_sns_canister_impl(
         .as_ref()
         .ok_or(String::from("neuron id not found"))?
         .id;
+
+    let _set_dissolve_delay = sns_governance
+        .manage_neuron(ManageNeuron {
+            subaccount: neuron_id.clone(),
+            command: Some(sns_governance::Command::Configure(Configure {
+                operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
+                    additional_dissolve_delay_seconds: 172800,
+                })),
+            })),
+        })
+        .await
+        .map_err(|e| format!("{:?}", e))?;
+
     let proposal_id = sns_governance
         .manage_neuron(ManageNeuron {
             subaccount: neuron_id.clone(),
