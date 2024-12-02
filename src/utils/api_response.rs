@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
-    pub success: bool,
-    pub error: Option<String>,
-    pub data: Option<T>,
+    success: bool,
+    error: Option<String>,
+    data: Option<T>,
 }
 
 impl<T> From<Result<T, Box<dyn Error>>> for ApiResponse<T>
