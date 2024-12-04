@@ -4,6 +4,7 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 
 use axum::{
     extract::State,
+    handler::Handler,
     middleware::{self},
     response::Response,
     routing::post,
@@ -29,6 +30,9 @@ use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 
 use crate::{
     app_state::AppState,
+    canister::upgrade_user_token_sns_canister::{
+        upgrade_user_token_sns_canister_impl, SnsCanisters,
+    },
     consts::ICP_LEDGER_CANISTER_ID,
     events::{
         event::upload_video_gcs,
@@ -301,10 +305,48 @@ async fn claim_tokens_from_first_neuron(
     Ok(res)
 }
 
+async fn upgrade_sns_creator_dao_canister(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SnsCanisters>,
+) -> Result<Response, StatusCode> {
+    let governance_canister_id = req.governance.to_text();
+
+    let result = upgrade_user_token_sns_canister_impl(&state.agent, governance_canister_id).await;
+
+    match result {
+        Ok(proposal_id) => {
+            let qstask_enqueue = state
+                .qstash_client
+                .upgrade_sns_creator_dao_canister(req)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            let response = Response::builder()
+                .status(StatusCode::OK)
+                .body(format!("upgrade proposal id: {} submitted", proposal_id).into())
+                .unwrap();
+
+            Ok(response)
+        }
+        Err(e) => {
+            log::error!(
+                "Error submitting upgrade proposal to governance canister: {:?}. Error: {}",
+                req.governance,
+                e.to_string()
+            );
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
         .route("/participate_in_swap", post(participate_in_swap))
+        .route(
+            "/upgrade_sns_creator_dao_canister",
+            post(upgrade_sns_creator_dao_canister),
+        )
         .route("/upload_video_gcs", post(upload_video_gcs))
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))

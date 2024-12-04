@@ -5,8 +5,9 @@ use http::{
     HeaderMap, HeaderValue,
 };
 use reqwest::{Client, Url};
+use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 
-use crate::consts::OFF_CHAIN_AGENT_URL;
+use crate::{canister::upgrade_user_token_sns_canister::SnsCanisters, consts::OFF_CHAIN_AGENT_URL};
 
 #[derive(Clone, Debug)]
 pub struct QStashClient {
@@ -94,6 +95,28 @@ impl QStashClient {
         let req = serde_json::json!({
             "video_id": video_id,
         });
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn upgrade_sns_creator_dao_canister(
+        &self,
+        sns_canister: SnsCanisters,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/upgrade_sns_creator_dao_canister")
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let req = serde_json::json!(sns_canister);
 
         self.client
             .post(url)

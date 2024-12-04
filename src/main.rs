@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
         .route("/report-approved", post(report_approved_handler))
         .route("/import-video", post(upload_user_video_handler))
         .route(
-            "/upgrade_user_token_sns_canister/:governance_canister_id",
+            "/upgrade_user_token_sns_canister/:individual_user_canister_id",
             post(upgrade_user_token_sns_canister_handler),
         )
         .route(
