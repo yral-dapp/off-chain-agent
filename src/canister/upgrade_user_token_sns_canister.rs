@@ -155,7 +155,7 @@ async fn setup_neurons_for_admin_principal(
         .map_err(|e| e.to_string())?
         .functions
         .iter()
-        .find(|function| function.name.contains("Upgrade SNS controlled canister"))
+        .find(|function| function.name.contains("Upgrade SNS to next version"))
         .map(|function| function.id)
         .ok_or("function id for upgrade sns to next version not found")?;
 
