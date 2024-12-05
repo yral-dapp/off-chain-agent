@@ -6,9 +6,9 @@ use candid::Principal;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
-use std::{error::Error, sync::Arc, time::Duration, vec};
+use std::{error::Error, sync::Arc, vec};
 use yral_canisters_client::{
-    individual_user_template::{DeployedCdaoCanisters, IndividualUserTemplate, Ok},
+    individual_user_template::{DeployedCdaoCanisters, IndividualUserTemplate},
     platform_orchestrator::PlatformOrchestrator,
     sns_governance::{
         self, Action, Command1, Configure, Follow, GetProposal, IncreaseDissolveDelay, ListNeurons,
@@ -20,6 +20,12 @@ use crate::{consts::PLATFORM_ORCHESTRATOR_ID, qstash::client::QStashClient};
 
 use crate::app_state::AppState;
 use crate::utils::api_response::ApiResponse;
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+pub struct VerifyUpgradeProposalRequest {
+    pub sns_canisters: SnsCanisters,
+    pub proposal_id: u64,
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct SnsCanisters {
@@ -191,31 +197,7 @@ async fn recharge_canister_using_platform_orchestrator(
     Ok(())
 }
 
-async fn check_if_the_proposal_executed_successfully_with_retries(
-    sns_governance: &SnsGovernance<'_>,
-    proposal_id: u64,
-    max_retries: u64,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let mut retry_attempt = 0_u64;
-
-    while retry_attempt < max_retries {
-        let res = check_if_the_proposal_executed_successfully(sns_governance, proposal_id).await;
-        if let Err(e) = res {
-            return Err(e);
-        } else if let Ok(executed) = res {
-            if executed {
-                return Ok(());
-            } else {
-                retry_attempt += 1;
-                tokio::time::sleep(Duration::from_secs(5)).await;
-            }
-        }
-    }
-
-    Err(format!("failed after retrying for {} times", max_retries).into())
-}
-
-async fn check_if_the_proposal_executed_successfully(
+pub async fn check_if_the_proposal_executed_successfully(
     sns_governance: &SnsGovernance<'_>,
     proposal_id: u64,
 ) -> Result<bool, Box<dyn Error + Send + Sync>> {
@@ -320,13 +302,6 @@ pub async fn upgrade_user_token_sns_canister_impl(
 
     if let Command1::MakeProposal(proposal_id) = proposal_id {
         let proposal_id_u64 = proposal_id.proposal_id.ok_or("proposal id not found")?.id;
-
-        check_if_the_proposal_executed_successfully_with_retries(
-            &sns_governance,
-            proposal_id_u64,
-            3,
-        )
-        .await?;
 
         Ok(proposal_id_u64)
     } else {
