@@ -63,6 +63,7 @@ google-cloud-bigquery = { version = "0.13.1", default-features = false, features
     "auth",
     "rustls-tls",
 ] }
+hex = "0.4.3"
 
 [build-dependencies]
 tonic-build = "0.12"

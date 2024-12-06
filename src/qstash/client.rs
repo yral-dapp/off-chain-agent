@@ -154,4 +154,28 @@ impl QStashClient {
 
         Ok(())
     }
+
+    pub async fn upgrade_all_sns_canisters_for_a_user_canister(
+        &self,
+        user_canister_id: String,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join(&format!(
+                "qstash/upgrade_all_sns_canisters_for_a_user_canister/{}",
+                user_canister_id
+            ))
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+
+        self.client
+            .post(url)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("upstash-retries", "0")
+            .send()
+            .await?;
+
+        Ok(())
+    }
 }
