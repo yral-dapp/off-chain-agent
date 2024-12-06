@@ -230,6 +230,7 @@ impl Event {
         });
     }
 
+    #[cfg(not(feature = "local-bin"))]
     pub fn stream_to_firestore(&self, app_state: &AppState) {
         if self.event.event == "token_creation_completed" {
             let app_state = app_state.clone();
@@ -305,6 +306,15 @@ fn system_time_to_custom(time: std::time::SystemTime) -> SystemTime {
     }
 }
 
+#[cfg(feature = "local-bin")]
+pub async fn stream_to_bigquery_token_metadata_impl_v2(
+    app_state: &AppState,
+    data: ICPumpTokenMetadata,
+) -> Result<(), anyhow::Error> {
+    Ok(())
+}
+
+#[cfg(not(feature = "local-bin"))]
 pub async fn stream_to_bigquery_token_metadata_impl_v2(
     app_state: &AppState,
     data: ICPumpTokenMetadata,

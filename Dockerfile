@@ -2,14 +2,18 @@ FROM debian:bookworm-20240211
 
 WORKDIR /app
 
-COPY ./target/x86_64-unknown-linux-musl/release/icp-off-chain-agent .
-
 RUN apt-get update \
     && apt-get install -y ca-certificates \
     && apt-get -y install curl \
     && apt-get -y install ffmpeg
 
 EXPOSE 50051
+
+ENV GOOGLE_SA_KEY=test
+ENV YRAL_METADATA_TOKEN="test_token"
+ENV QSTASH_CURRENT_SIGNING_KEY="test_key"
+ENV QSTASH_AUTH_TOKEN="test_token"
+
 
 # Latest releases available at https://github.com/aptible/supercronic/releases
 # ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.29/supercronic-linux-amd64 \
@@ -25,4 +29,5 @@ EXPOSE 50051
 # # You might need to change this depending on where your crontab is located
 # COPY crontab crontab
 
+COPY ./target/x86_64-unknown-linux-musl/release/icp-off-chain-agent .
 CMD ["./icp-off-chain-agent"]

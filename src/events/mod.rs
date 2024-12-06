@@ -39,6 +39,7 @@ impl WarehouseEvents for WarehouseEventsService {
         let params: Value = serde_json::from_str(&event.event.params).expect("Invalid JSON");
         let event_type: &str = &event.event.event;
 
+        #[cfg(not(feature = "local-bin"))]
         event.stream_to_bigquery(&shared_state.clone());
 
         event.upload_to_gcs(&shared_state.clone());
@@ -47,8 +48,10 @@ impl WarehouseEvents for WarehouseEventsService {
 
         event.update_success_history(&shared_state.clone());
 
+        #[cfg(not(feature = "local-bin"))]
         event.stream_to_firestore(&shared_state.clone());
 
+        #[cfg(not(feature = "local-bin"))]
         event.stream_to_bigquery_token_metadata(&shared_state.clone());
 
         let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
