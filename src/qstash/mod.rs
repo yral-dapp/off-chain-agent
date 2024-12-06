@@ -4,7 +4,6 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 
 use axum::{
     extract::State,
-    handler::Handler,
     middleware::{self},
     response::Response,
     routing::post,
@@ -31,7 +30,8 @@ use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 use crate::{
     app_state::AppState,
     canister::upgrade_user_token_sns_canister::{
-        upgrade_user_token_sns_canister_impl, SnsCanisters,
+        check_if_the_proposal_executed_successfully, upgrade_user_token_sns_canister_impl,
+        SnsCanisters, VerifyUpgradeProposalRequest,
     },
     consts::ICP_LEDGER_CANISTER_ID,
     events::{
@@ -311,13 +311,18 @@ async fn upgrade_sns_creator_dao_canister(
 ) -> Result<Response, StatusCode> {
     let governance_canister_id = req.governance.to_text();
 
-    let result = upgrade_user_token_sns_canister_impl(&state.agent, governance_canister_id).await;
+    let result =
+        upgrade_user_token_sns_canister_impl(&state.agent, governance_canister_id.clone()).await;
 
     match result {
         Ok(proposal_id) => {
-            let qstask_enqueue = state
+            let verify_request = VerifyUpgradeProposalRequest {
+                sns_canisters: req,
+                proposal_id,
+            };
+            state
                 .qstash_client
-                .upgrade_sns_creator_dao_canister(req)
+                .verify_sns_canister_upgrade_proposal(verify_request)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -339,6 +344,42 @@ async fn upgrade_sns_creator_dao_canister(
     }
 }
 
+async fn verify_sns_canister_upgrade_proposal(
+    State(state): State<Arc<AppState>>,
+    Json(verify_sns_canister_proposal_request): Json<VerifyUpgradeProposalRequest>,
+) -> Result<Response, StatusCode> {
+    let governance_canister_principal = verify_sns_canister_proposal_request
+        .sns_canisters
+        .governance;
+
+    let sns_governance = SnsGovernance(governance_canister_principal, &state.agent);
+
+    let result = check_if_the_proposal_executed_successfully(
+        &sns_governance,
+        verify_sns_canister_proposal_request.proposal_id,
+    )
+    .await;
+
+    match result {
+        Ok(executed) if executed => {
+            state
+                .qstash_client
+                .upgrade_sns_creator_dao_canister(
+                    verify_sns_canister_proposal_request.sns_canisters,
+                )
+                .await
+                .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .body("Proposal executed successfully".into())
+                .unwrap())
+        }
+
+        _ => Err(StatusCode::BAD_REQUEST),
+    }
+}
+
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
@@ -350,6 +391,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/upload_video_gcs", post(upload_video_gcs))
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
+        .route(
+            "/verify_sns_canister_upgrade_proposal",
+            post(verify_sns_canister_upgrade_proposal),
+        )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
