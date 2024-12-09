@@ -9,6 +9,12 @@ RUN apt-get update \
 
 EXPOSE 50051
 
+ENV GOOGLE_SA_KEY=test
+ENV YRAL_METADATA_TOKEN="test_token"
+ENV QSTASH_CURRENT_SIGNING_KEY="test_key"
+ENV QSTASH_AUTH_TOKEN="test_token"
+
+
 # Latest releases available at https://github.com/aptible/supercronic/releases
 # ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.29/supercronic-linux-amd64 \
 #     SUPERCRONIC=supercronic-linux-amd64 \
