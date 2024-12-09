@@ -31,8 +31,9 @@ use crate::{
     app_state::AppState,
     canister::upgrade_user_token_sns_canister::{
         check_if_the_proposal_executed_successfully, is_upgrade_required,
-        setup_sns_canisters_of_a_user_canister_for_upgrade, upgrade_user_token_sns_canister_impl,
-        SnsCanisters, VerifyUpgradeProposalRequest,
+        setup_sns_canisters_of_a_user_canister_for_upgrade,
+        upgrade_user_token_sns_canister_for_entire_network_impl,
+        upgrade_user_token_sns_canister_impl, SnsCanisters, VerifyUpgradeProposalRequest,
     },
     consts::ICP_LEDGER_CANISTER_ID,
     events::{
@@ -380,8 +381,12 @@ async fn verify_sns_canister_upgrade_proposal(
                 .body("Proposal executed successfully".into())
                 .unwrap())
         }
+        Ok(_) => Err(StatusCode::BAD_REQUEST),
 
-        _ => Err(StatusCode::BAD_REQUEST),
+        Err(e) => Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(e.to_string().into())
+            .unwrap()),
     }
 }
 
@@ -410,6 +415,25 @@ async fn upgrade_all_sns_canisters_for_a_user_canister(
     Ok(res)
 }
 
+async fn upgrade_user_token_sns_canister_for_entire_network(
+    State(state): State<Arc<AppState>>,
+) -> Response {
+    let result =
+        upgrade_user_token_sns_canister_for_entire_network_impl(&state.agent, &state.qstash_client)
+            .await;
+
+    match result {
+        Ok(()) => Response::builder()
+            .status(StatusCode::OK)
+            .body("Upgrade Started ".into())
+            .unwrap(),
+        Err(e) => Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(e.to_string().into())
+            .unwrap(),
+    }
+}
+
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
@@ -428,6 +452,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/upgrade_all_sns_canisters_for_a_user_canister",
             post(upgrade_all_sns_canisters_for_a_user_canister),
+        )
+        .route(
+            "upgrade_user_token_sns_canister_for_entire_network",
+            post(upgrade_user_token_sns_canister_for_entire_network),
         )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),

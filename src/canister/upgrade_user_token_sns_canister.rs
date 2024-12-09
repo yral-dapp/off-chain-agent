@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use candid::Principal;
-use futures::{stream::FuturesUnordered, TryStreamExt};
+use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 use google_cloud_bigquery::storage::array::Array;
 use hex::ToHex;
 use ic_agent::Agent;
@@ -69,13 +69,16 @@ impl From<DeployedCdaoCanisters> for SnsCanisters {
 pub async fn upgrade_user_token_sns_canister_for_entire_network(
     State(state): State<Arc<AppState>>,
 ) -> Json<ApiResponse<()>> {
-    Json(ApiResponse::from(
-        upgrade_user_token_sns_canister_for_entire_network_impl(&state.agent, &state.qstash_client)
-            .await,
-    ))
+    let result = state
+        .qstash_client
+        .upgrade_user_token_sns_canister_for_entire_network()
+        .await
+        .map_err(|e| e.into());
+
+    Json(ApiResponse::from(result))
 }
 
-async fn upgrade_user_token_sns_canister_for_entire_network_impl(
+pub async fn upgrade_user_token_sns_canister_for_entire_network_impl(
     agent: &Agent,
     qstash_client: &QStashClient,
 ) -> Result<(), Box<dyn Error>> {
@@ -91,11 +94,21 @@ async fn upgrade_user_token_sns_canister_for_entire_network_impl(
         individual_canister_ids.extend(subnet_orchestrator.get_user_canister_list().await?);
     }
 
-    for individual_canister in individual_canister_ids {
-        qstash_client
-            .upgrade_all_sns_canisters_for_a_user_canister(individual_canister.to_text())
-            .await?
-    }
+    let upgrade_governance_canister_tasks =
+        individual_canister_ids
+            .into_iter()
+            .map(|individual_canister| async move {
+                qstash_client
+                    .upgrade_all_sns_canisters_for_a_user_canister(individual_canister.to_text())
+                    .await
+            });
+
+    let stream = futures::stream::iter(upgrade_governance_canister_tasks)
+        .boxed()
+        .buffer_unordered(100);
+
+    let _upgrade_creator_dao_governance_canister_tasks =
+        stream.collect::<Vec<Result<(), anyhow::Error>>>().await;
 
     Ok(())
 }
