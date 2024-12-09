@@ -5,8 +5,12 @@ use http::{
     HeaderMap, HeaderValue,
 };
 use reqwest::{Client, Url};
+use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 
-use crate::consts::OFF_CHAIN_AGENT_URL;
+use crate::{
+    canister::upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
+    consts::OFF_CHAIN_AGENT_URL,
+};
 
 #[derive(Clone, Debug)]
 pub struct QStashClient {
@@ -100,6 +104,97 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn upgrade_sns_creator_dao_canister(
+        &self,
+        sns_canister: SnsCanisters,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/upgrade_sns_creator_dao_canister")
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let req = serde_json::json!(sns_canister);
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("upstash-retries", "0")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn verify_sns_canister_upgrade_proposal(
+        &self,
+        verify_request: VerifyUpgradeProposalRequest,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/verify_sns_canister_upgrade_proposal")
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let req = serde_json::json!(verify_request);
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn upgrade_all_sns_canisters_for_a_user_canister(
+        &self,
+        user_canister_id: String,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join(&format!(
+                "qstash/upgrade_all_sns_canisters_for_a_user_canister/{}",
+                user_canister_id
+            ))
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+
+        self.client
+            .post(url)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("upstash-retries", "0")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn upgrade_user_token_sns_canister_for_entire_network(
+        &self,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join(&format!(
+                "qstash/upgrade_user_token_sns_canister_for_entire_network/",
+            ))
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+
+        self.client
+            .post(url)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("upstash-retries", "0")
             .send()
             .await?;
 
