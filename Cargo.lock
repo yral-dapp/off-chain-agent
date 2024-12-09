@@ -2677,6 +2677,7 @@ dependencies = [
  "futures",
  "google-cloud-bigquery",
  "headers",
+ "hex",
  "http 1.1.0",
  "http-body-util",
  "hyper 1.4.1",
