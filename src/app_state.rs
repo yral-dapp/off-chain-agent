@@ -31,6 +31,8 @@ pub struct AppState {
     pub qstash_client: QStashClient,
     #[cfg(not(feature = "local-bin"))]
     pub gcs_client: Arc<cloud_storage::Client>,
+
+    pub storj_client: aws_sdk_s3::Client,
 }
 
 impl AppState {
@@ -50,6 +52,7 @@ impl AppState {
             qstash_client: init_qstash_client().await,
             #[cfg(not(feature = "local-bin"))]
             gcs_client: Arc::new(cloud_storage::Client::default()),
+            storj_client: init_storj_client().await,
         }
     }
 
@@ -92,6 +95,29 @@ impl AppState {
     pub fn individual_user(&self, user_canister: Principal) -> IndividualUserTemplate<'_> {
         IndividualUserTemplate(user_canister, &self.agent)
     }
+}
+
+async fn init_storj_client() -> aws_sdk_s3::Client {
+    use aws_config::{BehaviorVersion, Region};
+    use aws_sdk_s3::config::{Credentials, SharedCredentialsProvider};
+
+    let access_key_id =
+        env::var("STORJ_ACCESS_KEY_ID").expect("$STORJ_ACCESS_KEY_ID is not defined");
+    let secret_key = env::var("STORJ_SECRET_KEY").expect("$STORJ_SECRET_KEY is not defined");
+
+    let creds = Credentials::new(access_key_id, secret_key, None, None, "custom");
+
+    let shared_creds = SharedCredentialsProvider::new(creds);
+
+    let config = aws_config::load_defaults(BehaviorVersion::v2024_03_28())
+        .await
+        .into_builder()
+        .credentials_provider(shared_creds)
+        .endpoint_url("https://gateway.storjshare.io")
+        .region(Region::new("global"))
+        .build();
+
+    aws_sdk_s3::Client::new(&config)
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {

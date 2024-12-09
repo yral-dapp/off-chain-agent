@@ -63,6 +63,8 @@ google-cloud-bigquery = { version = "0.13.1", default-features = false, features
     "auth",
     "rustls-tls",
 ] }
+aws-config = "1.5.10"
+aws-sdk-s3 = "1.65.0"
 
 [build-dependencies]
 tonic-build = "0.12"
