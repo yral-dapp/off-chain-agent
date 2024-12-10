@@ -390,7 +390,7 @@ pub async fn upload_video_gcs(
 ) -> Result<Json<serde_json::Value>, AppError> {
     log::info!("upload_video_gcs is called");
     upload_gcs_impl(
-        state.storj_client.clone(),
+        &state.storj_client,
         &payload.video_id,
         &payload.canister_id,
         payload.post_id,
@@ -410,7 +410,7 @@ pub async fn upload_video_gcs(
 
 // TODO: rename this function as it now uploads to both gcs and storj
 pub async fn upload_gcs_impl(
-    storj_client: aws_sdk_s3::Client,
+    storj_client: &aws_sdk_s3::Client,
     uid: &str,
     canister_id: &str,
     post_id: u64,
@@ -433,7 +433,7 @@ pub async fn upload_gcs_impl(
 
     // TODO: generate key as `format!("{principal_id}/{name}")`
     log::info!("uploading video to storj: {}bytes", file.len());
-    storj_client
+    let storj_res = storj_client
         .put_object()
         .bucket("yral-videos")
         .body(ByteStream::from(file.clone()))
@@ -443,7 +443,20 @@ pub async fn upload_gcs_impl(
         .metadata("timestamp", &timestamp_str)
         .send()
         .await
-        .context("Couldn't send put object request to storj")?;
+        .context("Couldn't send put object request to storj");
+
+    match storj_res {
+        Ok(output) => {
+            log::info!(
+                "Successfully uploaded object ({}bytes) to storj bucket: {:#?}",
+                output.size().unwrap(),
+                output
+            );
+        }
+        Err(err) => {
+            error!("Couldn't upload to storj bucket: {}", err);
+        }
+    }
 
     // write to GCS
     let gcs_client = cloud_storage::Client::default();

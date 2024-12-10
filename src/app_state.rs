@@ -117,7 +117,22 @@ async fn init_storj_client() -> aws_sdk_s3::Client {
         .region(Region::new("global"))
         .build();
 
-    aws_sdk_s3::Client::new(&config)
+    let client = aws_sdk_s3::Client::new(&config);
+
+    // for testing creds
+    // TODO: remove this before merging to main
+    client
+        .list_buckets()
+        .send()
+        .await
+        .expect("buckets should be listed")
+        .buckets()
+        .iter()
+        .for_each(|b| {
+            dbg!(b);
+        });
+
+    client
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
