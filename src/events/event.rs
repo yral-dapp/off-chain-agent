@@ -7,6 +7,8 @@ use crate::{
     utils::cf_images::upload_base64_image,
     AppError,
 };
+use anyhow::Context;
+use aws_sdk_s3::primitives::ByteStream;
 use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
@@ -386,6 +388,7 @@ pub async fn upload_video_gcs(
     Json(payload): Json<UploadVideoInfo>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     upload_gcs_impl(
+        state.storj_client.clone(),
         &payload.video_id,
         &payload.canister_id,
         payload.post_id,
@@ -403,7 +406,9 @@ pub async fn upload_video_gcs(
     ))
 }
 
+// TODO: rename this function as it now uploads to both gcs and storj
 pub async fn upload_gcs_impl(
+    storj_client: aws_sdk_s3::Client,
     uid: &str,
     canister_id: &str,
     post_id: u64,
@@ -418,14 +423,30 @@ pub async fn upload_gcs_impl(
     let file = reqwest::Client::new()
         .get(&url)
         .send()
-        .await?
-        .bytes_stream();
+        .await
+        .context("Couldn't send get request to cf uid")?
+        .bytes()
+        .await
+        .context("Couldn't read all bytes from the get request")?;
+
+    // TODO: generate key as `format!("{principal_id}/{name}")`
+    storj_client
+        .put_object()
+        .bucket("yral-videos")
+        .body(ByteStream::from(file.clone()))
+        .key(&name)
+        .metadata("canister_id", canister_id)
+        .metadata("post_id", post_id.to_string())
+        .metadata("timestamp", &timestamp_str)
+        .send()
+        .await
+        .context("Couldn't send put object request to storj")?;
 
     // write to GCS
     let gcs_client = cloud_storage::Client::default();
     let mut res_obj = gcs_client
         .object()
-        .create_streamed("yral-videos", file, None, &name, "video/mp4")
+        .create("yral-videos", file.into(), &name, "video/mp4")
         .await?;
 
     let mut hashmap = HashMap::new();
