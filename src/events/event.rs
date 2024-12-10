@@ -139,6 +139,7 @@ impl Event {
                 let canister_id = params["canister_id"].as_str().unwrap();
                 let post_id = params["post_id"].as_u64().unwrap();
 
+                log::info!("publishing video to qstash: {timestamp} {uid}");
                 let res = qstash_client
                     .publish_video(uid, canister_id, post_id, timestamp)
                     .await;
@@ -387,6 +388,7 @@ pub async fn upload_video_gcs(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UploadVideoInfo>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    log::info!("upload_video_gcs is called");
     upload_gcs_impl(
         state.storj_client.clone(),
         &payload.video_id,
@@ -430,6 +432,7 @@ pub async fn upload_gcs_impl(
         .context("Couldn't read all bytes from the get request")?;
 
     // TODO: generate key as `format!("{principal_id}/{name}")`
+    log::info!("uploading video to storj: {}bytes", file.len());
     storj_client
         .put_object()
         .bucket("yral-videos")
