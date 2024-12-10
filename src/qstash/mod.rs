@@ -391,13 +391,13 @@ async fn verify_sns_canister_upgrade_proposal(
 }
 
 async fn upgrade_all_sns_canisters_for_a_user_canister(
-    Path(user_canister_id): Path<String>,
+    Path(individual_user_canister_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, StatusCode> {
     let result = setup_sns_canisters_of_a_user_canister_for_upgrade(
         &state.agent,
         &state.qstash_client,
-        user_canister_id,
+        individual_user_canister_id,
     )
     .await;
 
@@ -450,7 +450,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(verify_sns_canister_upgrade_proposal),
         )
         .route(
-            "/upgrade_all_sns_canisters_for_a_user_canister",
+            "/upgrade_all_sns_canisters_for_a_user_canister/:individual_user_canister_id",
             post(upgrade_all_sns_canisters_for_a_user_canister),
         )
         .route(
