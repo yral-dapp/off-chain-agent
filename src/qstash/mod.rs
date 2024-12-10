@@ -454,7 +454,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(upgrade_all_sns_canisters_for_a_user_canister),
         )
         .route(
-            "upgrade_user_token_sns_canister_for_entire_network",
+            "/upgrade_user_token_sns_canister_for_entire_network",
             post(upgrade_user_token_sns_canister_for_entire_network),
         )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
