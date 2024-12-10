@@ -184,7 +184,7 @@ impl QStashClient {
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join(&format!(
-                "qstash/upgrade_user_token_sns_canister_for_entire_network/",
+                "qstash/upgrade_user_token_sns_canister_for_entire_network",
             ))
             .unwrap();
 
