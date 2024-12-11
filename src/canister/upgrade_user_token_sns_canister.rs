@@ -22,7 +22,13 @@ use yral_canisters_client::{
     user_index::UserIndex,
 };
 
-use ic_utils::{interfaces::management_canister::ManagementCanister, Canister};
+use ic_utils::{
+    interfaces::management_canister::{
+        builders::{CanisterUpgradeOptions, InstallMode},
+        ManagementCanister,
+    },
+    Canister,
+};
 
 use crate::{consts::PLATFORM_ORCHESTRATOR_ID, qstash::client::QStashClient};
 
@@ -203,6 +209,7 @@ async fn upgrade_sns_governance_canister_with_custom_wasm(
 
     let upgrade_result = management_canister
         .install_code(&governance_canister_id, custom_governance_wasm)
+        .with_mode(InstallMode::Upgrade(None))
         .with_arg(governance_init_payload)
         .build()?
         .await
