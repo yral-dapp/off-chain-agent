@@ -242,7 +242,7 @@ async fn upgrade_sns_governance_canister_with_custom_wasm(
         .await?;
 
     //wait for the canister to startup
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     upgrade_result
 }
