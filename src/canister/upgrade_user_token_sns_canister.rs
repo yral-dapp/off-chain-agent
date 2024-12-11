@@ -7,6 +7,7 @@ use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 use google_cloud_bigquery::storage::array::Array;
 use hex::ToHex;
 use ic_agent::Agent;
+use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use k256::elliptic_curve::rand_core::le;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc, vec};
@@ -16,10 +17,12 @@ use yral_canisters_client::{
     sns_governance::{
         self, Action, Command1, Configure, Follow, GetProposal, GetRunningSnsVersionArg,
         IncreaseDissolveDelay, ListNeurons, ManageNeuron, NeuronId, Operation, Proposal,
-        ProposalId, SnsGovernance,
+        ProposalId, SnsGovernance, Version,
     },
     user_index::UserIndex,
 };
+
+use ic_utils::{interfaces::management_canister::ManagementCanister, Canister};
 
 use crate::{consts::PLATFORM_ORCHESTRATOR_ID, qstash::client::QStashClient};
 
@@ -98,9 +101,25 @@ pub async fn upgrade_user_token_sns_canister_for_entire_network_impl(
         individual_canister_ids
             .into_iter()
             .map(|individual_canister| async move {
-                qstash_client
-                    .upgrade_all_sns_canisters_for_a_user_canister(individual_canister.to_text())
-                    .await
+                let individual_canister_template =
+                    IndividualUserTemplate(individual_canister, agent);
+
+                let deployed_cdao_canisters_res =
+                    individual_canister_template.deployed_cdao_canisters().await;
+
+                let deployed_cdao_canisters_len = deployed_cdao_canisters_res
+                    .map(|res| res.len())
+                    .unwrap_or(0);
+
+                if deployed_cdao_canisters_len > 0 {
+                    qstash_client
+                        .upgrade_all_sns_canisters_for_a_user_canister(
+                            individual_canister.to_text(),
+                        )
+                        .await
+                } else {
+                    Ok(())
+                }
             });
 
     let stream = futures::stream::iter(upgrade_governance_canister_tasks)
@@ -131,7 +150,7 @@ pub async fn setup_sns_canisters_of_a_user_canister_for_upgrade(
     agent: &Agent,
     qstash_client: &QStashClient,
     individual_canister_id: String,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let individual_canister_principal =
         Principal::from_text(individual_canister_id).map_err(|e| e.to_string())?;
 
@@ -155,9 +174,9 @@ pub async fn setup_sns_canisters_of_a_user_canister_for_upgrade(
             qstash_client
                 .upgrade_sns_creator_dao_canister(sns_canisters)
                 .await
-                .map_err(|e| <anyhow::Error as Into<Box<dyn Error>>>::into(e))?;
+                .map_err(|e| <anyhow::Error as Into<Box<dyn Error + Send + Sync>>>::into(e))?;
 
-            Ok::<(), Box<dyn Error>>(())
+            Ok::<(), Box<dyn Error + Send + Sync>>(())
         })
         .collect::<FuturesUnordered<_>>()
         .try_collect::<()>()
@@ -166,11 +185,49 @@ pub async fn setup_sns_canisters_of_a_user_canister_for_upgrade(
     Ok(())
 }
 
+async fn upgrade_sns_governance_canister_with_custom_wasm(
+    agent: &Agent,
+    governance_canister_id: Principal,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    recharge_for_upgrade_using_platform_orchestrator(agent, governance_canister_id).await?;
+
+    let management_canister = ManagementCanister::create(agent);
+
+    let governance_init_payload = GovernanceCanisterInitPayloadBuilder::new().build();
+
+    management_canister
+        .stop_canister(&governance_canister_id)
+        .await?;
+
+    let custom_governance_wasm = include_bytes!("./wasms/custom-governance-canister.wasm.gz");
+
+    let upgrade_result = management_canister
+        .install_code(&governance_canister_id, custom_governance_wasm)
+        .with_arg(governance_init_payload)
+        .build()?
+        .await
+        .map_err(|e| e.into());
+
+    management_canister
+        .start_canister(&governance_canister_id)
+        .await?;
+
+    upgrade_result
+}
+
 async fn setup_neurons_for_admin_principal(
     agent: &Agent,
     governance_canister_id: Principal,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let sns_governance = SnsGovernance(governance_canister_id, agent);
+
+    let sns_version_res = sns_governance
+        .get_running_sns_version(GetRunningSnsVersionArg {})
+        .await?;
+
+    if sns_version_res.deployed_version.is_none() {
+        upgrade_sns_governance_canister_with_custom_wasm(agent, governance_canister_id).await?;
+    }
 
     let neuron_list = sns_governance
         .list_neurons(ListNeurons {
@@ -249,12 +306,26 @@ async fn setup_neurons_for_admin_principal(
 async fn recharge_canister_using_platform_orchestrator(
     platform_orchestrator: &PlatformOrchestrator<'_>,
     canister_id: Principal,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     const RECHARGE_AMOUNT: u128 = 100_000_000_000; //0.1T cycles
+    platform_orchestrator
+        .deposit_cycles_to_canister(canister_id, candid::Nat::from(RECHARGE_AMOUNT))
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+async fn recharge_for_upgrade_using_platform_orchestrator(
+    agent: &Agent,
+    canister_id: Principal,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let platform_orchestrator_principal = Principal::from_text(PLATFORM_ORCHESTRATOR_ID).unwrap();
+    let platform_orchestrator = PlatformOrchestrator(platform_orchestrator_principal, agent);
     platform_orchestrator
         .deposit_cycles_to_canister(
             canister_id,
-            candid::Nat::from(10_000_000_000_u128), //10B
+            candid::Nat::from(500_000_000_000_u128), // 0.5T
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -262,17 +333,7 @@ async fn recharge_canister_using_platform_orchestrator(
     Ok(())
 }
 
-pub async fn is_upgrade_required(
-    sns_governance: &SnsGovernance<'_>,
-) -> Result<bool, Box<dyn Error + Send + Sync>> {
-    let deployed_version = sns_governance
-        .get_running_sns_version(GetRunningSnsVersionArg {})
-        .await?;
-
-    let deployed_version = deployed_version
-        .deployed_version
-        .ok_or("deployed version not found")?;
-
+fn check_if_version_matches_deployed_canister_version(deployed_version: Version) -> bool {
     let governance_hash = deployed_version
         .governance_wasm_hash
         .to_vec()
@@ -323,6 +384,22 @@ pub async fn is_upgrade_required(
 
     let result = hashes.iter().all(|val| final_hashes.contains(val));
 
+    result
+}
+
+pub async fn is_upgrade_required(
+    sns_governance: &SnsGovernance<'_>,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    let deployed_version = sns_governance
+        .get_running_sns_version(GetRunningSnsVersionArg {})
+        .await?;
+
+    let deployed_version = deployed_version
+        .deployed_version
+        .ok_or("deployed version not found")?;
+
+    let result = check_if_version_matches_deployed_canister_version(deployed_version);
+
     Ok(result)
 }
 
@@ -350,7 +427,7 @@ pub async fn check_if_the_proposal_executed_successfully(
 pub async fn recharge_canisters(
     agent: &Agent,
     deployed_canisters: SnsCanisters,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let platform_orchestrator_canister_principal =
         Principal::from_text(PLATFORM_ORCHESTRATOR_ID).unwrap();
 

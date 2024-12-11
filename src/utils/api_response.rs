@@ -9,11 +9,11 @@ pub struct ApiResponse<T> {
     data: Option<T>,
 }
 
-impl<T> From<Result<T, Box<dyn Error>>> for ApiResponse<T>
+impl<T> From<Result<T, Box<dyn Error + Send + Sync>>> for ApiResponse<T>
 where
     T: Sized,
 {
-    fn from(value: Result<T, Box<dyn Error>>) -> Self {
+    fn from(value: Result<T, Box<dyn Error + Send + Sync>>) -> Self {
         match value {
             Ok(res) => ApiResponse {
                 success: true,

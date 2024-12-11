@@ -149,6 +149,7 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
+            .header("upstash-retries", "3")
             .send()
             .await?;
 
