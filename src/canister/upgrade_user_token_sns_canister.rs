@@ -10,7 +10,7 @@ use ic_agent::Agent;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use k256::elliptic_curve::rand_core::le;
 use serde::{Deserialize, Serialize};
-use std::{error::Error, sync::Arc, vec};
+use std::{error::Error, sync::Arc, time::Duration, vec};
 use yral_canisters_client::{
     individual_user_template::{DeployedCdaoCanisters, IndividualUserTemplate},
     platform_orchestrator::{self, PlatformOrchestrator},
@@ -191,6 +191,28 @@ pub async fn setup_sns_canisters_of_a_user_canister_for_upgrade(
     Ok(())
 }
 
+pub async fn verify_if_proposal_executed_successfully_impl(
+    agent: &Agent,
+    qstash_client: &QStashClient,
+    verify_proposal_request: VerifyUpgradeProposalRequest,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    let sns_governance = SnsGovernance(verify_proposal_request.sns_canisters.governance, agent);
+
+    let proposal_executed_successfully = check_if_the_proposal_executed_successfully(
+        &sns_governance,
+        verify_proposal_request.proposal_id,
+    )
+    .await?;
+
+    if proposal_executed_successfully {
+        qstash_client
+            .upgrade_sns_creator_dao_canister(verify_proposal_request.sns_canisters)
+            .await?;
+    }
+
+    Ok(proposal_executed_successfully)
+}
+
 async fn upgrade_sns_governance_canister_with_custom_wasm(
     agent: &Agent,
     governance_canister_id: Principal,
@@ -218,6 +240,9 @@ async fn upgrade_sns_governance_canister_with_custom_wasm(
     management_canister
         .start_canister(&governance_canister_id)
         .await?;
+
+    //wait for the canister to startup
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     upgrade_result
 }
@@ -405,7 +430,7 @@ pub async fn is_upgrade_required(
         .deployed_version
         .ok_or("deployed version not found")?;
 
-    let result = check_if_version_matches_deployed_canister_version(deployed_version);
+    let result = !check_if_version_matches_deployed_canister_version(deployed_version);
 
     Ok(result)
 }
@@ -476,11 +501,16 @@ pub async fn recharge_canisters(
 
 pub async fn upgrade_user_token_sns_canister_impl(
     agent: &Agent,
-    governance_canister_id: String,
-) -> Result<u64, Box<dyn Error + Send + Sync>> {
-    let governance_canister_id_principal = Principal::from_text(governance_canister_id)?;
+    qstash_client: &QStashClient,
+    sns_canisters: SnsCanisters,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let sns_governance = SnsGovernance(sns_canisters.governance, agent);
 
-    let sns_governance = SnsGovernance(governance_canister_id_principal, agent);
+    let is_upgrade_required = is_upgrade_required(&sns_governance).await?;
+
+    if !is_upgrade_required {
+        return Ok(());
+    }
 
     let neuron_list = sns_governance
         .list_neurons(ListNeurons {
@@ -516,7 +546,15 @@ pub async fn upgrade_user_token_sns_canister_impl(
     if let Command1::MakeProposal(proposal_id) = proposal_id {
         let proposal_id_u64 = proposal_id.proposal_id.ok_or("proposal id not found")?.id;
 
-        Ok(proposal_id_u64)
+        let verify_request = VerifyUpgradeProposalRequest {
+            sns_canisters: sns_canisters,
+            proposal_id: proposal_id_u64,
+        };
+
+        qstash_client
+            .verify_sns_canister_upgrade_proposal(verify_request)
+            .await?;
+        Ok(())
     } else {
         Err(format!("{:?}", proposal_id).into())
     }
