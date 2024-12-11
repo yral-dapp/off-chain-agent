@@ -4,11 +4,9 @@ use axum::{
 };
 use candid::Principal;
 use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
-use google_cloud_bigquery::storage::array::Array;
 use hex::ToHex;
 use ic_agent::Agent;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use k256::elliptic_curve::rand_core::le;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc, time::Duration, vec};
 use yral_canisters_client::{
@@ -19,6 +17,7 @@ use yral_canisters_client::{
         IncreaseDissolveDelay, ListNeurons, ManageNeuron, NeuronId, Operation, Proposal,
         ProposalId, SnsGovernance, Version,
     },
+    sns_root::{GetSnsCanistersSummaryRequest, SnsRoot},
     user_index::UserIndex,
 };
 
@@ -47,6 +46,9 @@ pub const SNS_TOKEN_INDEX_MODULE_HASH: &'static str =
     "67b5f0bf128e801adf4a959ea26c3c9ca0cd399940e169a26a2eb237899a94dd";
 pub const SNS_TOKEN_ARCHIVE_MODULE_HASH: &'static str =
     "317771544f0e828a60ad6efc97694c425c169c4d75d911ba592546912dba3116";
+
+const MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE: u128 = 500_000_000_000; //0.5T
+const INITIAL_RECHARGE_AMOUNT: u128 = 300_000_000_000; //0.3T
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct VerifyUpgradeProposalRequest {
@@ -336,12 +338,14 @@ async fn setup_neurons_for_admin_principal(
 }
 
 async fn recharge_canister_using_platform_orchestrator(
-    platform_orchestrator: &PlatformOrchestrator<'_>,
+    agent: &Agent,
     canister_id: Principal,
+    amount: u128,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    const RECHARGE_AMOUNT: u128 = 100_000_000_000; //0.1T cycles
+    let platform_orchestrator_principal = Principal::from_text(PLATFORM_ORCHESTRATOR_ID).unwrap();
+    let platform_orchestrator = PlatformOrchestrator(platform_orchestrator_principal, agent);
     platform_orchestrator
-        .deposit_cycles_to_canister(canister_id, candid::Nat::from(RECHARGE_AMOUNT))
+        .deposit_cycles_to_canister(canister_id, candid::Nat::from(amount))
         .await
         .map_err(|e| e.to_string())?;
 
@@ -352,15 +356,13 @@ async fn recharge_for_upgrade_using_platform_orchestrator(
     agent: &Agent,
     canister_id: Principal,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let platform_orchestrator_principal = Principal::from_text(PLATFORM_ORCHESTRATOR_ID).unwrap();
-    let platform_orchestrator = PlatformOrchestrator(platform_orchestrator_principal, agent);
-    platform_orchestrator
-        .deposit_cycles_to_canister(
-            canister_id,
-            candid::Nat::from(500_000_000_000_u128), // 0.5T
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+    recharge_canister_using_platform_orchestrator(
+        agent,
+        canister_id,
+        500_000_000_000_u128, // 0.5T
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -460,34 +462,33 @@ pub async fn recharge_canisters(
     agent: &Agent,
     deployed_canisters: SnsCanisters,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let platform_orchestrator_canister_principal =
-        Principal::from_text(PLATFORM_ORCHESTRATOR_ID).unwrap();
-
-    let platform_orchestrator =
-        PlatformOrchestrator(platform_orchestrator_canister_principal, agent);
-
     let mut recharge_canister_tasks = vec![];
 
     recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        &platform_orchestrator,
+        agent,
         deployed_canisters.governance,
+        INITIAL_RECHARGE_AMOUNT,
     ));
 
     recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        &platform_orchestrator,
+        agent,
         deployed_canisters.index,
+        INITIAL_RECHARGE_AMOUNT,
     ));
     recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        &platform_orchestrator,
+        agent,
         deployed_canisters.ledger,
+        INITIAL_RECHARGE_AMOUNT,
     ));
     recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        &platform_orchestrator,
+        agent,
         deployed_canisters.root,
+        INITIAL_RECHARGE_AMOUNT,
     ));
     recharge_canister_tasks.push(recharge_canister_using_platform_orchestrator(
-        &platform_orchestrator,
+        agent,
         deployed_canisters.swap,
+        INITIAL_RECHARGE_AMOUNT,
     ));
 
     recharge_canister_tasks
@@ -495,6 +496,114 @@ pub async fn recharge_canisters(
         .collect::<FuturesUnordered<_>>()
         .try_collect::<()>()
         .await?;
+
+    Ok(())
+}
+
+async fn recharge_if_sns_canister_threshold(
+    agent: &Agent,
+    canister_id: Principal,
+    cycle_balance: u128,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if cycle_balance < MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE {
+        let amount = MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE - cycle_balance;
+        recharge_canister_using_platform_orchestrator(agent, canister_id, amount).await?;
+    }
+
+    Ok(())
+}
+
+async fn check_and_recharge_canisters_for_sns_upgrade(
+    agent: &Agent,
+    sns_canisters: SnsCanisters,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let root_canister = SnsRoot(sns_canisters.root, agent);
+    let sns_canister_summary = root_canister
+        .get_sns_canisters_summary(GetSnsCanistersSummaryRequest {
+            update_canister_list: None,
+        })
+        .await?;
+
+    let root_canister_cycle_balance = sns_canister_summary
+        .root
+        .map(|canister_res| {
+            canister_res
+                .status
+                .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
+        })
+        .flatten();
+
+    if let Some(root_canister_balance) = root_canister_cycle_balance {
+        let _ =
+            recharge_if_sns_canister_threshold(agent, sns_canisters.root, root_canister_balance)
+                .await;
+    }
+
+    let swap_canister_cycle_balance = sns_canister_summary
+        .swap
+        .map(|canister_res| {
+            canister_res
+                .status
+                .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
+        })
+        .flatten();
+
+    if let Some(swap_canister_balance) = swap_canister_cycle_balance {
+        let _ =
+            recharge_if_sns_canister_threshold(agent, sns_canisters.swap, swap_canister_balance)
+                .await;
+    }
+
+    let ledger_canister_cycle_balance = sns_canister_summary
+        .ledger
+        .map(|canister_res| {
+            canister_res
+                .status
+                .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
+        })
+        .flatten();
+
+    if let Some(ledger_canister_balance) = ledger_canister_cycle_balance {
+        let _ = recharge_if_sns_canister_threshold(
+            agent,
+            sns_canisters.ledger,
+            ledger_canister_balance,
+        )
+        .await;
+    }
+
+    let index_cansiter_cycle_balance = sns_canister_summary
+        .index
+        .map(|canister_res| {
+            canister_res
+                .status
+                .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
+        })
+        .flatten();
+
+    if let Some(index_canister_balance) = index_cansiter_cycle_balance {
+        let _ =
+            recharge_if_sns_canister_threshold(agent, sns_canisters.index, index_canister_balance)
+                .await;
+    }
+
+    let governance_canister_cycle_balance = sns_canister_summary
+        .governance
+        .map(|canister_res| {
+            canister_res
+                .status
+                .map(|canister_status| u128::try_from(canister_status.cycles.0).unwrap())
+        })
+        .flatten();
+
+    if let Some(governance_canister_balance) = governance_canister_cycle_balance {
+        let _ = recharge_if_sns_canister_threshold(
+            agent,
+            sns_canisters.governance,
+            governance_canister_balance,
+        )
+        .await;
+    }
 
     Ok(())
 }
@@ -511,6 +620,8 @@ pub async fn upgrade_user_token_sns_canister_impl(
     if !is_upgrade_required {
         return Ok(());
     }
+
+    check_and_recharge_canisters_for_sns_upgrade(agent, sns_canisters).await?;
 
     let neuron_list = sns_governance
         .list_neurons(ListNeurons {
