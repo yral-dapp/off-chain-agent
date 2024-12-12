@@ -100,6 +100,7 @@ pub async fn upload_frames_to_gcs(
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VideoRequest {
     video_id: String,
+    publisher_user_id: String,
 }
 
 // extract_frames_and_upload API handler which takes video_id as queryparam in axum
@@ -122,7 +123,7 @@ pub async fn extract_frames_and_upload(
     // enqueue qstash job to detect nsfw
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_nsfw_detection(&video_id)
+        .publish_video_nsfw_detection(&video_id, &payload.publisher_user_id)
         .await?;
 
     Ok(Json(
@@ -191,11 +192,17 @@ pub async fn nsfw_job(
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id;
+    let publisher_user_id = payload.publisher_user_id;
 
     let nsfw_info = get_video_nsfw_info(video_id.clone()).await?;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
+
+    log::info!(
+        "we have {user_publisher_id}/{video_id}.mpu, which was flagged as {:?}",
+        nsfs_info
+    );
     push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
 
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
