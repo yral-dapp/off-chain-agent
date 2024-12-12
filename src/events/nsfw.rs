@@ -192,8 +192,8 @@ pub async fn nsfw_job(
 
     push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
 
-    // TODO: use nsfw_info.is_nsfw
-    if true {
+    log::info!("nsfw info: {nsfw_info:?}");
+    if nsfw_info.is_nsfw {
         let key = format!("{publisher_user_id}/{video_id}.mp4");
         // move video to nsfw bucket in storj
         // TODO: move this into a function
