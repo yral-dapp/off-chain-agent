@@ -452,8 +452,8 @@ pub async fn upload_gcs_impl(
     match storj_res {
         Ok(output) => {
             log::info!(
-                "Successfully uploaded object ({}bytes) to storj bucket: {:#?}",
-                output.size().unwrap(),
+                "Successfully uploaded object ({:?}bytes) to storj bucket: {:#?}",
+                output.size(),
                 output
             );
         }
