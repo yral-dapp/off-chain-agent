@@ -161,6 +161,8 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
+            .header("upstash-delay", "5s")
+            .header("upstash-retries", "3")
             .send()
             .await?;
 
@@ -196,7 +198,7 @@ impl QStashClient {
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join(&format!(
-                "qstash/upgrade_user_token_sns_canister_for_entire_network/",
+                "qstash/upgrade_user_token_sns_canister_for_entire_network",
             ))
             .unwrap();
 
