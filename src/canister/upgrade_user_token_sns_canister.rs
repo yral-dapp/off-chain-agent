@@ -47,7 +47,7 @@ pub const SNS_TOKEN_INDEX_MODULE_HASH: &'static str =
 pub const SNS_TOKEN_ARCHIVE_MODULE_HASH: &'static str =
     "317771544f0e828a60ad6efc97694c425c169c4d75d911ba592546912dba3116";
 
-const MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE: u128 = 500_000_000_000; //0.5T
+const MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE: u128 = 1_000_000_000_000; //1T
 const INITIAL_RECHARGE_AMOUNT: u128 = 300_000_000_000; //0.3T
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
@@ -506,7 +506,7 @@ async fn recharge_if_sns_canister_threshold(
     cycle_balance: u128,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     if cycle_balance < MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE {
-        let amount = MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE - cycle_balance;
+        let amount = MINIMUM_RECHARGE_AMOUNT_TO_RUN_SNS_UPGRADE.saturating_sub(cycle_balance);
         recharge_canister_using_platform_orchestrator(agent, canister_id, amount).await?;
     }
 
