@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::consts::NSFW_SERVER_URL;
-use anyhow::Error;
+use anyhow::{Context, Error};
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use serde::{Deserialize, Serialize};
@@ -178,15 +178,6 @@ struct VideoNSFWData {
     nsfw_gore: String,
 }
 
-#[cfg(feature = "local-bin")]
-pub async fn nsfw_job(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<VideoRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    Err(anyhow::anyhow!("not implemented for local binary").into())
-}
-
-#[cfg(not(feature = "local-bin"))]
 pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
@@ -199,11 +190,40 @@ pub async fn nsfw_job(
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
 
-    log::info!(
-        "we have {user_publisher_id}/{video_id}.mpu, which was flagged as {:?}",
-        nsfs_info
-    );
     push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
+
+    // TODO: use nsfw_info.is_nsfw
+    if true {
+        let key = format!("{publisher_user_id}/{video_id}.mp4");
+        // move video to nsfw bucket in storj
+        // TODO: move this into a function
+        let res = {
+            state
+                .storj_client
+                .copy_object()
+                .key(&key)
+                .bucket("yral-nsfw-videos")
+                .copy_source(format!("yral-videos/{key}"))
+                .send()
+                .await
+                .context("Couldn't copy video across buckets")?;
+
+            state
+                .storj_client
+                .delete_object()
+                .bucket("yral-videos")
+                .key(key)
+                .send()
+                .await
+                .context("Coulnd't delete video from clean bucket")?;
+
+            Ok(())
+        };
+
+        if let Err(err) = res {
+            log::error!("Couldn't move video across buckets. {err}");
+        }
+    }
 
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
