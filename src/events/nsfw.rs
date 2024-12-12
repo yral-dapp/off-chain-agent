@@ -197,7 +197,7 @@ pub async fn nsfw_job(
         let key = format!("{publisher_user_id}/{video_id}.mp4");
         // move video to nsfw bucket in storj
         // TODO: move this into a function
-        let res = {
+        let res: anyhow::Result<()> = {
             state
                 .storj_client
                 .copy_object()
