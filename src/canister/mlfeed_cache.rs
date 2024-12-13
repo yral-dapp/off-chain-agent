@@ -82,6 +82,7 @@ pub struct CustomMlFeedCacheItem {
     creator_principal_id: String,
 }
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
     let bigquery_client = state.bigquery_client.clone();
     let request = QueryRequest {
@@ -126,5 +127,10 @@ pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<
         Err(e) => println!("Failed to get update_ml_feed_cache response: {}", e),
     }
 
+    Ok(())
+}
+
+#[cfg(feature = "local-bin")]
+pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
     Ok(())
 }
