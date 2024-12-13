@@ -24,4 +24,5 @@ pub static OFF_CHAIN_AGENT_URL: Lazy<Url> =
 
 pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
 
-pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str = "https://sample-worker.komalsai.workers.dev/";
+pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str =
+    "https://yral-ml-feed-cache.go-bazzinga.workers.dev";
