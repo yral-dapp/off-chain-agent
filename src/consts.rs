@@ -23,3 +23,6 @@ pub static OFF_CHAIN_AGENT_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://icp-off-chain-agent.fly.dev/").unwrap());
 
 pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
+
+pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str =
+    "https://yral-ml-feed-cache.go-bazzinga.workers.dev";
