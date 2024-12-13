@@ -77,7 +77,7 @@ pub async fn upload_user_video_handler(
 pub async fn upload_user_video_impl(
     app_state: Arc<AppState>,
     payload: UploadUserVideoRequestBody,
-) -> Result<u64, Box<dyn Error>> {
+) -> Result<u64, Box<dyn Error + Send + Sync>> {
     let yral_metadata_client = &app_state.yral_metadata_client;
     let identity: DelegatedIdentity = DelegatedIdentity::try_from(payload.delegated_identity_wire)?;
     let user_principal = identity.sender()?;

@@ -8,7 +8,9 @@ use axum::routing::post;
 use axum::{routing::get, Router};
 use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
 use canister::mlfeed_cache::{update_ml_feed_cache, OffChainCanisterService};
-use canister::upgrade_user_token_sns_canister::upgrade_user_token_sns_canister_handler;
+use canister::upgrade_user_token_sns_canister::{
+    upgrade_user_token_sns_canister_for_entire_network, upgrade_user_token_sns_canister_handler,
+};
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use env_logger::{Builder, Target};
@@ -71,6 +73,10 @@ async fn main() -> Result<()> {
         .route(
             "/upgrade_user_token_sns_canister/:individual_user_canister_id",
             post(upgrade_user_token_sns_canister_handler),
+        )
+        .route(
+            "/upgrade_user_token_sns_canister_for_entire_network",
+            post(upgrade_user_token_sns_canister_for_entire_network),
         )
         .route(
             "/get-snapshot",

@@ -3,7 +3,7 @@ mod verify;
 use std::{str::FromStr, sync::Arc, time::Duration};
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     middleware::{self},
     response::Response,
     routing::post,
@@ -30,7 +30,10 @@ use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 use crate::{
     app_state::AppState,
     canister::upgrade_user_token_sns_canister::{
-        check_if_the_proposal_executed_successfully, upgrade_user_token_sns_canister_impl,
+        check_if_the_proposal_executed_successfully, is_upgrade_required,
+        setup_sns_canisters_of_a_user_canister_for_upgrade,
+        upgrade_user_token_sns_canister_for_entire_network_impl,
+        upgrade_user_token_sns_canister_impl, verify_if_proposal_executed_successfully_impl,
         SnsCanisters, VerifyUpgradeProposalRequest,
     },
     consts::ICP_LEDGER_CANISTER_ID,
@@ -309,26 +312,14 @@ async fn upgrade_sns_creator_dao_canister(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SnsCanisters>,
 ) -> Result<Response, StatusCode> {
-    let governance_canister_id = req.governance.to_text();
-
     let result =
-        upgrade_user_token_sns_canister_impl(&state.agent, governance_canister_id.clone()).await;
+        upgrade_user_token_sns_canister_impl(&state.agent, &state.qstash_client, req).await;
 
     match result {
-        Ok(proposal_id) => {
-            let verify_request = VerifyUpgradeProposalRequest {
-                sns_canisters: req,
-                proposal_id,
-            };
-            state
-                .qstash_client
-                .verify_sns_canister_upgrade_proposal(verify_request)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
+        Ok(()) => {
             let response = Response::builder()
                 .status(StatusCode::OK)
-                .body(format!("upgrade proposal id: {} submitted", proposal_id).into())
+                .body(format!("upgrade proposal id submitted").into())
                 .unwrap();
 
             Ok(response)
@@ -348,35 +339,68 @@ async fn verify_sns_canister_upgrade_proposal(
     State(state): State<Arc<AppState>>,
     Json(verify_sns_canister_proposal_request): Json<VerifyUpgradeProposalRequest>,
 ) -> Result<Response, StatusCode> {
-    let governance_canister_principal = verify_sns_canister_proposal_request
-        .sns_canisters
-        .governance;
-
-    let sns_governance = SnsGovernance(governance_canister_principal, &state.agent);
-
-    let result = check_if_the_proposal_executed_successfully(
-        &sns_governance,
-        verify_sns_canister_proposal_request.proposal_id,
+    let result = verify_if_proposal_executed_successfully_impl(
+        &state.agent,
+        &state.qstash_client,
+        verify_sns_canister_proposal_request,
     )
     .await;
 
     match result {
-        Ok(executed) if executed => {
-            state
-                .qstash_client
-                .upgrade_sns_creator_dao_canister(
-                    verify_sns_canister_proposal_request.sns_canisters,
-                )
-                .await
-                .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(executed) if executed => Ok(Response::builder()
+            .status(StatusCode::OK)
+            .body("Proposal executed successfully".into())
+            .unwrap()),
+        Ok(_) => Err(StatusCode::BAD_REQUEST),
 
-            Ok(Response::builder()
-                .status(StatusCode::OK)
-                .body("Proposal executed successfully".into())
-                .unwrap())
-        }
+        Err(e) => Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(e.to_string().into())
+            .unwrap()),
+    }
+}
 
-        _ => Err(StatusCode::BAD_REQUEST),
+async fn upgrade_all_sns_canisters_for_a_user_canister(
+    Path(individual_user_canister_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, StatusCode> {
+    let result = setup_sns_canisters_of_a_user_canister_for_upgrade(
+        &state.agent,
+        &state.qstash_client,
+        individual_user_canister_id,
+    )
+    .await;
+
+    let res = match result {
+        Ok(_) => Response::builder()
+            .status(StatusCode::OK)
+            .body("setup for upgrade complete".into())
+            .unwrap(),
+        Err(e) => Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(e.to_string().into())
+            .unwrap(),
+    };
+
+    Ok(res)
+}
+
+async fn upgrade_user_token_sns_canister_for_entire_network(
+    State(state): State<Arc<AppState>>,
+) -> Response {
+    let result =
+        upgrade_user_token_sns_canister_for_entire_network_impl(&state.agent, &state.qstash_client)
+            .await;
+
+    match result {
+        Ok(()) => Response::builder()
+            .status(StatusCode::OK)
+            .body("Upgrade Started ".into())
+            .unwrap(),
+        Err(e) => Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(e.to_string().into())
+            .unwrap(),
     }
 }
 
@@ -394,6 +418,14 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route(
             "/verify_sns_canister_upgrade_proposal",
             post(verify_sns_canister_upgrade_proposal),
+        )
+        .route(
+            "/upgrade_all_sns_canisters_for_a_user_canister/:individual_user_canister_id",
+            post(upgrade_all_sns_canisters_for_a_user_canister),
+        )
+        .route(
+            "/upgrade_user_token_sns_canister_for_entire_network",
+            post(upgrade_user_token_sns_canister_for_entire_network),
         )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),

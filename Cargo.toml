@@ -56,13 +56,18 @@ cloud-storage = { version = "0.11.1", default-features = false, features = [
 k256 = { version = "0.13.3", features = ["jwk"] }
 time = "0.3.36"
 firestore = "0.43.1"
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "0247d886ad95747deee4618c3fd42524ba78d5fe", features = ["full"] }
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "0247d886ad95747deee4618c3fd42524ba78d5fe", features = [
+    "full",
+] }
 yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "0247d886ad95747deee4618c3fd42524ba78d5fe" }
 base64 = "0.22.1"
 google-cloud-bigquery = { version = "0.13.1", default-features = false, features = [
     "auth",
     "rustls-tls",
 ] }
+hex = "0.4.3"
+ic-sns-governance = { git = "https://github.com/dfinity/ic", rev = "tags/release-2024-10-17_03-07-base" }
+ic-utils = "0.38.1"
 
 [build-dependencies]
 tonic-build = "0.12"

@@ -20,12 +20,16 @@ use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
 pub struct AppState {
     pub agent: ic_agent::Agent,
     pub yral_metadata_client: MetadataClient<true>,
+    #[cfg(not(feature = "local-bin"))]
     pub auth: Authenticator<HttpsConnector<HttpConnector>>,
+    #[cfg(not(feature = "local-bin"))]
     pub firestoredb: FirestoreDb,
     pub qstash: QStashState,
+    #[cfg(not(feature = "local-bin"))]
     pub bigquery_client: Client,
     pub nsfw_detect_channel: Channel,
     pub qstash_client: QStashClient,
+    #[cfg(not(feature = "local-bin"))]
     pub gcs_client: Arc<cloud_storage::Client>,
 }
 
@@ -34,24 +38,36 @@ impl AppState {
         AppState {
             yral_metadata_client: init_yral_metadata_client(&app_config),
             agent: init_agent().await,
+            #[cfg(not(feature = "local-bin"))]
             auth: init_auth().await,
             // ml_server_grpc_channel: init_ml_server_grpc_channel().await,
+            #[cfg(not(feature = "local-bin"))]
             firestoredb: init_firestoredb().await,
             qstash: init_qstash(),
+            #[cfg(not(feature = "local-bin"))]
             bigquery_client: init_bigquery_client().await,
             nsfw_detect_channel: init_nsfw_detect_channel().await,
             qstash_client: init_qstash_client().await,
+            #[cfg(not(feature = "local-bin"))]
             gcs_client: Arc::new(cloud_storage::Client::default()),
         }
     }
 
     pub async fn get_access_token(&self, scopes: &[&str]) -> String {
-        let auth = &self.auth;
-        let token = auth.token(scopes).await.unwrap();
+        #[cfg(feature = "local-bin")]
+        {
+            "localtoken".into()
+        }
 
-        match token.token() {
-            Some(t) => t.to_string(),
-            _ => panic!("No access token found"),
+        #[cfg(not(feature = "local-bin"))]
+        {
+            let auth = &self.auth;
+            let token = auth.token(scopes).await.unwrap();
+
+            match token.token() {
+                Some(t) => t.to_string(),
+                _ => panic!("No access token found"),
+            }
         }
     }
 
