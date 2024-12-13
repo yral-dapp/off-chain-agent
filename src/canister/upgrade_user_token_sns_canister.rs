@@ -297,7 +297,7 @@ async fn install_wasm_in_index_canister_if_not_present(
 
     let upgrade_result = management_canister
         .install_code(&sns_canisters.index, index_canister_wasm)
-        .with_mode(InstallMode::Upgrade(None))
+        .with_mode(InstallMode::Install)
         .with_arg(index_ng_init_args)
         .build()?
         .await
