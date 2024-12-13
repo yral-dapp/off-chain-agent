@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use candid::Principal;
+use candid::{CandidType, Principal};
 use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 use hex::ToHex;
 use ic_agent::Agent;
@@ -33,6 +33,24 @@ use crate::{consts::PLATFORM_ORCHESTRATOR_ID, qstash::client::QStashClient};
 
 use crate::app_state::AppState;
 use crate::utils::api_response::ApiResponse;
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum IndexArg {
+    Init(InitArg),
+    Upgrade(UpgradeArg),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct InitArg {
+    pub ledger_id: Principal,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct UpgradeArg {
+    pub ledger_id: Option<Principal>,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+}
 
 pub const SNS_TOKEN_GOVERNANCE_MODULE_HASH: &'static str =
     "bc91fd7bc4d6c01ea814b12510a1ff8f4f74fcac9ab16248ad4af7cb98d9c69d";
@@ -178,7 +196,7 @@ pub async fn setup_sns_canisters_of_a_user_canister_for_upgrade(
         .into_iter()
         .map(|sns_canisters| async move {
             recharge_canisters(agent, sns_canisters).await?;
-            setup_neurons_for_admin_principal(agent, sns_canisters.governance).await?;
+            setup_neurons_for_admin_principal(agent, sns_canisters).await?;
             qstash_client
                 .upgrade_sns_creator_dao_canister(sns_canisters)
                 .await
@@ -249,10 +267,57 @@ async fn upgrade_sns_governance_canister_with_custom_wasm(
     upgrade_result
 }
 
+async fn install_wasm_in_index_canister_if_not_present(
+    agent: &Agent,
+    sns_canisters: SnsCanisters,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let management_canister = ManagementCanister::create(agent);
+
+    let index_cansier_info = management_canister
+        .canister_status(&sns_canisters.index)
+        .await
+        .map(|res| res.0.module_hash)?;
+
+    if index_cansier_info.is_some() {
+        return Ok(());
+    }
+
+    recharge_for_upgrade_using_platform_orchestrator(agent, sns_canisters.index).await?;
+
+    let index_ng_init_args = Some(IndexArg::Init(InitArg {
+        ledger_id: sns_canisters.ledger,
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    }));
+
+    management_canister
+        .stop_canister(&sns_canisters.index)
+        .await?;
+
+    let index_canister_wasm = include_bytes!("./wasms/index.wasm.gz");
+
+    let upgrade_result = management_canister
+        .install_code(&sns_canisters.index, index_canister_wasm)
+        .with_mode(InstallMode::Upgrade(None))
+        .with_arg(index_ng_init_args)
+        .build()?
+        .await
+        .map_err(|e| e.into());
+
+    management_canister
+        .start_canister(&sns_canisters.index)
+        .await?;
+
+    //wait for the canister to startup
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    upgrade_result
+}
+
 async fn setup_neurons_for_admin_principal(
     agent: &Agent,
-    governance_canister_id: Principal,
+    sns_canisters: SnsCanisters,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let governance_canister_id = sns_canisters.governance;
     let sns_governance = SnsGovernance(governance_canister_id, agent);
 
     let sns_version_res = sns_governance
@@ -262,6 +327,8 @@ async fn setup_neurons_for_admin_principal(
     if sns_version_res.deployed_version.is_none() {
         upgrade_sns_governance_canister_with_custom_wasm(agent, governance_canister_id).await?;
     }
+
+    install_wasm_in_index_canister_if_not_present(agent, sns_canisters).await?;
 
     let neuron_list = sns_governance
         .list_neurons(ListNeurons {
