@@ -104,6 +104,7 @@ async fn init_storj_client() -> aws_sdk_s3::Client {
     let access_key_id =
         env::var("STORJ_ACCESS_KEY_ID").expect("$STORJ_ACCESS_KEY_ID is not defined");
     let secret_key = env::var("STORJ_SECRET_KEY").expect("$STORJ_SECRET_KEY is not defined");
+    let gateway = env::var("STORJ_GATEWAY_URL").expect("$STORJ_GATEWAY_URL is not defined");
 
     let creds = Credentials::new(access_key_id, secret_key, None, None, "custom");
 
@@ -113,26 +114,11 @@ async fn init_storj_client() -> aws_sdk_s3::Client {
         .await
         .into_builder()
         .credentials_provider(shared_creds)
-        .endpoint_url("https://gateway.storjshare.io")
+        .endpoint_url(gateway)
         .region(Region::new("global"))
         .build();
 
-    let client = aws_sdk_s3::Client::new(&config);
-
-    // for testing creds
-    // TODO: remove this before merging to main
-    client
-        .list_buckets()
-        .send()
-        .await
-        .expect("buckets should be listed")
-        .buckets()
-        .iter()
-        .for_each(|b| {
-            dbg!(b);
-        });
-
-    client
+    aws_sdk_s3::Client::new(&config)
 }
 
 pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {

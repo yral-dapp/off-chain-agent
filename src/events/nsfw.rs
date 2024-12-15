@@ -192,40 +192,35 @@ pub async fn nsfw_job(
 
     push_nsfw_data_bigquery(bigquery_client, nsfw_info.clone(), video_id.clone()).await?;
 
-    log::info!("nsfw info: {nsfw_info:?}");
     if nsfw_info.is_nsfw {
         let key = format!("{publisher_user_id}/{video_id}.mp4");
+
         // move video to nsfw bucket in storj
-        // TODO: move this into a function
-        let res: anyhow::Result<()> = {
-            state
-                .storj_client
-                .copy_object()
-                .key(&key)
-                .bucket("yral-nsfw-videos")
-                .copy_source(format!("yral-videos/{key}"))
-                .send()
-                .await
-                .context("Couldn't copy video across buckets")?;
-
-            state
-                .storj_client
-                .delete_object()
-                .bucket("yral-videos")
-                .key(key)
-                .send()
-                .await
-                .context("Coulnd't delete video from clean bucket")?;
-
-            Ok(())
-        };
-
-        if let Err(err) = res {
-            log::error!("Couldn't move video across buckets. {err}");
-        }
+        let res = move_to_nsfw_bucket(&state.storj_client, &key).await?;
     }
 
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
+}
+
+async fn move_to_nsfw_bucket(client: &aws_sdk_s3::Client, key: &str) -> Result<(), AppError> {
+    client
+        .copy_object()
+        .key(key)
+        .bucket("yral-nsfw-videos")
+        .copy_source(format!("yral-videos/{key}"))
+        .send()
+        .await
+        .context("Couldn't copy video across buckets")?;
+
+    client
+        .delete_object()
+        .bucket("yral-videos")
+        .key(key)
+        .send()
+        .await
+        .context("Coulnd't delete video from clean bucket")?;
+
+    Ok(())
 }
 
 pub async fn push_nsfw_data_bigquery(
