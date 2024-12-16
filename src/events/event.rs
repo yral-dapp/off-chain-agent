@@ -7,6 +7,8 @@ use crate::{
     utils::cf_images::upload_base64_image,
     AppError,
 };
+use anyhow::Context;
+use aws_sdk_s3::primitives::ByteStream;
 use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
@@ -136,9 +138,10 @@ impl Event {
                 let uid = params["video_id"].as_str().unwrap();
                 let canister_id = params["canister_id"].as_str().unwrap();
                 let post_id = params["post_id"].as_u64().unwrap();
+                let publisher_user_id = params["publisher_user_id"].as_str().unwrap();
 
                 let res = qstash_client
-                    .publish_video(uid, canister_id, post_id, timestamp)
+                    .publish_video(uid, canister_id, post_id, timestamp, publisher_user_id)
                     .await;
                 if res.is_err() {
                     error!(
@@ -379,6 +382,7 @@ pub struct UploadVideoInfo {
     pub canister_id: String,
     pub post_id: u64,
     pub timestamp: String,
+    pub publisher_user_id: String,
 }
 
 pub async fn upload_video_gcs(
@@ -386,16 +390,18 @@ pub async fn upload_video_gcs(
     Json(payload): Json<UploadVideoInfo>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     upload_gcs_impl(
+        &state.storj_client,
         &payload.video_id,
         &payload.canister_id,
         payload.post_id,
         payload.timestamp,
+        &payload.publisher_user_id,
     )
     .await?;
 
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_frames(&payload.video_id)
+        .publish_video_frames(&payload.video_id, &payload.publisher_user_id)
         .await?;
 
     Ok(Json(
@@ -404,10 +410,12 @@ pub async fn upload_video_gcs(
 }
 
 pub async fn upload_gcs_impl(
+    storj_client: &aws_sdk_s3::Client,
     uid: &str,
     canister_id: &str,
     post_id: u64,
     timestamp_str: String,
+    publisher_user_id: &str,
 ) -> Result<(), anyhow::Error> {
     let url = format!(
         "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
@@ -418,14 +426,29 @@ pub async fn upload_gcs_impl(
     let file = reqwest::Client::new()
         .get(&url)
         .send()
-        .await?
-        .bytes_stream();
+        .await
+        .context("Couldn't send get request to cf uid")?
+        .bytes()
+        .await
+        .context("Couldn't read all bytes from the get request")?;
+
+    let storj_res = storj_client
+        .put_object()
+        .bucket("yral-videos")
+        .body(ByteStream::from(file.clone()))
+        .key(format!("{publisher_user_id}/{name}"))
+        .metadata("canister_id", canister_id)
+        .metadata("post_id", post_id.to_string())
+        .metadata("timestamp", &timestamp_str)
+        .send()
+        .await
+        .context("Couldn't send put object request to storj")?;
 
     // write to GCS
     let gcs_client = cloud_storage::Client::default();
     let mut res_obj = gcs_client
         .object()
-        .create_streamed("yral-videos", file, None, &name, "video/mp4")
+        .create("yral-videos", file.into(), &name, "video/mp4")
         .await?;
 
     let mut hashmap = HashMap::new();
