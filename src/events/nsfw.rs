@@ -177,7 +177,15 @@ struct VideoNSFWData {
     nsfw_ec: String,
     nsfw_gore: String,
 }
+#[cfg(feature = "local-bin")]
+pub async fn nsfw_job(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VideoRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Err(anyhow::anyhow!("not implemented for local binary").into())
+}
 
+#[cfg(not(feature = "local-bin"))]
 pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
