@@ -7,7 +7,9 @@ use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
 use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
-use canister::mlfeed_cache::{update_ml_feed_cache, OffChainCanisterService};
+use canister::mlfeed_cache::{
+    update_ml_feed_cache, update_ml_feed_cache_nsfw, OffChainCanisterService,
+};
 use canister::upgrade_user_token_sns_canister::{
     upgrade_user_token_sns_canister_for_entire_network, upgrade_user_token_sns_canister_handler,
 };
@@ -84,6 +86,10 @@ async fn main() -> Result<()> {
         )
         .route("/extract-frames", post(extract_frames_and_upload))
         .route("/update-global-ml-feed-cache", get(update_ml_feed_cache))
+        .route(
+            "/update-global-ml-feed-cache-nsfw",
+            get(update_ml_feed_cache_nsfw),
+        )
         .nest("/qstash", qstash_routes)
         .with_state(shared_state.clone());
 
