@@ -139,7 +139,7 @@ pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<
 pub async fn update_ml_feed_cache_nsfw(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
     let bigquery_client = state.bigquery_client.clone();
     let request = QueryRequest {
-        query: "SELECT uri, (SELECT value FROM UNNEST(metadata) WHERE name = 'timestamp') AS timestamp, (SELECT value FROM UNNEST(metadata) WHERE name = 'canister_id') AS canister_id, (SELECT value FROM UNNEST(metadata) WHERE name = 'post_id') AS post_id, is_nsfw FROM `hot-or-not-feed-intelligence.yral_ds.video_embeddings` WHERE is_nsfw = true GROUP BY 1, 2, 3, 4, 5 ORDER BY timestamp DESC LIMIT 50".to_string(),
+        query: "SELECT uri, (SELECT value FROM UNNEST(metadata) WHERE name = 'timestamp') AS timestamp, (SELECT value FROM UNNEST(metadata) WHERE name = 'canister_id') AS canister_id, (SELECT value FROM UNNEST(metadata) WHERE name = 'post_id') AS post_id, is_nsfw, nsfw_ec, nsfw_gore FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE nsfw_ec IN ('nudity', 'explicit') GROUP BY 1, 2, 3, 4, 5, 6, 7 ORDER BY timestamp DESC LIMIT 50".to_string(),
         ..Default::default()
     };
 
