@@ -134,3 +134,56 @@ pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<
 pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
     Ok(())
 }
+
+#[cfg(not(feature = "local-bin"))]
+pub async fn update_ml_feed_cache_nsfw(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    let bigquery_client = state.bigquery_client.clone();
+    let request = QueryRequest {
+        query: "SELECT uri, (SELECT value FROM UNNEST(metadata) WHERE name = 'timestamp') AS timestamp, (SELECT value FROM UNNEST(metadata) WHERE name = 'canister_id') AS canister_id, (SELECT value FROM UNNEST(metadata) WHERE name = 'post_id') AS post_id, is_nsfw, nsfw_ec, nsfw_gore FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE nsfw_ec IN ('nudity', 'explicit') GROUP BY 1, 2, 3, 4, 5, 6, 7 ORDER BY timestamp DESC LIMIT 50".to_string(),
+        ..Default::default()
+    };
+
+    let rs = bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await?;
+
+    let mut offchain_items = Vec::new();
+    for row in rs.rows.unwrap_or_default() {
+        let mut canister_id_val = "".to_string();
+        if let Value::String(canister_id) = &row.f[2].v {
+            canister_id_val = canister_id.clone();
+        }
+
+        let mut post_id_val = "".to_string();
+        if let Value::String(post_id) = &row.f[3].v {
+            post_id_val = post_id.clone();
+        }
+
+        offchain_items.push(CustomMlFeedCacheItem {
+            post_id: post_id_val.parse().unwrap(),
+            canister_id: canister_id_val,
+            video_id: "".to_string(),
+            creator_principal_id: "".to_string(),
+        });
+    }
+
+    let cf_worker_url = CLOUDFLARE_ML_FEED_CACHE_WORKER_URL;
+
+    // call POST /feed-cache/<CANISTER_ID>
+    let url = format!("{}/feed-cache/{}", cf_worker_url, "global-feed-nsfw");
+    let client = reqwest::Client::new();
+    let response = client.post(url).json(&offchain_items).send().await;
+
+    match response {
+        Ok(_) => (),
+        Err(e) => println!("Failed to get update_ml_feed_cache response: {}", e),
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "local-bin")]
+pub async fn update_ml_feed_cache_nsfw(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    Ok(())
+}
