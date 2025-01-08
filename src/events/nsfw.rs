@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::consts::NSFW_SERVER_URL;
-use anyhow::Error;
+use anyhow::{Context, Error};
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use serde::{Deserialize, Serialize};
@@ -100,6 +100,7 @@ pub async fn upload_frames_to_gcs(
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VideoRequest {
     video_id: String,
+    publisher_user_id: String,
 }
 
 // extract_frames_and_upload API handler which takes video_id as queryparam in axum
@@ -122,7 +123,7 @@ pub async fn extract_frames_and_upload(
     // enqueue qstash job to detect nsfw
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_nsfw_detection(&video_id)
+        .publish_video_nsfw_detection(&video_id, &payload.publisher_user_id)
         .await?;
 
     Ok(Json(
@@ -176,7 +177,6 @@ struct VideoNSFWData {
     nsfw_ec: String,
     nsfw_gore: String,
 }
-
 #[cfg(feature = "local-bin")]
 pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
@@ -191,14 +191,44 @@ pub async fn nsfw_job(
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id;
+    let publisher_user_id = payload.publisher_user_id;
 
     let nsfw_info = get_video_nsfw_info(video_id.clone()).await?;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
-    push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
+
+    push_nsfw_data_bigquery(bigquery_client, nsfw_info.clone(), video_id.clone()).await?;
+
+    if nsfw_info.is_nsfw {
+        let key = format!("{publisher_user_id}/{video_id}.mp4");
+
+        // move video to nsfw bucket in storj
+        let res = move_to_nsfw_bucket(&state.storj_client, &key).await?;
+    }
 
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
+}
+
+async fn move_to_nsfw_bucket(client: &aws_sdk_s3::Client, key: &str) -> Result<(), AppError> {
+    client
+        .copy_object()
+        .key(key)
+        .bucket("yral-nsfw-videos")
+        .copy_source(format!("yral-videos/{key}"))
+        .send()
+        .await
+        .context("Couldn't copy video across buckets")?;
+
+    client
+        .delete_object()
+        .bucket("yral-videos")
+        .key(key)
+        .send()
+        .await
+        .context("Coulnd't delete video from clean bucket")?;
+
+    Ok(())
 }
 
 pub async fn push_nsfw_data_bigquery(

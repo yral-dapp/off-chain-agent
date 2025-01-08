@@ -2,4 +2,5 @@
 /.direnv
 gha-creds-*.json
 .DS_Store
+.env
 google_service_account.json

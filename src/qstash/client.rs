@@ -45,6 +45,7 @@ impl QStashClient {
         canister_id: &str,
         post_id: u64,
         timestamp_str: String,
+        publisher_user_id: &str,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/upload_video_gcs").unwrap();
 
@@ -54,6 +55,7 @@ impl QStashClient {
             "canister_id": canister_id,
             "post_id": post_id,
             "timestamp": timestamp_str,
+            "publisher_user_id": publisher_user_id
         });
 
         self.client
@@ -61,14 +63,18 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("upstash-delay", format!("600s"))
+            .header("upstash-delay", "600s")
             .send()
             .await?;
 
         Ok(())
     }
 
-    pub async fn publish_video_frames(&self, video_id: &str) -> Result<(), anyhow::Error> {
+    pub async fn publish_video_frames(
+        &self,
+        video_id: &str,
+        publisher_user_id: &str,
+    ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_frames")
             .unwrap();
@@ -76,6 +82,7 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
+            "publisher_user_id": publisher_user_id
         });
 
         self.client
@@ -89,7 +96,11 @@ impl QStashClient {
         Ok(())
     }
 
-    pub async fn publish_video_nsfw_detection(&self, video_id: &str) -> Result<(), anyhow::Error> {
+    pub async fn publish_video_nsfw_detection(
+        &self,
+        video_id: &str,
+        publisher_user_id: &str,
+    ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection")
             .unwrap();
@@ -97,6 +108,7 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
+            "publisher_user_id": publisher_user_id,
         });
 
         self.client
