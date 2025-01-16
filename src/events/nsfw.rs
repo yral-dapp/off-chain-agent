@@ -168,7 +168,7 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     let nsfw_info = NSFWInfo::from(res.into_inner());
 
     // get embedding nsfw
-    let embedding_req = tonic::Request::new(nsfw_detector::EmbeddingNSFWDetectorRequest {
+    let embedding_req = tonic::Request::new(nsfw_detector::EmbeddingNsfwDetectorRequest {
         video_id: video_id.clone(),
     });
     let embedding_res = client.detect_nsfw_embedding(embedding_req).await?;
