@@ -4118,7 +4118,6 @@ dependencies = [
  "log",
  "once_cell",
  "prost",
- "rand",
  "reqwest 0.12.7",
  "rust-s3",
  "serde",

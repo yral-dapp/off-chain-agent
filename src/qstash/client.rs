@@ -5,7 +5,6 @@ use http::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     HeaderMap, HeaderValue,
 };
-use rand::Rng;
 use reqwest::{Client, Url};
 use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 
@@ -111,8 +110,7 @@ impl QStashClient {
         };
 
         // Convert to seconds and add random jitter between 0-60 seconds
-        let mut rng = rand::thread_rng();
-        let jitter = rng.gen_range(0..61);
+        let jitter = (now.nanosecond() % 61) as u32;
         let delay_seconds = minutes_until_20 * 60 + jitter;
 
         self.client
