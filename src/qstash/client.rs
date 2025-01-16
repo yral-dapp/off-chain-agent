@@ -99,11 +99,26 @@ impl QStashClient {
             "video_id": video_id,
         });
 
+        // Calculate delay until next :20 minute of any hour
+        let now = chrono::Utc::now();
+        let current_minute = now.minute();
+        let minutes_until_20 = if current_minute >= 20 {
+            60 - current_minute + 20 // Wait for next hour's :20
+        } else {
+            20 - current_minute // Wait for this hour's :20
+        };
+
+        // Convert to seconds and add random jitter between 0-60 seconds
+        let mut rng = rand::thread_rng();
+        let jitter = rng.gen_range(0..61);
+        let delay_seconds = minutes_until_20 * 60 + jitter;
+
         self.client
             .post(url)
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
+            .header("upstash-delay", format!("{}s", delay_seconds))
             .send()
             .await?;
 

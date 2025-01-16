@@ -20,9 +20,9 @@ pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
 pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
 pub static OFF_CHAIN_AGENT_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://icp-off-chain-agent.fly.dev/").unwrap());
+    Lazy::new(|| Url::parse("https://pr-117-yral-dapp-off-chain-agent.fly.dev/").unwrap()); //   icp-off-chain-agent
 
-pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
+pub const NSFW_SERVER_URL: &str = "https://stage-yral-nsfw-classification-komal.fly.dev:443";
 
 pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str =
     "https://yral-ml-feed-cache.go-bazzinga.workers.dev";

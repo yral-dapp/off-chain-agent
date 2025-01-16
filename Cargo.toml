@@ -68,6 +68,7 @@ google-cloud-bigquery = { version = "0.13.1", default-features = false, features
 hex = "0.4.3"
 ic-sns-governance = { git = "https://github.com/dfinity/ic", rev = "tags/release-2024-10-17_03-07-base" }
 ic-utils = "0.38.1"
+rand = "0.8.5"
 
 [build-dependencies]
 tonic-build = "0.12"

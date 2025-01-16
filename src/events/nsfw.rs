@@ -136,6 +136,7 @@ pub struct NSFWInfo {
     pub nsfw_ec: String,
     pub nsfw_gore: String,
     pub csam_detected: bool,
+    pub probability: f32,
 }
 
 pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
@@ -165,6 +166,14 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     let res = client.detect_nsfw_video_id(req).await?;
 
     let nsfw_info = NSFWInfo::from(res.into_inner());
+
+    // get embedding nsfw
+    let embedding_req = tonic::Request::new(nsfw_detector::EmbeddingNSFWDetectorRequest {
+        video_id: video_id.clone(),
+    });
+    let embedding_res = client.detect_nsfw_embedding(embedding_req).await?;
+    nsfw_info.probability = embedding_res.into_inner().probability;
+
     Ok(nsfw_info)
 }
 
@@ -175,6 +184,7 @@ struct VideoNSFWData {
     is_nsfw: bool,
     nsfw_ec: String,
     nsfw_gore: String,
+    probability: f32,
 }
 
 #[cfg(feature = "local-bin")]
@@ -212,6 +222,7 @@ pub async fn push_nsfw_data_bigquery(
         is_nsfw: nsfw_info.is_nsfw,
         nsfw_ec: nsfw_info.nsfw_ec,
         nsfw_gore: nsfw_info.nsfw_gore,
+        probability: nsfw_info.probability,
     };
 
     let row = Row {
@@ -251,6 +262,7 @@ impl From<nsfw_detector::NsfwDetectorResponse> for NSFWInfo {
             nsfw_ec: item.nsfw_ec,
             nsfw_gore: item.nsfw_gore,
             csam_detected: item.csam_detected,
+            probability: 0.0,
         }
     }
 }
