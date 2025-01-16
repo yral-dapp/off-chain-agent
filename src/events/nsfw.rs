@@ -321,11 +321,44 @@ pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
     Ok(embedding_res.into_inner().probability)
 }
 
+#[derive(Serialize)]
+struct VideoNSFWDataV2 {
+    video_id: String,
+    gcs_video_id: String,
+    probability: f32,
+}
+
 pub async fn push_nsfw_data_bigquery_v2(
     bigquery_client: google_cloud_bigquery::client::Client,
     nsfw_prob: f32,
     video_id: String,
 ) -> Result<(), Error> {
+    let row_data = VideoNSFWDataV2 {
+        video_id: video_id.clone(),
+        gcs_video_id: format!("gs://yral-videos/{}.mp4", video_id),
+        probability: nsfw_prob,
+    };
+
+    let row = Row {
+        insert_id: None,
+        json: row_data,
+    };
+
+    let request = InsertAllRequest {
+        rows: vec![row],
+        ..Default::default()
+    };
+
+    bigquery_client
+        .tabledata()
+        .insert(
+            "hot-or-not-feed-intelligence",
+            "yral_ds",
+            "video_nsfw_v2",
+            &request,
+        )
+        .await?;
+
     // Create update query to add probability field to existing row
     let query = format!(
         "UPDATE `hot-or-not-feed-intelligence.yral_ds.video_nsfw` 
