@@ -100,6 +100,30 @@ impl QStashClient {
             "video_id": video_id,
         });
 
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn publish_video_nsfw_detection_v2(
+        &self,
+        video_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL
+            .join("qstash/enqueue_video_nsfw_detection_v2")
+            .unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let req = serde_json::json!({
+            "video_id": video_id,
+        });
+
         // Calculate delay until next :20 minute of any hour
         let now = chrono::Utc::now();
         let current_minute = now.minute();
@@ -109,8 +133,8 @@ impl QStashClient {
             20 - current_minute // Wait for this hour's :20
         };
 
-        // Convert to seconds and add random jitter between 0-60 seconds
-        let jitter = (now.nanosecond() % 61) as u32;
+        // Convert to seconds and add random jitter between 0-600 seconds
+        let jitter = (now.nanosecond() % 601) as u32;
         let delay_seconds = minutes_until_20 * 60 + jitter;
 
         self.client
