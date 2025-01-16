@@ -102,10 +102,26 @@ pub struct VideoRequest {
     video_id: String,
 }
 
-// extract_frames_and_upload API handler which takes video_id as queryparam in axum
-pub async fn extract_frames_and_upload(
+// Add this new wrapper function for the main router
+pub async fn extract_frames_and_upload_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    extract_frames_and_upload_impl(state, payload).await
+}
+
+// Add this new wrapper function for the QStash router
+pub async fn extract_frames_and_upload_qstash(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VideoRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    extract_frames_and_upload_impl(state, payload).await
+}
+
+// Rename the original function to _impl and keep its implementation
+async fn extract_frames_and_upload_impl(
+    state: Arc<AppState>,
+    payload: VideoRequest,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id;
     let video_path = format!(
@@ -116,10 +132,8 @@ pub async fn extract_frames_and_upload(
     let frames = extract_frames(&video_path, output_dir.clone())?;
     #[cfg(not(feature = "local-bin"))]
     upload_frames_to_gcs(&state.gcs_client, frames, &video_id).await?;
-    // delete output directory
     fs::remove_dir_all(output_dir)?;
 
-    // enqueue qstash job to detect nsfw
     let qstash_client = state.qstash_client.clone();
     qstash_client
         .publish_video_nsfw_detection(&video_id)

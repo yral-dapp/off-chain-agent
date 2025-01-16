@@ -39,7 +39,7 @@ use crate::{
     consts::ICP_LEDGER_CANISTER_ID,
     events::{
         event::upload_video_gcs,
-        nsfw::{extract_frames_and_upload, nsfw_job},
+        nsfw::{extract_frames_and_upload_qstash, nsfw_job},
     },
 };
 
@@ -413,7 +413,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(upgrade_sns_creator_dao_canister),
         )
         .route("/upload_video_gcs", post(upload_video_gcs))
-        .route("/enqueue_video_frames", post(extract_frames_and_upload))
+        .route(
+            "/enqueue_video_frames",
+            post(extract_frames_and_upload_qstash),
+        )
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
         .route(
             "/verify_sns_canister_upgrade_proposal",
