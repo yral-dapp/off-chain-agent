@@ -325,6 +325,9 @@ pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
 struct VideoNSFWDataV2 {
     video_id: String,
     gcs_video_id: String,
+    is_nsfw: bool,
+    nsfw_ec: String,
+    nsfw_gore: String,
     probability: f32,
 }
 
@@ -333,9 +336,58 @@ pub async fn push_nsfw_data_bigquery_v2(
     nsfw_prob: f32,
     video_id: String,
 ) -> Result<(), Error> {
+    // First query to get existing NSFW data
+    let query = format!(
+        "SELECT video_id, gcs_video_id, is_nsfw, nsfw_ec, nsfw_gore 
+         FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw`
+         WHERE video_id = '{}'",
+        video_id
+    );
+
+    let request = QueryRequest {
+        query,
+        ..Default::default()
+    };
+
+    let result = bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await?;
+
+    // Get the first row
+    let row = result
+        .rows
+        .and_then(|mut rows| rows.pop())
+        .ok_or(anyhow::anyhow!("No data found for video_id"))?;
+
+    // Extract values from row
+    let gcs_video_id = match &row.f[1].v {
+        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        _ => return Err(anyhow::anyhow!("Invalid gcs_video_id")),
+    };
+
+    let is_nsfw = match &row.f[2].v {
+        google_cloud_bigquery::http::tabledata::list::Value::String(b) => b == "true",
+        _ => return Err(anyhow::anyhow!("Invalid is_nsfw")),
+    };
+
+    let nsfw_ec = match &row.f[3].v {
+        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        _ => return Err(anyhow::anyhow!("Invalid nsfw_ec")),
+    };
+
+    let nsfw_gore = match &row.f[4].v {
+        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        _ => return Err(anyhow::anyhow!("Invalid nsfw_gore")),
+    };
+
+    // Create row data for aggregated table
     let row_data = VideoNSFWDataV2 {
         video_id: video_id.clone(),
-        gcs_video_id: format!("gs://yral-videos/{}.mp4", video_id),
+        gcs_video_id,
+        is_nsfw,
+        nsfw_ec,
+        nsfw_gore,
         probability: nsfw_prob,
     };
 
@@ -349,33 +401,15 @@ pub async fn push_nsfw_data_bigquery_v2(
         ..Default::default()
     };
 
+    // Insert into aggregated table
     bigquery_client
         .tabledata()
         .insert(
             "hot-or-not-feed-intelligence",
             "yral_ds",
-            "video_nsfw_v2",
+            "video_nsfw_agg",
             &request,
         )
-        .await?;
-
-    // Create update query to add probability field to existing row
-    let query = format!(
-        "UPDATE `hot-or-not-feed-intelligence.yral_ds.video_nsfw` 
-         SET probability = {}
-         WHERE video_id = '{}'",
-        nsfw_prob, video_id
-    );
-
-    let request = QueryRequest {
-        query: query,
-        ..Default::default()
-    };
-
-    // Execute the update query
-    bigquery_client
-        .job()
-        .query("hot-or-not-feed-intelligence", &request)
         .await?;
 
     Ok(())
