@@ -4,8 +4,8 @@
 
 Off-chain agent is a service that runs on Fly.io and is responsible for orchestrating the off-chain operations of the platform. It is responsible for the following:
 
-- Daily backups for disaster recovery
-- Monitoring
+-   Daily backups for disaster recovery
+-   Monitoring
 
 ## Architecture
 
@@ -75,3 +75,6 @@ flowchart TD
     end
 
 ```
+
+
+
