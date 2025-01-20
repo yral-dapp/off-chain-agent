@@ -135,7 +135,7 @@ impl QStashClient {
 
         // Convert to seconds and add random jitter between 0-600 seconds
         let jitter = (now.nanosecond() % 601) as u32;
-        let delay_seconds = minutes_until_20 * 60 + jitter;
+        let delay_seconds = minutes_until_20 * 60 + jitter + 3600; // add 1 hour to the delay to compensate for bigquery buffer time
 
         self.client
             .post(url)
