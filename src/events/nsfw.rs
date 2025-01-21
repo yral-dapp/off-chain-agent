@@ -8,7 +8,10 @@ use std::{
 use crate::consts::NSFW_SERVER_URL;
 use anyhow::Error;
 use axum::{extract::State, Json};
-use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
+use google_cloud_bigquery::http::{
+    job::query::QueryRequest,
+    tabledata::insert_all::{InsertAllRequest, Row},
+};
 use serde::{Deserialize, Serialize};
 use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::{metadata::MetadataValue, Request};
@@ -164,7 +167,8 @@ pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     });
     let res = client.detect_nsfw_video_id(req).await?;
 
-    let nsfw_info = NSFWInfo::from(res.into_inner());
+    let mut nsfw_info = NSFWInfo::from(res.into_inner());
+
     Ok(nsfw_info)
 }
 
@@ -197,6 +201,12 @@ pub async fn nsfw_job(
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
     push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
+
+    // enqueue qstash job to detect nsfw v2
+    let qstash_client = state.qstash_client.clone();
+    qstash_client
+        .publish_video_nsfw_detection_v2(&video_id)
+        .await?;
 
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
@@ -253,4 +263,154 @@ impl From<nsfw_detector::NsfwDetectorResponse> for NSFWInfo {
             csam_detected: item.csam_detected,
         }
     }
+}
+
+#[cfg(feature = "local-bin")]
+pub async fn nsfw_job_v2(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VideoRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Err(anyhow::anyhow!("not implemented for local binary").into())
+}
+
+#[cfg(not(feature = "local-bin"))]
+pub async fn nsfw_job_v2(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VideoRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let video_id = payload.video_id;
+
+    let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;
+
+    // push nsfw info to bigquery table using google-cloud-bigquery
+    let bigquery_client = state.bigquery_client.clone();
+    push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
+
+    Ok(Json(
+        serde_json::json!({ "message": "NSFW v2 job completed" }),
+    ))
+}
+
+pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
+    // create a new connection everytime and depend on fly proxy to load balance
+    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+    let channel = Channel::from_static(NSFW_SERVER_URL)
+        .tls_config(tls_config)
+        .expect("Couldn't update TLS config for nsfw agent")
+        .connect()
+        .await
+        .expect("Couldn't connect to nsfw agent");
+
+    let nsfw_grpc_auth_token = env::var("NSFW_GRPC_TOKEN").expect("NSFW_GRPC_TOKEN");
+    let token: MetadataValue<_> = format!("Bearer {}", nsfw_grpc_auth_token).parse()?;
+
+    let mut client = nsfw_detector::nsfw_detector_client::NsfwDetectorClient::with_interceptor(
+        channel,
+        move |mut req: Request<()>| {
+            req.metadata_mut().insert("authorization", token.clone());
+            Ok(req)
+        },
+    );
+
+    // get embedding nsfw
+    let embedding_req = tonic::Request::new(nsfw_detector::EmbeddingNsfwDetectorRequest {
+        video_id: video_id.clone(),
+    });
+    let embedding_res = client.detect_nsfw_embedding(embedding_req).await?;
+
+    Ok(embedding_res.into_inner().probability)
+}
+
+#[derive(Serialize)]
+struct VideoNSFWDataV2 {
+    video_id: String,
+    gcs_video_id: String,
+    is_nsfw: bool,
+    nsfw_ec: String,
+    nsfw_gore: String,
+    probability: f32,
+}
+
+pub async fn push_nsfw_data_bigquery_v2(
+    bigquery_client: google_cloud_bigquery::client::Client,
+    nsfw_prob: f32,
+    video_id: String,
+) -> Result<(), Error> {
+    // First query to get existing NSFW data
+    let query = format!(
+        "SELECT video_id, gcs_video_id, is_nsfw, nsfw_ec, nsfw_gore 
+         FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw`
+         WHERE video_id = '{}'",
+        video_id
+    );
+
+    let request = QueryRequest {
+        query,
+        ..Default::default()
+    };
+
+    let result = bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await?;
+
+    // Get the first row
+    let row = result
+        .rows
+        .and_then(|mut rows| rows.pop())
+        .ok_or(anyhow::anyhow!("No data found for video_id"))?;
+
+    // Extract values from row
+    let gcs_video_id = match &row.f[1].v {
+        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        _ => return Err(anyhow::anyhow!("Invalid gcs_video_id")),
+    };
+
+    let is_nsfw = match &row.f[2].v {
+        google_cloud_bigquery::http::tabledata::list::Value::String(b) => b == "true",
+        _ => return Err(anyhow::anyhow!("Invalid is_nsfw")),
+    };
+
+    let nsfw_ec = match &row.f[3].v {
+        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        _ => return Err(anyhow::anyhow!("Invalid nsfw_ec")),
+    };
+
+    let nsfw_gore = match &row.f[4].v {
+        google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+        _ => return Err(anyhow::anyhow!("Invalid nsfw_gore")),
+    };
+
+    // Create row data for aggregated table
+    let row_data = VideoNSFWDataV2 {
+        video_id: video_id.clone(),
+        gcs_video_id,
+        is_nsfw,
+        nsfw_ec,
+        nsfw_gore,
+        probability: nsfw_prob,
+    };
+
+    let row = Row {
+        insert_id: None,
+        json: row_data,
+    };
+
+    let request = InsertAllRequest {
+        rows: vec![row],
+        ..Default::default()
+    };
+
+    // Insert into aggregated table
+    bigquery_client
+        .tabledata()
+        .insert(
+            "hot-or-not-feed-intelligence",
+            "yral_ds",
+            "video_nsfw_agg",
+            &request,
+        )
+        .await?;
+
+    Ok(())
 }
