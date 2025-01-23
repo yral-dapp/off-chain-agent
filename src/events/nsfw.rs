@@ -419,6 +419,7 @@ pub async fn push_nsfw_data_bigquery_v2(
 pub struct BackfillRequest {
     num_videos: u64,
     max_jitter: u32,
+    batch_size: usize,
 }
 
 pub async fn backfill_nsfw_job(
@@ -445,26 +446,53 @@ pub async fn backfill_nsfw_job(
 
     let mut cnt = 0;
     let mut total = 0;
+    let mut video_ids = Vec::new();
     for urow in result.rows {
         for row in urow {
             let video_id = match &row.f[0].v {
                 google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
                 _ => continue,
             };
-            let res = qstash_client
-                .publish_video_nsfw_detection_v2_backfill(&video_id, payload.max_jitter)
-                .await;
-            if res.is_ok() {
-                cnt += 1;
-            }
-            total += 1;
+            video_ids.push(video_id);
         }
     }
 
-    Ok(Json(format!(
-        "NSFW backfill job completed for {}/{} videos",
-        cnt, total
-    )))
+    tokio::spawn(async move {
+        let qstash_client = state.qstash_client.clone();
+        let batch_size = payload.batch_size;
+        let mut failed = 0;
+        let mut batch_num = 0;
+
+        for chunk in video_ids.chunks(batch_size) {
+            let futures = chunk.iter().map(|video_id| {
+                let qstash_client = qstash_client.clone();
+                async move {
+                    let result = qstash_client
+                        .publish_video_nsfw_detection_v2_backfill(video_id, payload.max_jitter)
+                        .await;
+                    (video_id.clone(), result)
+                }
+            });
+
+            let results = futures::future::join_all(futures).await;
+
+            // Collect failures
+            for (video_id, result) in results {
+                if let Err(e) = result {
+                    println!("Failed to process video {}: {:?}", video_id, e);
+                    failed += 1;
+                }
+            }
+
+            batch_num += 1;
+            println!("Batch {} completed", batch_num);
+        }
+
+        println!("NSFW pipeline ingestion completed");
+        println!("Failed to process {}/{} videos", failed, video_ids.len());
+    });
+
+    Ok(Json("NSFW backfill job completed for videos".to_string()))
 }
 
 #[cfg(feature = "local-bin")]
