@@ -418,6 +418,7 @@ pub async fn push_nsfw_data_bigquery_v2(
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BackfillRequest {
     num_videos: u64,
+    max_jitter: u32,
 }
 
 pub async fn backfill_nsfw_job(
@@ -451,7 +452,7 @@ pub async fn backfill_nsfw_job(
                 _ => continue,
             };
             let res = qstash_client
-                .publish_video_nsfw_detection_v2_backfill(&video_id)
+                .publish_video_nsfw_detection_v2_backfill(&video_id, payload.max_jitter)
                 .await;
             if res.is_ok() {
                 cnt += 1;

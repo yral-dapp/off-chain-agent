@@ -152,6 +152,7 @@ impl QStashClient {
     pub async fn publish_video_nsfw_detection_v2_backfill(
         &self,
         video_id: &str,
+        max_jitter: u32,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection_v3")
@@ -162,9 +163,9 @@ impl QStashClient {
             "video_id": video_id,
         });
 
-        // add random jitter between 0-120 seconds
+        // add random jitter between 0-max_jitter seconds
         let now = chrono::Utc::now();
-        let jitter = (now.nanosecond() % 121) as u32;
+        let jitter = (now.nanosecond() % max_jitter) as u32;
 
         self.client
             .post(url)
