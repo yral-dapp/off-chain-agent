@@ -149,36 +149,6 @@ impl QStashClient {
         Ok(())
     }
 
-    pub async fn publish_video_nsfw_detection_v2_backfill(
-        &self,
-        video_id: &str,
-        max_jitter: u32,
-    ) -> Result<(), anyhow::Error> {
-        let off_chain_ep = OFF_CHAIN_AGENT_URL
-            .join("qstash/enqueue_video_nsfw_detection_v3")
-            .unwrap();
-
-        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
-        let req = serde_json::json!({
-            "video_id": video_id,
-        });
-
-        // add random jitter between 0-max_jitter seconds
-        let now = chrono::Utc::now();
-        let jitter = (now.nanosecond() % max_jitter) as u32;
-
-        self.client
-            .post(url)
-            .json(&req)
-            .header(CONTENT_TYPE, "application/json")
-            .header("upstash-method", "POST")
-            .header("upstash-delay", format!("{}s", jitter))
-            .send()
-            .await?;
-
-        Ok(())
-    }
-
     pub async fn upgrade_sns_creator_dao_canister(
         &self,
         sns_canister: SnsCanisters,

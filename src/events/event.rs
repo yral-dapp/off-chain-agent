@@ -439,30 +439,3 @@ pub async fn upload_gcs_impl(
 
     Ok(())
 }
-
-// test endpoint , to be removed later
-// pub async fn test_upload_to_qstash(
-//     State(state): State<Arc<AppState>>,
-//     Json(payload): Json<UploadVideoInfo>,
-// ) -> Result<Json<serde_json::Value>, AppError> {
-//     let qstash_client = state.qstash_client.clone();
-
-//     let res = qstash_client
-//         .publish_video(
-//             &payload.video_id,
-//             &payload.canister_id,
-//             payload.post_id,
-//             payload.timestamp,
-//         )
-//         .await;
-//     if res.is_err() {
-//         error!(
-//             "upload_to_gcs: Error sending data to qstash: {:?}",
-//             res.err()
-//         );
-//     }
-
-//     Ok(Json(
-//         serde_json::json!({ "message": "Video uploaded to GCS" }),
-//     ))
-// }
