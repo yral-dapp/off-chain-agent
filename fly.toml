@@ -22,4 +22,4 @@ soft_limit = 500
 [[vm]]
 memory = '1gb'
 cpu_kind = 'shared'
-cpus = 2
+cpus = 1
