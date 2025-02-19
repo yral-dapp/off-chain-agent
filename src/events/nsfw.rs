@@ -10,7 +10,10 @@ use anyhow::Error;
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::{
     job::query::QueryRequest,
-    tabledata::insert_all::{InsertAllRequest, Row},
+    tabledata::{
+        insert_all::{InsertAllRequest, Row},
+        list::Value,
+    },
 };
 use serde::{Deserialize, Serialize};
 use tonic::transport::{Channel, ClientTlsConfig};
@@ -331,6 +334,32 @@ struct VideoNSFWDataV2 {
     probability: f32,
 }
 
+#[derive(Serialize, Debug)]
+struct VideoEmbeddingMetadata {
+    name: String,
+    value: String,
+}
+
+#[derive(Serialize, Debug)]
+struct VideoEmbeddingAgg {
+    ml_generate_embedding_result: Vec<f64>,
+    ml_generate_embedding_status: Option<String>,
+    ml_generate_embedding_start_sec: Option<i64>,
+    ml_generate_embedding_end_sec: Option<i64>,
+    uri: Option<String>,
+    generation: Option<i64>,
+    content_type: Option<String>,
+    size: Option<i64>,
+    md5_hash: Option<String>,
+    updated: Option<String>, // Using String for TIMESTAMP as it's more flexible for serialization
+    metadata: Vec<VideoEmbeddingMetadata>,
+    is_nsfw: Option<bool>,
+    nsfw_ec: Option<String>,
+    nsfw_gore: Option<String>,
+    probability: Option<f32>,
+    video_id: Option<String>,
+}
+
 pub async fn push_nsfw_data_bigquery_v2(
     bigquery_client: google_cloud_bigquery::client::Client,
     nsfw_prob: f32,
@@ -384,10 +413,10 @@ pub async fn push_nsfw_data_bigquery_v2(
     // Create row data for aggregated table
     let row_data = VideoNSFWDataV2 {
         video_id: video_id.clone(),
-        gcs_video_id,
+        gcs_video_id: gcs_video_id.clone(),
         is_nsfw,
-        nsfw_ec,
-        nsfw_gore,
+        nsfw_ec: nsfw_ec.clone(),
+        nsfw_gore: nsfw_gore.clone(),
         probability: nsfw_prob,
     };
 
@@ -411,6 +440,136 @@ pub async fn push_nsfw_data_bigquery_v2(
             &request,
         )
         .await?;
+
+    // Insert into video_embeddings_agg table
+    // read embedding from bigquery hot-or-not-feed-intelligence.yral_ds.video_embeddings table
+    // and push to bigquery hot-or-not-feed-intelligence.yral_ds.video_embeddings_agg table
+
+    let embedding_query = format!(
+        "SELECT * FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` WHERE uri = '{}'",
+        gcs_video_id
+    );
+
+    let embedding_request = QueryRequest {
+        query: embedding_query,
+        ..Default::default()
+    };
+
+    let embedding_result = bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &embedding_request)
+        .await?;
+
+    // in a loop convert each row to VideoEmbedding
+
+    // ... existing code ...
+    let mut video_embeddings = Vec::new();
+    for row in embedding_result.rows.unwrap_or_default() {
+        let embedding = VideoEmbeddingAgg {
+            ml_generate_embedding_result: match &row.f[0].v {
+                Value::Array(arr) => arr
+                    .iter()
+                    .filter_map(|cell| match &cell.v {
+                        Value::String(s) => s.parse::<f64>().ok(),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
+            ml_generate_embedding_status: match &row.f[1].v {
+                Value::String(s) => Some(s.clone()),
+                _ => None,
+            },
+            ml_generate_embedding_start_sec: match &row.f[2].v {
+                Value::String(s) => s.parse::<i64>().ok(),
+                _ => None,
+            },
+            ml_generate_embedding_end_sec: match &row.f[3].v {
+                Value::String(s) => s.parse::<i64>().ok(),
+                _ => None,
+            },
+            uri: match &row.f[4].v {
+                Value::String(s) => Some(s.clone()),
+                _ => None,
+            },
+            generation: match &row.f[5].v {
+                Value::String(s) => s.parse::<i64>().ok(),
+                _ => None,
+            },
+            content_type: match &row.f[6].v {
+                Value::String(s) => Some(s.clone()),
+                _ => None,
+            },
+            size: match &row.f[7].v {
+                Value::String(s) => s.parse::<i64>().ok(),
+                _ => None,
+            },
+            md5_hash: match &row.f[8].v {
+                Value::String(s) => Some(s.clone()),
+                _ => None,
+            },
+            updated: match &row.f[9].v {
+                Value::String(s) => Some(s.clone()),
+                _ => None,
+            },
+            metadata: match &row.f[10].v {
+                Value::Array(arr) => arr
+                    .iter()
+                    .filter_map(|cell| match &cell.v {
+                        Value::Struct(tuple) => {
+                            if tuple.f.len() >= 2 {
+                                match (&tuple.f[0].v, &tuple.f[1].v) {
+                                    (Value::String(key), Value::String(value)) => {
+                                        Some(VideoEmbeddingMetadata {
+                                            name: key.clone(),
+                                            value: value.clone(),
+                                        })
+                                    }
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
+            is_nsfw: Some(is_nsfw),
+            nsfw_ec: Some(nsfw_ec.clone()),
+            nsfw_gore: Some(nsfw_gore.clone()),
+            probability: Some(nsfw_prob),
+            video_id: Some(video_id.clone()),
+        };
+        video_embeddings.push(embedding);
+    }
+
+    let rows = video_embeddings
+        .into_iter()
+        .map(|embedding| Row {
+            insert_id: None,
+            json: embedding,
+        })
+        .collect();
+
+    // insert into bigquery
+    let insert_request = InsertAllRequest {
+        rows: rows,
+        ..Default::default()
+    };
+
+    let res = bigquery_client
+        .tabledata()
+        .insert(
+            "hot-or-not-feed-intelligence",
+            "yral_ds",
+            "video_embeddings_agg",
+            &insert_request,
+        )
+        .await?;
+
+    log::info!("video_embeddings_agg insert response : {:?}", res);
 
     Ok(())
 }
