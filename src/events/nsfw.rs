@@ -351,7 +351,7 @@ struct VideoEmbeddingAgg {
     content_type: Option<String>,
     size: Option<i64>,
     md5_hash: Option<String>,
-    updated: Option<String>, // Using String for TIMESTAMP as it's more flexible for serialization
+    updated: Option<String>,
     metadata: Vec<VideoEmbeddingMetadata>,
     is_nsfw: Option<bool>,
     nsfw_ec: Option<String>,
@@ -460,9 +460,8 @@ pub async fn push_nsfw_data_bigquery_v2(
         .query("hot-or-not-feed-intelligence", &embedding_request)
         .await?;
 
-    // in a loop convert each row to VideoEmbedding
+    // in a loop convert each row to VideoEmbeddingAgg
 
-    // ... existing code ...
     let mut video_embeddings = Vec::new();
     for row in embedding_result.rows.unwrap_or_default() {
         let embedding = VideoEmbeddingAgg {
