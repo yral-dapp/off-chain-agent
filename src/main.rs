@@ -23,6 +23,7 @@ use offchain_service::report_approved_handler;
 use qstash::qstash_router;
 use tower::make::Shared;
 use tower::steer::Steer;
+use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
@@ -111,6 +112,7 @@ async fn main() -> Result<()> {
         )
         .nest("/qstash", qstash_routes)
         .nest_service("/", router)
+        .layer(CorsLayer::permissive())
         .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()

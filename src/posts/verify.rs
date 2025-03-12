@@ -30,6 +30,8 @@ pub async fn verify_post_request<T>(
 where
     T: for<'de> Deserialize<'de> + Serialize + Clone + Send + Sync + 'static,
 {
+    log::info!("verify_post_request");
+
     // Extract the JSON body
     let (parts, body) = request.into_parts();
     let bytes = match axum::body::to_bytes(body, usize::MAX).await {
@@ -72,8 +74,14 @@ where
         request: post_request,
     };
 
-    let mut request = Request::from_parts(parts, axum::body::Body::from(bytes));
-    request.extensions_mut().insert(verified_request);
+    // let mut request = Request::from_parts(parts, axum::body::Body::from(bytes));
+    // request.extensions_mut().insert(verified_request);
+    // convert verified_request to request body
+    let request_body = serde_json::to_string(&verified_request).unwrap();
+    let request = Request::from_parts(parts, axum::body::Body::from(request_body));
+    // request.extensions_mut().insert(verified_request);
+
+    log::info!("verify_post_request complete");
 
     // Pass the request to the next handler
     Ok(next.run(request).await)
