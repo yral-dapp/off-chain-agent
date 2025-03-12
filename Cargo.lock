@@ -4166,7 +4166,6 @@ dependencies = [
  "tower 0.5.2",
  "utoipa",
  "utoipa-axum",
- "utoipa-redoc",
  "utoipa-swagger-ui",
  "yral-canisters-client",
  "yral-metadata-client",
@@ -6559,18 +6558,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.87",
-]
-
-[[package]]
-name = "utoipa-redoc"
-version = "5.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9218304bba9a0ea5e92085b0a427ccce5fd56eaaf6436d245b7578e6a95787e1"
-dependencies = [
- "axum",
- "serde",
- "serde_json",
- "utoipa",
 ]
 
 [[package]]

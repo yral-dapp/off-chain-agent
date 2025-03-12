@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
-use http::StatusCode;
 use ic_agent::{identity::DelegatedIdentity, Agent};
 
-use crate::{app_state::AppState, canister::upload_user_video::DelegatedIdentityWire};
+use crate::{app_state::AppState, types::DelegatedIdentityWire};
 
 use super::types::VideoDeleteRow;
 

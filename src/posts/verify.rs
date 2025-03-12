@@ -1,19 +1,17 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
-    extract::{FromRequestParts, Request, State},
-    http::{request::Parts, StatusCode},
+    extract::{Request, State},
+    http::StatusCode,
     middleware::Next,
     response::Response,
     Json,
 };
 use candid::Principal;
-use ic_agent::{identity::DelegatedIdentity, Agent, Identity};
+use ic_agent::{identity::DelegatedIdentity, Identity};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
-use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 
-use crate::{app_state::AppState, canister::upload_user_video::DelegatedIdentityWire};
+use crate::app_state::AppState;
 
 use super::PostRequest;
 

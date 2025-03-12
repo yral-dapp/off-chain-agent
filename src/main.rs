@@ -1,16 +1,11 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-// use aide::axum::ApiRouter;
-// use aide::openapi::Tag;
-// use aide::transform::TransformOpenApi;
 use anyhow::Result;
 use auth::check_auth_grpc_offchain_mlfeed;
-use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
-use axum::{Extension, Json};
 use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
 use canister::mlfeed_cache::{
     update_ml_feed_cache, update_ml_feed_cache_nsfw, OffChainCanisterService,
@@ -20,7 +15,6 @@ use canister::upgrade_user_token_sns_canister::{
 };
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
-// use docs::docs_routes;
 use env_logger::{Builder, Target};
 use events::nsfw::extract_frames_and_upload;
 use http::header::CONTENT_TYPE;
@@ -29,10 +23,8 @@ use offchain_service::report_approved_handler;
 use qstash::qstash_router;
 use tower::make::Shared;
 use tower::steer::Steer;
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
-use utoipa::{openapi, Modify, OpenApi};
+use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
-use utoipa_redoc::{Redoc, Servable};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::check_auth_grpc;
@@ -50,7 +42,6 @@ mod auth;
 pub mod canister;
 mod config;
 mod consts;
-// mod docs;
 mod error;
 mod events;
 mod offchain_service;
@@ -58,22 +49,11 @@ mod posts;
 mod qstash;
 mod types;
 pub mod utils;
-// use aide::{
-//     axum::{ApiRouter, IntoApiResponse},
-//     openapi::{Info, OpenApi},
-// };
+
 use app_state::AppState;
-use axum::response::IntoResponse;
-use http::Response;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // aide::generate::on_error(|error| {
-    //     println!("{error}");
-    // });
-
-    // aide::generate::extract_schemas(true);
-
     #[derive(OpenApi)]
     #[openapi(
         tags(
@@ -91,22 +71,12 @@ async fn main() -> Result<()> {
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
 
-    // let mut api = OpenApi::default();
-
-    // let app = ApiRouter::new()
-    //     .nest_api_service("/todo", todo_routes(state.clone()))
-    //     .nest_api_service("/docs", docs_routes(state.clone()))
-    //     .finish_api_with(&mut api, api_docs)
-    //     .layer(Extension(Arc::new(api))) // Arc is very important here or you will face massive memory and performance issues
-    //     .with_state(state);
-
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/api/v1/posts", posts::posts_router(shared_state.clone()))
         .split_for_parts();
 
-    let router = router
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()))
-        .merge(Redoc::with_url("/redoc", api.clone()));
+    let router =
+        router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()));
 
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
@@ -200,23 +170,3 @@ async fn health_handler() -> (StatusCode, &'static str) {
 
     (StatusCode::OK, "OK")
 }
-
-// fn api_docs(api: TransformOpenApi) -> TransformOpenApi {
-//     api.title("Aide axum Open API")
-//         .summary("An example Todo application")
-//         .description(include_str!("../README.md"))
-//         .tag(Tag {
-//             name: "todo".into(),
-//             description: Some("Todo Management".into()),
-//             ..Default::default()
-//         })
-//         .security_scheme(
-//             "ApiKey",
-//             aide::openapi::SecurityScheme::ApiKey {
-//                 location: aide::openapi::ApiKeyLocation::Header,
-//                 name: "X-Auth-Key".into(),
-//                 description: Some("A key that is ignored.".into()),
-//                 extensions: Default::default(),
-//             },
-//         )
-// }

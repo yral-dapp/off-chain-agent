@@ -1,88 +1,57 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
-// use aide::axum::routing::post_with;
-// use aide::axum::ApiRouter;
-// use aide::{axum::routing::delete_with, transform::TransformOperation};
-use axum::{
-    extract::State,
-    http::StatusCode,
-    middleware,
-    routing::{delete, get, post},
-    Json,
-};
+use axum::{extract::State, http::StatusCode, middleware, Json};
 use candid::Principal;
+use events::{LikeVideoRequest, VideoDurationWatchedRequest};
 use http::Response;
-use ic_agent::{identity::DelegatedIdentity, Agent};
-// use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use types::VideoDeleteRow;
+use tonic::transport::{Channel, ClientTlsConfig};
+use types::PostRequest;
 use utils::{get_agent_from_delegated_identity_wire, insert_video_delete_row_to_bigquery};
-use utoipa::{openapi::request_body, ToSchema};
-use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa::ToSchema;
+use utoipa_axum::{
+    router::{OpenApiRouter, UtoipaMethodRouterExt},
+    routes,
+};
 use verify::{verify_post_request, VerifiedPostRequest};
 use yral_canisters_client::individual_user_template::{IndividualUserTemplate, Result1};
 
-use crate::{app_state::AppState, types::DelegatedIdentityWire};
+use crate::{
+    app_state::AppState,
+    consts::ML_FEED_SERVER_GRPC_URL,
+    utils::grpc_clients::ml_feed::{ml_feed_client::MlFeedClient, VideoReportRequest},
+    AppError,
+};
 
-mod events;
+pub mod events;
 mod types;
 mod utils;
 mod verify;
 
-// #[derive(Serialize, Deserialize, Clone, JsonSchema)]
-// pub struct CreatePostRequest {
-//     canister_id: String,
-//     post_id: u64,
-// }
-
-// pub fn todo_routes(state: Arc<AppState>) -> ApiRouter {
-//     ApiRouter::new()
-//         .api_route("/", post_with(handle_create_post, create_post_docs))
-//         .with_state(state)
-// }
-
-// #[axum::debug_handler]
-// async fn handle_create_post(
-//     State(state): State<Arc<AppState>>,
-//     Json(verified_request): Json<CreatePostRequest>,
-// ) -> Result<Response<String>, StatusCode> {
-//     Ok(Response::builder()
-//         .status(StatusCode::OK)
-//         .body("Post created".into())
-//         .unwrap())
-// }
-
-// fn create_post_docs(op: TransformOperation) -> TransformOperation {
-//     op.description("Create a new incomplete Todo item.")
-//         .response::<201, String>()
-// }
-
-pub fn posts_router(state: Arc<AppState>) -> OpenApiRouter {
-    let delete_router = OpenApiRouter::new()
-        .routes(routes!(handle_delete_post))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            verify_post_request::<DeletePostRequest>,
-        ));
-
-    let report_router = OpenApiRouter::new()
-        .routes(routes!(handle_report_post))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            verify_post_request::<ReportPostRequest>,
-        ));
-
-    OpenApiRouter::new()
-        .merge(delete_router)
-        .merge(report_router)
-        .with_state(state)
+/// Macro to create a route with verification middleware
+macro_rules! verified_route {
+    ($router:expr, $handler:path, $request_type:ty, $state:expr) => {
+        $router.routes(routes!($handler).layer(middleware::from_fn_with_state(
+            $state.clone(),
+            verify_post_request::<$request_type>,
+        )))
+    };
 }
 
-#[derive(Serialize, Deserialize, Clone, ToSchema)]
-pub struct PostRequest<T> {
-    delegated_identity_wire: DelegatedIdentityWire,
-    #[serde(flatten)]
-    request_body: T,
+pub fn posts_router(state: Arc<AppState>) -> OpenApiRouter {
+    let mut router = OpenApiRouter::new();
+
+    router = verified_route!(router, handle_delete_post, DeletePostRequest, state);
+    router = verified_route!(router, handle_report_post, ReportPostRequest, state);
+    router = verified_route!(router, events::handle_like_video, LikeVideoRequest, state);
+    router = verified_route!(
+        router,
+        events::handle_video_duration_watched,
+        VideoDurationWatchedRequest,
+        state
+    );
+
+    router.with_state(state)
 }
 
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
@@ -90,21 +59,16 @@ pub struct DeletePostRequest {
     #[schema(value_type = String)]
     canister_id: Principal,
     post_id: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, ToSchema)]
-pub struct ReportPostRequest {
-    #[schema(value_type = String)]
-    canister_id: Principal,
-    post_id: u64,
+    video_id: String,
 }
 
 #[utoipa::path(
     delete,
     path = "",
+    request_body = PostRequest<DeletePostRequest>,
     tag = "posts",
     responses(
-        (status = 200, description = "Delete post success", body = [PostRequest<DeletePostRequest>]),
+        (status = 200, description = "Delete post success"),
         (status = 400, description = "Delete post failed"),
         (status = 500, description = "Internal server error"),
         (status = 403, description = "Forbidden"),
@@ -123,21 +87,13 @@ async fn handle_delete_post(
 
     let canister_id = request_body.canister_id.to_string();
     let post_id = request_body.post_id;
+    let video_id = request_body.video_id;
 
     let agent =
         get_agent_from_delegated_identity_wire(&verified_request.request.delegated_identity_wire)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let individual_user_template = IndividualUserTemplate(verified_request.user_canister, &agent);
-
-    let post_details = match individual_user_template
-        .get_individual_post_details_by_id(post_id)
-        .await
-    {
-        Ok(post_details) => post_details,
-        Err(_) => return Err(StatusCode::BAD_REQUEST),
-    };
-    let video_id = post_details.video_uid;
 
     // Call the canister to delete the post
     let delete_res = individual_user_template.delete_post(post_id).await;
@@ -157,31 +113,81 @@ async fn handle_delete_post(
         .unwrap())
 }
 
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
+pub struct ReportPostRequest {
+    #[schema(value_type = String)]
+    pub canister_id: Principal,
+    pub post_id: u64,
+    pub video_id: String,
+    #[schema(value_type = String)]
+    pub user_canister_id: Principal,
+    #[schema(value_type = String)]
+    pub user_principal: Principal,
+    pub reason: String,
+}
+
 #[utoipa::path(
     post,
     path = "/report",
+    request_body = PostRequest<ReportPostRequest>,
     tag = "posts",
     responses(
-        (status = 200, description = "Report post success", body = [PostRequest<ReportPostRequest>])
+        (status = 200, description = "Report post success"),
+        (status = 500, description = "Internal server error"),
     )
 )]
 async fn handle_report_post(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<ReportPostRequest>>,
 ) -> Result<Response<String>, StatusCode> {
-    let post_id = verified_request.request.request_body.post_id;
+    let request_body = verified_request.request.request_body;
 
-    // Call the canister to report the post
-    // This is a placeholder - you would implement the actual reporting logic
-
-    // Example:
-    // let result = verified_request.individual_user.report_post(post_id).await;
-    // if let Err(_) = result {
-    //     return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    // }
+    let qstash_client = state.qstash_client.clone();
+    qstash_client
+        .publish_report_post(request_body)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Response::builder()
         .status(StatusCode::OK)
         .body("Post reported".into())
         .unwrap())
+}
+
+pub async fn qstash_report_post(
+    State(_state): State<Arc<AppState>>,
+    Json(payload): Json<ReportPostRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let tls_config = ClientTlsConfig::new().with_webpki_roots();
+
+    let channel = Channel::from_static(ML_FEED_SERVER_GRPC_URL)
+        .tls_config(tls_config)
+        .expect("Couldn't update TLS config for nsfw agent")
+        .connect()
+        .await
+        .expect("Couldn't connect to ML feed server");
+
+    let mut client = MlFeedClient::new(channel);
+
+    let request = VideoReportRequest {
+        reportee_user_id: payload.user_principal.to_string(),
+        reportee_canister_id: payload.user_canister_id.to_string(),
+        video_canister_id: payload.canister_id.to_string(),
+        video_post_id: payload.post_id as u32,
+        video_id: payload.video_id,
+        reason: payload.reason,
+    };
+
+    let res = client.report_video(request).await;
+    match res {
+        Ok(_) => (),
+        Err(_) => {
+            log::error!("Failed to report video, qstash_report_post");
+            return Err(anyhow::anyhow!("Failed to report video").into());
+        }
+    }
+
+    Ok(Json(
+        serde_json::json!({ "message": "Report post success" }),
+    ))
 }
