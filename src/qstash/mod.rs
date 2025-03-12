@@ -41,6 +41,7 @@ use crate::{
         event::upload_video_gcs,
         nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
     },
+    posts::qstash_report_post,
 };
 
 pub mod client;
@@ -428,6 +429,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/upgrade_user_token_sns_canister_for_entire_network",
             post(upgrade_user_token_sns_canister_for_entire_network),
         )
+        .route("/report_post", post(qstash_report_post))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
