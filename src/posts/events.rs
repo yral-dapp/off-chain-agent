@@ -127,8 +127,6 @@ pub async fn handle_like_video(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<LikeVideoRequest>>,
 ) -> Result<Response<String>, StatusCode> {
-    log::info!("handle_like_video");
-
     if verified_request.request.request_body.canister_id != verified_request.user_canister {
         return Err(StatusCode::FORBIDDEN);
     }
