@@ -51,11 +51,7 @@ pub async fn handle_video_duration_watched(
 
     let request_body = verified_request.request.request_body;
 
-    let agent =
-        get_agent_from_delegated_identity_wire(&verified_request.request.delegated_identity_wire)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let individual_user_template = IndividualUserTemplate(verified_request.user_canister, &agent);
+    let user_canister = state.individual_user(verified_request.user_canister);
 
     if request_body.percentage_watched >= 90.0 {
         let watch_history_item = WatchHistoryItem {
@@ -66,9 +62,7 @@ pub async fn handle_video_duration_watched(
             cf_video_id: request_body.video_id.clone(),
         };
 
-        let res = individual_user_template
-            .update_watch_history(watch_history_item)
-            .await;
+        let res = user_canister.update_watch_history(watch_history_item).await;
         match res {
             Ok(_) => (),
             Err(e) => {
@@ -88,7 +82,7 @@ pub async fn handle_video_duration_watched(
             item_type: "video_duration_watched".to_string(),
         };
 
-        let res = individual_user_template
+        let res = user_canister
             .update_success_history(success_history_item)
             .await;
         match res {
@@ -141,11 +135,7 @@ pub async fn handle_like_video(
 
     let request_body = verified_request.request.request_body;
 
-    let agent =
-        get_agent_from_delegated_identity_wire(&verified_request.request.delegated_identity_wire)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let individual_user_template = IndividualUserTemplate(verified_request.user_canister, &agent);
+    let user_canister = state.individual_user(verified_request.user_canister);
 
     let success_history_item = SuccessHistoryItemV1 {
         post_id: request_body.post_id,
@@ -156,7 +146,7 @@ pub async fn handle_like_video(
         item_type: "like_video".to_string(),
     };
 
-    let res = individual_user_template
+    let res = user_canister
         .update_success_history(success_history_item)
         .await;
     match res {
