@@ -43,6 +43,7 @@ jobs:
           flyctl secrets set "CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY=$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" --app "icp-off-chain-agent" --stage
           flyctl secrets set "RECLAIM_CANISTER_PEM=$RECLAIM_CANISTER_PEM" --app "icp-off-chain-agent" --stage
           flyctl secrets set "GOOGLE_SA_KEY=$GOOGLE_SA_KEY" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN=$YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "GRPC_AUTH_TOKEN=$GRPC_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "YRAL_METADATA_TOKEN=$YRAL_METADATA_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "UPSTASH_VECTOR_READ_WRITE_TOKEN=$UPSTASH_VECTOR_READ_WRITE_TOKEN" --app "icp-off-chain-agent" --stage
