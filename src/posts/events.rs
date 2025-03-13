@@ -20,7 +20,7 @@ use super::verify::VerifiedPostRequest;
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct VideoDurationWatchedRequest {
     #[schema(value_type = String)]
-    pub canister_id: Principal,
+    pub user_canister_id: Principal,
     #[schema(value_type = String)]
     pub user_principal: Principal,
     #[schema(value_type = String)]
@@ -45,7 +45,7 @@ pub async fn handle_video_duration_watched(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<VideoDurationWatchedRequest>>,
 ) -> Result<Response<String>, StatusCode> {
-    if verified_request.request.request_body.canister_id != verified_request.user_canister {
+    if verified_request.request.request_body.user_canister_id != verified_request.user_canister {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -103,7 +103,7 @@ pub async fn handle_video_duration_watched(
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct LikeVideoRequest {
     #[schema(value_type = String)]
-    pub canister_id: Principal,
+    pub user_canister_id: Principal,
     #[schema(value_type = String)]
     pub user_principal: Principal,
     #[schema(value_type = String)]
@@ -127,7 +127,7 @@ pub async fn handle_like_video(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<LikeVideoRequest>>,
 ) -> Result<Response<String>, StatusCode> {
-    if verified_request.request.request_body.canister_id != verified_request.user_canister {
+    if verified_request.request.request_body.user_canister_id != verified_request.user_canister {
         return Err(StatusCode::FORBIDDEN);
     }
 
