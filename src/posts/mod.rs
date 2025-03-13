@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, middleware, Json};
+use axum::{extract::State, http::StatusCode, middleware, response::IntoResponse, Json};
 use candid::Principal;
 use events::{LikeVideoRequest, VideoDurationWatchedRequest};
-use http::Response;
 use serde::{Deserialize, Serialize};
 use tonic::transport::{Channel, ClientTlsConfig};
 use types::PostRequest;
@@ -20,7 +19,6 @@ use crate::{
     app_state::AppState,
     consts::ML_FEED_SERVER_GRPC_URL,
     utils::grpc_clients::ml_feed::{ml_feed_client::MlFeedClient, VideoReportRequest},
-    AppError,
 };
 
 pub mod events;
@@ -77,10 +75,10 @@ pub struct DeletePostRequest {
 async fn handle_delete_post(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<DeletePostRequest>>,
-) -> Result<Response<String>, StatusCode> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     // Verify that the canister ID matches the user's canister
     if verified_request.request.request_body.canister_id != verified_request.user_canister {
-        return Err(StatusCode::FORBIDDEN);
+        return Err((StatusCode::FORBIDDEN, "Forbidden".to_string()));
     }
 
     let request_body = verified_request.request.request_body;
@@ -92,25 +90,39 @@ async fn handle_delete_post(
     let agent =
         get_agent_from_delegated_identity_wire(&verified_request.request.delegated_identity_wire)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let individual_user_template = IndividualUserTemplate(verified_request.user_canister, &agent);
 
     // Call the canister to delete the post
     let delete_res = individual_user_template.delete_post(post_id).await;
     match delete_res {
         Ok(Result1::Ok) => (),
-        Ok(Result1::Err(_)) => return Err(StatusCode::BAD_REQUEST),
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(Result1::Err(_)) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Delete post failed - either the post doesn't exist or already deleted".to_string(),
+            ))
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal server error: {}", e),
+            ))
+        }
     }
 
     insert_video_delete_row_to_bigquery(state, canister_id, post_id, video_id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            log::error!("Failed to insert video delete row to bigquery: {}", e);
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .body("Post deleted".into())
-        .unwrap())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to insert video to bigquery: {}", e),
+            )
+        })?;
+
+    Ok((StatusCode::OK, "Post deleted".to_string()))
 }
 
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
@@ -139,33 +151,47 @@ pub struct ReportPostRequest {
 async fn handle_report_post(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<ReportPostRequest>>,
-) -> Result<Response<String>, StatusCode> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let request_body = verified_request.request.request_body;
 
     let qstash_client = state.qstash_client.clone();
     qstash_client
         .publish_report_post(request_body)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            log::error!("Failed to publish report post: {}", e);
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .body("Post reported".into())
-        .unwrap())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to publish report post: {}", e),
+            )
+        })?;
+
+    Ok((StatusCode::OK, "Post reported".to_string()))
 }
 
 pub async fn qstash_report_post(
     State(_state): State<Arc<AppState>>,
     Json(payload): Json<ReportPostRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let tls_config = ClientTlsConfig::new().with_webpki_roots();
 
     let channel = Channel::from_static(ML_FEED_SERVER_GRPC_URL)
         .tls_config(tls_config)
-        .expect("Couldn't update TLS config for nsfw agent")
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create channel: {}", e),
+            )
+        })?
         .connect()
         .await
-        .expect("Couldn't connect to ML feed server");
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to connect to ML feed server: {}", e),
+            )
+        })?;
 
     let mut client = MlFeedClient::new(channel);
 
@@ -178,16 +204,14 @@ pub async fn qstash_report_post(
         reason: payload.reason,
     };
 
-    let res = client.report_video(request).await;
-    match res {
-        Ok(_) => (),
-        Err(_) => {
-            log::error!("Failed to report video, qstash_report_post");
-            return Err(anyhow::anyhow!("Failed to report video").into());
-        }
-    }
+    client.report_video(request).await.map_err(|e| {
+        log::error!("Failed to report video: {}", e);
 
-    Ok(Json(
-        serde_json::json!({ "message": "Report post success" }),
-    ))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to report video: {}", e),
+        )
+    })?;
+
+    Ok((StatusCode::OK, "Report post success".to_string()))
 }

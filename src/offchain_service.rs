@@ -100,16 +100,24 @@ impl OffChain for OffChainService {
             ));
         }
 
-        let user_principal =
-            Principal::from_text(&request.reporter_id).expect("Invalid reporter id");
+        let user_principal = Principal::from_text(&request.reporter_id)
+            .map_err(|_| tonic::Status::new(tonic::Code::Unknown, "Invalid reporter id"))?;
         let user_canister_id = shared_state
             .get_individual_canister_by_user_principal(user_principal)
             .await
-            .expect("Failed to get user canister id");
+            .map_err(|_| {
+                tonic::Status::new(tonic::Code::Unknown, "Failed to get user canister id")
+            })?;
+        let publisher_canister_id =
+            Principal::from_text(&request.publisher_canister_id).map_err(|_| {
+                tonic::Status::new(tonic::Code::Unknown, "Invalid publisher canister id")
+            })?;
         let post_report_request = crate::posts::ReportPostRequest {
-            canister_id: Principal::from_text(&request.publisher_canister_id)
-                .expect("Invalid publisher canister id"),
-            post_id: request.post_id.parse::<u64>().expect("Invalid post id"),
+            canister_id: publisher_canister_id,
+            post_id: request
+                .post_id
+                .parse::<u64>()
+                .map_err(|_| tonic::Status::new(tonic::Code::Unknown, "Invalid post id"))?,
             video_id: request.video_id,
             user_canister_id,
             user_principal,

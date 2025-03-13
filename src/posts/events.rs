@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
+use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use candid::Principal;
-use http::Response;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_canisters_client::individual_user_template::SuccessHistoryItemV1;
 use yral_canisters_client::individual_user_template::WatchHistoryItem;
 
@@ -14,7 +13,6 @@ use crate::app_state::AppState;
 use crate::utils::time::system_time_to_custom;
 
 use super::types::PostRequest;
-use super::utils::get_agent_from_delegated_identity_wire;
 use super::verify::VerifiedPostRequest;
 
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
@@ -44,9 +42,9 @@ pub struct VideoDurationWatchedRequest {
 pub async fn handle_video_duration_watched(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<VideoDurationWatchedRequest>>,
-) -> Result<Response<String>, StatusCode> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     if verified_request.request.request_body.user_canister_id != verified_request.user_canister {
-        return Err(StatusCode::FORBIDDEN);
+        return Err((StatusCode::FORBIDDEN, "Forbidden".to_string()));
     }
 
     let request_body = verified_request.request.request_body;
@@ -67,7 +65,10 @@ pub async fn handle_video_duration_watched(
             Ok(_) => (),
             Err(e) => {
                 log::error!("Error updating watch history: {:?}", e);
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error updating watch history: {:?}", e),
+                ));
             }
         }
     }
@@ -89,15 +90,15 @@ pub async fn handle_video_duration_watched(
             Ok(_) => (),
             Err(e) => {
                 log::error!("Error updating success history: {:?}", e);
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error updating success history: {:?}", e),
+                ));
             }
         }
     }
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .body("SUCCESS".into())
-        .unwrap())
+    Ok((StatusCode::OK, "SUCCESS".to_string()))
 }
 
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
@@ -126,9 +127,9 @@ pub struct LikeVideoRequest {
 pub async fn handle_like_video(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<LikeVideoRequest>>,
-) -> Result<Response<String>, StatusCode> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     if verified_request.request.request_body.user_canister_id != verified_request.user_canister {
-        return Err(StatusCode::FORBIDDEN);
+        return Err((StatusCode::FORBIDDEN, "Forbidden".to_string()));
     }
 
     let request_body = verified_request.request.request_body;
@@ -151,12 +152,12 @@ pub async fn handle_like_video(
         Ok(_) => (),
         Err(e) => {
             log::error!("Error updating success history: {:?}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error updating success history: {:?}", e),
+            ));
         }
     }
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .body("SUCCESS".into())
-        .unwrap())
+    Ok((StatusCode::OK, "SUCCESS".to_string()))
 }

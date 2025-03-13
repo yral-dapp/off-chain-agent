@@ -54,7 +54,14 @@ pub async fn insert_video_delete_row_to_bigquery(
         )
         .await?;
 
-    log::info!("video_deleted insert response : {:?}", res);
+    if let Some(errors) = res.insert_errors {
+        if errors.len() > 0 {
+            log::error!("video_deleted insert response : {:?}", errors);
+            return Err(anyhow::anyhow!(
+                "Failed to insert video deleted row to bigquery"
+            ));
+        }
+    }
 
     Ok(())
 }
