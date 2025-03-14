@@ -34,7 +34,7 @@ LEFT JOIN
 ON
   t0.uri = video_deleted.gcs_video_id
 WHERE
-  video_nsfw_agg.probability < 0.5
+  video_nsfw_agg.probability < 0.4
   AND video_deleted.gcs_video_id IS NULL
 GROUP BY
   1,
