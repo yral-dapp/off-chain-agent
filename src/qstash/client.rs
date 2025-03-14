@@ -11,6 +11,7 @@ use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 use crate::{
     canister::upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
     consts::OFF_CHAIN_AGENT_URL,
+    posts::ReportPostRequest,
 };
 
 #[derive(Clone, Debug)]
@@ -236,6 +237,26 @@ impl QStashClient {
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
             .header("upstash-retries", "0")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn publish_report_post(
+        &self,
+        report_request: ReportPostRequest,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/report_post").unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let req = serde_json::json!(report_request);
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
             .send()
             .await?;
 

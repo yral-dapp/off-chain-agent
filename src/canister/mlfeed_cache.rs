@@ -12,7 +12,7 @@ use google_cloud_bigquery::http::{job::query::QueryRequest, tabledata::list::Val
 use http::StatusCode;
 use off_chain::{off_chain_canister_server::OffChainCanister, MlFeedCacheItem};
 use serde::{Deserialize, Serialize};
-use yral_canisters_client::individual_user_template::Result25;
+use yral_canisters_client::individual_user_template::Result24;
 
 pub mod off_chain {
     tonic::include_proto!("offchain_canister");
@@ -47,7 +47,7 @@ impl OffChainCanister for OffChainCanisterService {
                 tonic::Status::internal(format!("Error updating ml feed cache: {:?}", e))
             })?;
 
-        if let Result25::Err(err) = res {
+        if let Result24::Err(err) = res {
             log::error!("Error updating ml feed cache: {:?}", err);
             return Err(tonic::Status::internal(format!(
                 "Error updating ml feed cache: {:?}",
@@ -84,9 +84,11 @@ pub struct CustomMlFeedCacheItem {
 
 #[cfg(not(feature = "local-bin"))]
 pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    use super::queries::GET_LATEST_NON_NSFW_POSTS_QUERY;
+
     let bigquery_client = state.bigquery_client.clone();
     let request = QueryRequest {
-        query: "SELECT video_embeddings.uri, (SELECT value FROM UNNEST(video_embeddings.metadata) WHERE name = 'timestamp') AS timestamp, (SELECT value FROM UNNEST(video_embeddings.metadata) WHERE name = 'canister_id') AS canister_id, (SELECT value FROM UNNEST(video_embeddings.metadata) WHERE name = 'post_id') AS post_id, video_nsfw_agg.probability FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` AS video_embeddings INNER JOIN `hot-or-not-feed-intelligence`.`yral_ds`.`video_nsfw_agg` AS video_nsfw_agg ON video_embeddings.uri = video_nsfw_agg.gcs_video_id WHERE video_nsfw_agg.probability < 0.5 GROUP BY 1, 2, 3, 4, 5 ORDER BY timestamp DESC LIMIT 50".to_string(),
+        query: GET_LATEST_NON_NSFW_POSTS_QUERY.to_string(),
         ..Default::default()
     };
 
@@ -137,9 +139,11 @@ pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<
 
 #[cfg(not(feature = "local-bin"))]
 pub async fn update_ml_feed_cache_nsfw(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    use super::queries::GET_LATEST_NSFW_POSTS_QUERY;
+
     let bigquery_client = state.bigquery_client.clone();
     let request = QueryRequest {
-        query: "SELECT video_embeddings.uri, (SELECT value FROM UNNEST(video_embeddings.metadata) WHERE name = 'timestamp') AS timestamp, (SELECT value FROM UNNEST(video_embeddings.metadata) WHERE name = 'canister_id') AS canister_id, (SELECT value FROM UNNEST(video_embeddings.metadata) WHERE name = 'post_id') AS post_id, video_nsfw_agg.probability FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_embeddings` AS video_embeddings INNER JOIN `hot-or-not-feed-intelligence`.`yral_ds`.`video_nsfw_agg` AS video_nsfw_agg ON video_embeddings.uri = video_nsfw_agg.gcs_video_id WHERE video_nsfw_agg.probability > 0.6 GROUP BY 1, 2, 3, 4, 5 ORDER BY timestamp DESC LIMIT 50".to_string(),
+        query: GET_LATEST_NSFW_POSTS_QUERY.to_string(),
         ..Default::default()
     };
 

@@ -4,7 +4,7 @@ use crate::{
     app_state::AppState,
     consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
     events::warehouse_events::WarehouseEvent,
-    utils::cf_images::upload_base64_image,
+    utils::{cf_images::upload_base64_image, time::system_time_to_custom},
     AppError,
 };
 use axum::{extract::State, Json};
@@ -292,17 +292,6 @@ async fn stream_to_bigquery(
     match response.status().is_success() {
         true => Ok(()),
         false => Err(format!("Failed to stream data - {:?}", response.text().await?).into()),
-    }
-}
-
-fn system_time_to_custom(time: std::time::SystemTime) -> SystemTime {
-    let duration = time
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-
-    SystemTime {
-        nanos_since_epoch: duration.subsec_nanos(),
-        secs_since_epoch: duration.as_secs(),
     }
 }
 

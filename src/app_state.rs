@@ -100,7 +100,7 @@ pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
 }
 
 pub async fn init_agent() -> Agent {
-    #[cfg(not(feature = "local-bin"))]
+    #[cfg(not(any(feature = "local-bin", feature = "local-bin-dev")))]
     {
         let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
@@ -127,7 +127,7 @@ pub async fn init_agent() -> Agent {
         agent
     }
 
-    #[cfg(feature = "local-bin")]
+    #[cfg(any(feature = "local-bin", feature = "local-bin-dev"))]
     {
         let agent = Agent::builder()
             .with_url("https://ic0.app")

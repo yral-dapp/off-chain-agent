@@ -26,3 +26,5 @@ pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev
 
 pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str =
     "https://yral-ml-feed-cache.go-bazzinga.workers.dev";
+
+pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";

@@ -12,6 +12,7 @@ use serde::Serialize;
 use self::utils::get_canisters_list_all;
 
 pub mod mlfeed_cache;
+pub mod queries;
 pub mod reclaim_canisters;
 pub mod snapshot;
 pub mod upgrade_user_token_sns_canister;
