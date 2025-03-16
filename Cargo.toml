@@ -82,4 +82,4 @@ path = "src/main.rs"
 
 [features]
 local-bin = []
-local-bin-dev = []
+use-local-agent = []
