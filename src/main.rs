@@ -23,6 +23,10 @@ use offchain_service::report_approved_handler;
 use qstash::qstash_router;
 use tower::make::Shared;
 use tower::steer::Steer;
+use tower_http::cors::CorsLayer;
+use utoipa::OpenApi;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::check_auth_grpc;
 use crate::canister::canisters_list_handler;
@@ -42,6 +46,7 @@ mod consts;
 mod error;
 mod events;
 mod offchain_service;
+mod posts;
 mod qstash;
 mod types;
 pub mod utils;
@@ -50,6 +55,14 @@ use app_state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    #[derive(OpenApi)]
+    #[openapi(
+        tags(
+            (name = "OFF_CHAIN", description = "Off Chain Agent API")
+        )
+    )]
+    struct ApiDoc;
+
     let conf = AppConfig::load()?;
 
     Builder::new()
@@ -58,6 +71,13 @@ async fn main() -> Result<()> {
         .init();
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
+
+    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .nest("/api/v1/posts", posts::posts_router(shared_state.clone()))
+        .split_for_parts();
+
+    let router =
+        router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()));
 
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
@@ -91,6 +111,8 @@ async fn main() -> Result<()> {
             get(update_ml_feed_cache_nsfw),
         )
         .nest("/qstash", qstash_routes)
+        .nest_service("/", router)
+        .layer(CorsLayer::permissive())
         .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
