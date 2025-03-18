@@ -74,6 +74,10 @@ async fn main() -> Result<()> {
 
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/api/v1/posts", posts::posts_router(shared_state.clone()))
+        .nest(
+            "/api/v1/events",
+            events::events_router(shared_state.clone()),
+        )
         .split_for_parts();
 
     let router =
