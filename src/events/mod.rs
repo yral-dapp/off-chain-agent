@@ -3,7 +3,7 @@ use axum::response::IntoResponse;
 use axum::Json;
 use candid::Principal;
 use event::Event;
-use http::StatusCode;
+use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::error::Error;
@@ -134,7 +134,7 @@ async fn post_event(
     Json(payload): Json<EventRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let auth_token = headers
-        .get("Authorization")
+        .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .map(|value| value.trim_start_matches("Bearer ").to_string());
 
