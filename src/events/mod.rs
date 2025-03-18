@@ -133,21 +133,12 @@ async fn post_event(
     headers: axum::http::HeaderMap,
     Json(payload): Json<EventRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    log::info!("Received event: {:?}", payload);
-
     let auth_token = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .map(|value| value.trim_start_matches("Bearer ").to_string());
 
-    match auth_token.clone() {
-        Some(token) => log::info!("Auth token length: {:?}", token.len()),
-        None => log::info!("No auth token"),
-    };
-
     check_auth_events(auth_token).map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
-
-    log::info!("valid auth");
 
     let warehouse_event = WarehouseEvent {
         event: payload.event,
@@ -155,8 +146,6 @@ async fn post_event(
     };
 
     let event = Event::new(warehouse_event);
-
-    log::info!("before process_event_impl");
 
     process_event_impl(event, state.clone())
         .await
@@ -167,8 +156,6 @@ async fn post_event(
                 "Failed to process event".to_string(),
             )
         })?;
-
-    log::info!("after process_event_impl success");
 
     Ok((StatusCode::OK, "Event processed".to_string()))
 }
@@ -181,8 +168,6 @@ async fn process_event_impl(
         log::error!("Failed to parse params: {}", e);
         anyhow::anyhow!("Failed to parse params: {}", e)
     })?;
-
-    log::info!("params parsed success: {:?}", params);
 
     let event_type: &str = &event.event.event;
 
