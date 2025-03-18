@@ -44,6 +44,7 @@ mod auth;
 pub mod canister;
 mod config;
 mod consts;
+mod duplicate_video;
 mod error;
 mod events;
 mod offchain_service;
