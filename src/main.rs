@@ -21,6 +21,7 @@ use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
 use qstash::qstash_router;
+use tonic::transport::Server;
 use tower::make::Shared;
 use tower::steer::Steer;
 use tower_http::cors::CorsLayer;
@@ -121,27 +122,29 @@ async fn main() -> Result<()> {
         .build_v1()
         .unwrap();
 
-    let mut grpc = tonic::service::Routes::builder();
-    grpc.add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
-        WarehouseEventsService {
-            shared_state: shared_state.clone(),
-        },
-        check_auth_grpc,
-    )))
-    .add_service(tonic_web::enable(OffChainServer::with_interceptor(
-        OffChainService {
-            shared_state: shared_state.clone(),
-        },
-        check_auth_grpc,
-    )))
-    .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
-        OffChainCanisterService {
-            shared_state: shared_state.clone(),
-        },
-        check_auth_grpc_offchain_mlfeed,
-    )))
-    .add_service(reflection_service);
-    let grpc_axum = grpc.routes().into_axum_router();
+    let grpc_axum = Server::builder()
+        .accept_http1(true)
+        .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
+            WarehouseEventsService {
+                shared_state: shared_state.clone(),
+            },
+            check_auth_grpc,
+        )))
+        .add_service(tonic_web::enable(OffChainServer::with_interceptor(
+            OffChainService {
+                shared_state: shared_state.clone(),
+            },
+            check_auth_grpc,
+        )))
+        .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
+            OffChainCanisterService {
+                shared_state: shared_state.clone(),
+            },
+            check_auth_grpc_offchain_mlfeed,
+        )))
+        .add_service(reflection_service)
+        .into_service()
+        .into_axum_router();
 
     let http_grpc = Steer::new(
         vec![http, grpc_axum],
