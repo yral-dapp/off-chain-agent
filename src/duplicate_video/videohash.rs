@@ -21,6 +21,30 @@ pub const MAX_FRAMES: usize = 60;
 /// Size of the generated hash in bits
 pub const HASH_SIZE: usize = 64;
 
+struct TempDir {
+    path: PathBuf,
+}
+
+impl TempDir {
+    fn new(prefix: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let path = create_ram_temp_dir(prefix)?;
+        Ok(Self { path })
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        if self.path.exists() {
+            log::debug!("Cleaning up temporary directory: {:?}", self.path);
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
 fn create_ram_temp_dir(prefix: &str) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let count = COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -78,10 +102,12 @@ impl VideoHash {
     pub fn fast_hash(video_path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
         let start = Instant::now();
 
-        let temp_dir = create_ram_temp_dir("videohash")?;
-        log::debug!("Using temp directory: {:?}", temp_dir);
+        // Use the TempDir struct instead of manual cleanup
+        let temp_dir = TempDir::new("videohash")?;
+        log::debug!("Using temp directory: {:?}", temp_dir.path());
 
         let output_pattern = temp_dir
+            .path()
             .join("frame_%04d.jpg")
             .to_string_lossy()
             .to_string();
@@ -141,12 +167,12 @@ impl VideoHash {
             .status()?;
 
         if !output.success() {
-            let _ = fs::remove_dir_all(&temp_dir);
+            // No need to manually clean up - will happen in Drop
             return Err("Failed to extract frames with ffmpeg".into());
         }
 
         let mut frame_paths = Vec::new();
-        for entry in fs::read_dir(&temp_dir)? {
+        for entry in fs::read_dir(temp_dir.path())? {
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
@@ -160,7 +186,7 @@ impl VideoHash {
         frame_paths.sort();
 
         if frame_paths.is_empty() {
-            let _ = fs::remove_dir_all(&temp_dir);
+            // No need to manually clean up - will happen in Drop
             return Err("No frames could be extracted".into());
         }
 
@@ -190,7 +216,7 @@ impl VideoHash {
             .collect();
 
         if frames.is_empty() {
-            let _ = fs::remove_dir_all(&temp_dir);
+            // No need to manually clean up - will happen in Drop
             return Err("Failed to load any frames".into());
         }
 
@@ -202,8 +228,7 @@ impl VideoHash {
         let final_hash = Self::xor_hashes(wavelet_hash?, color_hash?);
         log::info!("Hash calculation took {:?}", hash_start.elapsed());
 
-        log::debug!("Cleaning up temporary files in: {:?}", temp_dir);
-        let _ = fs::remove_dir_all(&temp_dir);
+        // temp_dir will be automatically cleaned up when it goes out of scope
 
         Ok(final_hash)
     }
