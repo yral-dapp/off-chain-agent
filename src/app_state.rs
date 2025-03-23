@@ -13,6 +13,7 @@ use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
+use yral_ml_feed_cache::MLFeedCacheState;
 use yup_oauth2::hyper_rustls::HttpsConnector;
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
 
@@ -31,6 +32,8 @@ pub struct AppState {
     pub qstash_client: QStashClient,
     #[cfg(not(feature = "local-bin"))]
     pub gcs_client: Arc<cloud_storage::Client>,
+    #[cfg(not(feature = "local-bin"))]
+    pub ml_feed_cache: MLFeedCacheState,
 }
 
 impl AppState {
@@ -50,6 +53,8 @@ impl AppState {
             qstash_client: init_qstash_client().await,
             #[cfg(not(feature = "local-bin"))]
             gcs_client: Arc::new(cloud_storage::Client::default()),
+            #[cfg(not(feature = "local-bin"))]
+            ml_feed_cache: MLFeedCacheState::new().await,
         }
     }
 
