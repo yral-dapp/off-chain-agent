@@ -1,10 +1,6 @@
 /target
 /.direnv
 gha-creds-*.json
-<<<<<<< HEAD
-.DS_Store
 .env
-=======
 **/.DS_Store
->>>>>>> main
 google_service_account.json
