@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::consts::NSFW_SERVER_URL;
+use crate::consts::{NSFW_SERVER_URL, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL};
 use anyhow::{Context, Error};
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::{
@@ -208,10 +208,8 @@ pub async fn nsfw_job(
     push_nsfw_data_bigquery(bigquery_client, nsfw_info.clone(), video_id.clone()).await?;
 
     if nsfw_info.is_nsfw {
-        let key = format!("{publisher_user_id}/{video_id}.mp4");
-
         // move video to nsfw bucket in storj
-        let res = move_to_nsfw_bucket(&state.storj_client, &key).await?;
+        let res = move_to_nsfw_bucket(&publisher_user_id, &video_id).await?;
     }
 
     // enqueue qstash job to detect nsfw v2
@@ -223,24 +221,22 @@ pub async fn nsfw_job(
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
 
-async fn move_to_nsfw_bucket(client: &aws_sdk_s3::Client, key: &str) -> Result<(), AppError> {
-    client
-        .copy_object()
-        .key(key)
-        .bucket("yral-nsfw-videos")
-        .copy_source(format!("yral-videos/{key}"))
-        .send()
-        .await
-        .context("Couldn't copy video across buckets")?;
+async fn move_to_nsfw_bucket(publisher_use_id: &str, video_id: &str) -> Result<(), AppError> {
+    let client = reqwest::Client::new();
 
     client
-        .delete_object()
-        .bucket("yral-videos")
-        .key(key)
+        .post(
+            STORJ_INTERFACE_URL
+                .join("/move-to-nsfw")
+                .expect("url to be valid"),
+        )
+        .json(&storj_interface::move2nsfw::Args {
+            publisher_user_id: publisher_use_id.into(),
+            video_id: video_id.into(),
+        })
+        .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
         .send()
-        .await
-        .context("Coulnd't delete video from clean bucket")?;
-
+        .await?;
     Ok(())
 }
 

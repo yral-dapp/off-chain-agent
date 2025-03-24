@@ -65,8 +65,6 @@ google-cloud-bigquery = { version = "0.13.1", default-features = false, features
     "auth",
     "rustls-tls",
 ] }
-aws-config = "1.5.10"
-aws-sdk-s3 = "1.65.0"
 hex = "0.4.3"
 ic-sns-governance = { git = "https://github.com/dfinity/ic", rev = "tags/release-2024-10-17_03-07-base" }
 ic-utils = "0.38.1"
@@ -77,6 +75,7 @@ tower-http = { version = "0.6.2", features = ["cors"] }
 image = "0.24"
 rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
+storj-interface = { git = "https://github.com/yral-dapp/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
 
 [build-dependencies]
 tonic-build = "0.12"

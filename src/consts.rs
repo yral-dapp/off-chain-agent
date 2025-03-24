@@ -29,3 +29,10 @@ pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str =
     "https://yral-ml-feed-cache.go-bazzinga.workers.dev";
 
 pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
+
+pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
+    Url::parse("https://storjinterzvpuuk9pt3-1a53e66524f5042a.tec-s1.onthetaedgecloud.com").unwrap()
+});
+
+pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
+    Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").unwrap_or_else(|_| "testtoken".into()));

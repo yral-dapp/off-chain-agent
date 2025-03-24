@@ -2,13 +2,14 @@ use std::{collections::HashMap, env, sync::Arc, time::UNIX_EPOCH};
 
 use crate::{
     app_state::AppState,
-    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
+    consts::{
+        BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL,
+    },
     events::warehouse_events::WarehouseEvent,
     utils::{cf_images::upload_base64_image, time::system_time_to_custom},
     AppError,
 };
 use anyhow::Context;
-use aws_sdk_s3::primitives::ByteStream;
 use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
@@ -379,7 +380,6 @@ pub async fn upload_video_gcs(
     Json(payload): Json<UploadVideoInfo>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     upload_gcs_impl(
-        &state.storj_client,
         &payload.video_id,
         &payload.canister_id,
         payload.post_id,
@@ -399,7 +399,6 @@ pub async fn upload_video_gcs(
 }
 
 pub async fn upload_gcs_impl(
-    storj_client: &aws_sdk_s3::Client,
     uid: &str,
     canister_id: &str,
     post_id: u64,
@@ -412,42 +411,47 @@ pub async fn upload_gcs_impl(
     );
     let name = format!("{}.mp4", uid);
 
-    let file = reqwest::Client::new()
+    let http_client = reqwest::Client::new();
+    let file = http_client
         .get(&url)
         .send()
         .await
         .context("Couldn't send get request to cf uid")?
-        .bytes()
-        .await
-        .context("Couldn't read all bytes from the get request")?;
-
-    let storj_res = storj_client
-        .put_object()
-        .bucket("yral-videos")
-        .body(ByteStream::from(file.clone()))
-        .key(format!("{publisher_user_id}/{name}"))
-        .metadata("canister_id", canister_id)
-        .metadata("post_id", post_id.to_string())
-        .metadata("timestamp", &timestamp_str)
-        .send()
-        .await
-        .context("Couldn't send put object request to storj")?;
+        .bytes_stream();
 
     // write to GCS
     let gcs_client = cloud_storage::Client::default();
     let mut res_obj = gcs_client
         .object()
-        .create("yral-videos", file.into(), &name, "video/mp4")
+        .create_streamed("yral-videos", file, None, &name, "video/mp4")
         .await?;
 
     let mut hashmap = HashMap::new();
     hashmap.insert("canister_id".to_string(), canister_id.to_string());
     hashmap.insert("post_id".to_string(), post_id.to_string());
     hashmap.insert("timestamp".to_string(), timestamp_str);
-    res_obj.metadata = Some(hashmap);
+    res_obj.metadata = Some(hashmap.clone());
 
     // update
     let _ = gcs_client.object().update(&res_obj).await?;
+
+    let duplication_args = storj_interface::duplicate::Args {
+        publisher_user_id: publisher_user_id.into(),
+        video_id: uid.into(),
+        is_nsfw: false,
+        metadata: hashmap.into_iter().collect(),
+    };
+
+    http_client
+        .post(
+            STORJ_INTERFACE_URL
+                .join("/duplicate")
+                .expect("url to be valid"),
+        )
+        .json(&duplication_args)
+        .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
+        .send()
+        .await?;
 
     Ok(())
 }
