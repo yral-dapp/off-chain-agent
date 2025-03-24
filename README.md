@@ -39,33 +39,39 @@ flowchart TD
     end
 ```
 
-### Monitoring
+### Video Processing Pipeline (NSFW detection)
 
 ```mermaid
 flowchart TD
-    IndividualCansiter1[(Individual User <br>Canister 1)]
-    IndividualCansiter2[(Individual User <br>Canister 2)]
-    UserIndex[(User Index)]
-    PlatformOrchestrator[Platform <br>Orchestrator]
     OffChainAgent[OffChain Agent]
-    Prom[Prometheus]
-    Grafana[Grafana]
+    Frontend[Frontend SSR]
+    CFStream[Cloudflare<br> Stream]
+    GCSVideos[GCS Videos bucket]
+    GCSFrames[GCS Frames bucket]
+    NSFWServer[NSFW Server]
+    BQEmbedding[BQ Embedding table]
+    BQNSFW[BQ NSFW table]
+    Upstash[Upstash]
 
-    OffChainAgent --[1.1]--> PlatformOrchestrator
-    OffChainAgent --[1.2]--> UserIndex
+    Frontend --[1]--> CFStream
+    Frontend --[2.1]--> OffChainAgent
+    OffChainAgent --[2.x.1]--> Upstash
+    Upstash --[2.x.2]--> OffChainAgent
+    OffChainAgent --[2.2 (from Q1)]--> GCSVideos
+    OffChainAgent --[2.3 (from Q2)]--> GCSFrames
+    OffChainAgent --[2.4 (from Q3)]--> NSFWServer
+    BQEmbedding --[3.1]--> GCSVideos
+    NSFWServer --[2.4.1]--> GCSFrames
+    OffChainAgent --[2.5]--> BQNSFW
 
-    Prom -- 1(http_sd_config <br> periodically fetch canisters list) --> OffChainAgent
-    Prom -- 2 (/metrics) --> IndividualCansiter1
-    Prom -- 2 (/metrics) --> IndividualCansiter2
-
-    subgraph OnChain
-        PlatformOrchestrator
-        UserIndex
-        IndividualCansiter1
-        IndividualCansiter2
+    subgraph GCS
+        GCSVideos
+        GCSFrames
     end
 
-    subgraph GoogleCloud[DigitalOcean]
-        Prom --> Grafana
+    subgraph BigQuery
+        BQEmbedding
+        BQNSFW
     end
+
 ```

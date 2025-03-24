@@ -7,11 +7,15 @@ use ic_agent::{
 };
 use k256::{elliptic_curve::JwkEcKey, SecretKey};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-use crate::{app_state::AppState, events::VideoUploadSuccessful, utils::api_response::ApiResponse};
+use crate::{
+    app_state::AppState, events::VideoUploadSuccessful, types::DelegatedIdentityWire,
+    utils::api_response::ApiResponse,
+};
 
 use yral_canisters_client::individual_user_template::{
-    IndividualUserTemplate, PostDetailsFromFrontend, Result1,
+    IndividualUserTemplate, PostDetailsFromFrontend, Result2,
 };
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -43,13 +47,6 @@ impl From<PostDetails> for PostDetailsFromFrontend {
 }
 
 pub struct UploadUserVideoResData;
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct DelegatedIdentityWire {
-    from_key: Vec<u8>,
-    to_secret: JwkEcKey,
-    delegation_chain: Vec<SignedDelegation>,
-}
 
 impl TryFrom<DelegatedIdentityWire> for DelegatedIdentity {
     fn try_from(value: DelegatedIdentityWire) -> Result<Self, Self::Error> {
@@ -97,7 +94,7 @@ pub async fn upload_user_video_impl(
         .await?;
 
     match upload_video_res {
-        Result1::Ok(post_id) => {
+        Result2::Ok(post_id) => {
             let upload_video_event = VideoUploadSuccessful {
                 shared_state: app_state.clone(),
             };
@@ -123,6 +120,6 @@ pub async fn upload_user_video_impl(
 
             Ok(post_id)
         }
-        Result1::Err(e) => Err(e.into()),
+        Result2::Err(e) => Err(e.into()),
     }
 }

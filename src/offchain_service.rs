@@ -33,6 +33,7 @@ impl OffChain for OffChainService {
         &self,
         request: tonic::Request<ReportPostRequest>,
     ) -> core::result::Result<tonic::Response<Empty>, tonic::Status> {
+        let shared_state = self.shared_state.clone();
         let request = request.into_inner();
 
         let text_str = format!(
@@ -98,6 +99,41 @@ impl OffChain for OffChainService {
                 "Error sending data to Google Chat",
             ));
         }
+
+        let user_principal = Principal::from_text(&request.reporter_id)
+            .map_err(|_| tonic::Status::new(tonic::Code::Unknown, "Invalid reporter id"))?;
+        let user_canister_id = shared_state
+            .get_individual_canister_by_user_principal(user_principal)
+            .await
+            .map_err(|_| {
+                tonic::Status::new(tonic::Code::Unknown, "Failed to get user canister id")
+            })?;
+        let publisher_canister_id =
+            Principal::from_text(&request.publisher_canister_id).map_err(|_| {
+                tonic::Status::new(tonic::Code::Unknown, "Invalid publisher canister id")
+            })?;
+        let post_report_request = crate::posts::ReportPostRequest {
+            canister_id: publisher_canister_id,
+            post_id: request
+                .post_id
+                .parse::<u64>()
+                .map_err(|_| tonic::Status::new(tonic::Code::Unknown, "Invalid post id"))?,
+            video_id: request.video_id,
+            user_canister_id,
+            user_principal,
+            reason: request.reason,
+        };
+
+        let qstash_client = shared_state.qstash_client.clone();
+        qstash_client
+            .publish_report_post(post_report_request)
+            .await
+            .map_err(|_| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    "Error sending data to qstash. request from leptos ssr",
+                )
+            })?;
 
         Ok(tonic::Response::new(Empty {}))
     }

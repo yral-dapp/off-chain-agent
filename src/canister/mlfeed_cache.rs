@@ -3,10 +3,16 @@ use std::sync::Arc;
 use crate::{
     app_state::AppState,
     canister::mlfeed_cache::off_chain::{Empty, UpdateMlFeedCacheRequest},
+    consts::CLOUDFLARE_ML_FEED_CACHE_WORKER_URL,
+    AppError,
 };
+use axum::extract::State;
 use candid::Principal;
+use google_cloud_bigquery::http::{job::query::QueryRequest, tabledata::list::Value};
+use http::StatusCode;
 use off_chain::{off_chain_canister_server::OffChainCanister, MlFeedCacheItem};
-use yral_canisters_client::individual_user_template::Result25;
+use serde::{Deserialize, Serialize};
+use yral_canisters_client::individual_user_template::Result24;
 
 pub mod off_chain {
     tonic::include_proto!("offchain_canister");
@@ -41,7 +47,7 @@ impl OffChainCanister for OffChainCanisterService {
                 tonic::Status::internal(format!("Error updating ml feed cache: {:?}", e))
             })?;
 
-        if let Result25::Err(err) = res {
+        if let Result24::Err(err) = res {
             log::error!("Error updating ml feed cache: {:?}", err);
             return Err(tonic::Status::internal(format!(
                 "Error updating ml feed cache: {:?}",
@@ -66,4 +72,122 @@ impl From<MlFeedCacheItem> for yral_canisters_client::individual_user_template::
             },
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CustomMlFeedCacheItem {
+    post_id: u64,
+    canister_id: String,
+    video_id: String,
+    creator_principal_id: String,
+}
+
+#[cfg(not(feature = "local-bin"))]
+pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    use super::queries::GET_LATEST_NON_NSFW_POSTS_QUERY;
+
+    let bigquery_client = state.bigquery_client.clone();
+    let request = QueryRequest {
+        query: GET_LATEST_NON_NSFW_POSTS_QUERY.to_string(),
+        ..Default::default()
+    };
+
+    let rs = bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await?;
+
+    let mut offchain_items = Vec::new();
+    for row in rs.rows.unwrap_or_default() {
+        let mut canister_id_val = "".to_string();
+        if let Value::String(canister_id) = &row.f[2].v {
+            canister_id_val = canister_id.clone();
+        }
+
+        let mut post_id_val = "".to_string();
+        if let Value::String(post_id) = &row.f[3].v {
+            post_id_val = post_id.clone();
+        }
+
+        offchain_items.push(CustomMlFeedCacheItem {
+            post_id: post_id_val.parse().unwrap(),
+            canister_id: canister_id_val,
+            video_id: "".to_string(),
+            creator_principal_id: "".to_string(),
+        });
+    }
+
+    let cf_worker_url = CLOUDFLARE_ML_FEED_CACHE_WORKER_URL;
+
+    // call POST /feed-cache/<CANISTER_ID>
+    let url = format!("{}/feed-cache/{}", cf_worker_url, "global-feed");
+    let client = reqwest::Client::new();
+    let response = client.post(url).json(&offchain_items).send().await;
+
+    match response {
+        Ok(_) => (),
+        Err(e) => println!("Failed to get update_ml_feed_cache response: {}", e),
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "local-bin")]
+pub async fn update_ml_feed_cache(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    Ok(())
+}
+
+#[cfg(not(feature = "local-bin"))]
+pub async fn update_ml_feed_cache_nsfw(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    use super::queries::GET_LATEST_NSFW_POSTS_QUERY;
+
+    let bigquery_client = state.bigquery_client.clone();
+    let request = QueryRequest {
+        query: GET_LATEST_NSFW_POSTS_QUERY.to_string(),
+        ..Default::default()
+    };
+
+    let rs = bigquery_client
+        .job()
+        .query("hot-or-not-feed-intelligence", &request)
+        .await?;
+
+    let mut offchain_items = Vec::new();
+    for row in rs.rows.unwrap_or_default() {
+        let mut canister_id_val = "".to_string();
+        if let Value::String(canister_id) = &row.f[2].v {
+            canister_id_val = canister_id.clone();
+        }
+
+        let mut post_id_val = "".to_string();
+        if let Value::String(post_id) = &row.f[3].v {
+            post_id_val = post_id.clone();
+        }
+
+        offchain_items.push(CustomMlFeedCacheItem {
+            post_id: post_id_val.parse().unwrap(),
+            canister_id: canister_id_val,
+            video_id: "".to_string(),
+            creator_principal_id: "".to_string(),
+        });
+    }
+
+    let cf_worker_url = CLOUDFLARE_ML_FEED_CACHE_WORKER_URL;
+
+    // call POST /feed-cache/<CANISTER_ID>
+    let url = format!("{}/feed-cache/{}", cf_worker_url, "global-feed-nsfw");
+    let client = reqwest::Client::new();
+    let response = client.post(url).json(&offchain_items).send().await;
+
+    match response {
+        Ok(_) => (),
+        Err(e) => println!("Failed to get update_ml_feed_cache response: {}", e),
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "local-bin")]
+pub async fn update_ml_feed_cache_nsfw(State(state): State<Arc<AppState>>) -> Result<(), AppError> {
+    Ok(())
 }

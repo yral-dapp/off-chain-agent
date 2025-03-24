@@ -4,7 +4,7 @@ use crate::{
     app_state::AppState,
     consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
     events::warehouse_events::WarehouseEvent,
-    utils::cf_images::upload_base64_image,
+    utils::{cf_images::upload_base64_image, time::system_time_to_custom},
     AppError,
 };
 use anyhow::Context;
@@ -298,17 +298,6 @@ async fn stream_to_bigquery(
     }
 }
 
-fn system_time_to_custom(time: std::time::SystemTime) -> SystemTime {
-    let duration = time
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-
-    SystemTime {
-        nanos_since_epoch: duration.subsec_nanos(),
-        secs_since_epoch: duration.as_secs(),
-    }
-}
-
 #[cfg(feature = "local-bin")]
 pub async fn stream_to_bigquery_token_metadata_impl_v2(
     app_state: &AppState,
@@ -462,30 +451,3 @@ pub async fn upload_gcs_impl(
 
     Ok(())
 }
-
-// test endpoint , to be removed later
-// pub async fn test_upload_to_qstash(
-//     State(state): State<Arc<AppState>>,
-//     Json(payload): Json<UploadVideoInfo>,
-// ) -> Result<Json<serde_json::Value>, AppError> {
-//     let qstash_client = state.qstash_client.clone();
-
-//     let res = qstash_client
-//         .publish_video(
-//             &payload.video_id,
-//             &payload.canister_id,
-//             payload.post_id,
-//             payload.timestamp,
-//         )
-//         .await;
-//     if res.is_err() {
-//         error!(
-//             "upload_to_gcs: Error sending data to qstash: {:?}",
-//             res.err()
-//         );
-//     }
-
-//     Ok(Json(
-//         serde_json::json!({ "message": "Video uploaded to GCS" }),
-//     ))
-// }
