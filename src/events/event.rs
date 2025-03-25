@@ -383,14 +383,13 @@ pub async fn upload_video_gcs(
         &payload.video_id,
         &payload.canister_id,
         payload.post_id,
-        payload.timestamp,
-        &payload.publisher_user_id,
+        &payload.timestamp,
     )
     .await?;
 
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_frames(&payload.video_id, &payload.publisher_user_id)
+        .publish_video_frames(&payload.video_id, &payload)
         .await?;
 
     Ok(Json(
@@ -402,8 +401,7 @@ pub async fn upload_gcs_impl(
     uid: &str,
     canister_id: &str,
     post_id: u64,
-    timestamp_str: String,
-    publisher_user_id: &str,
+    timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
     let url = format!(
         "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
@@ -411,8 +409,7 @@ pub async fn upload_gcs_impl(
     );
     let name = format!("{}.mp4", uid);
 
-    let http_client = reqwest::Client::new();
-    let file = http_client
+    let file = reqwest::Client::new()
         .get(&url)
         .send()
         .await
@@ -429,29 +426,11 @@ pub async fn upload_gcs_impl(
     let mut hashmap = HashMap::new();
     hashmap.insert("canister_id".to_string(), canister_id.to_string());
     hashmap.insert("post_id".to_string(), post_id.to_string());
-    hashmap.insert("timestamp".to_string(), timestamp_str);
+    hashmap.insert("timestamp".to_string(), timestamp_str.to_string());
     res_obj.metadata = Some(hashmap.clone());
 
     // update
     let _ = gcs_client.object().update(&res_obj).await?;
-
-    let duplication_args = storj_interface::duplicate::Args {
-        publisher_user_id: publisher_user_id.into(),
-        video_id: uid.into(),
-        is_nsfw: false,
-        metadata: hashmap.into_iter().collect(),
-    };
-
-    http_client
-        .post(
-            STORJ_INTERFACE_URL
-                .join("/duplicate")
-                .expect("url to be valid"),
-        )
-        .json(&duplication_args)
-        .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
-        .send()
-        .await?;
 
     Ok(())
 }

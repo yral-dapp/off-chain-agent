@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
     process::Command,
@@ -20,6 +21,8 @@ use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::{metadata::MetadataValue, Request};
 
 use crate::{app_state::AppState, AppError};
+
+use super::event::UploadVideoInfo;
 
 pub mod nsfw_detector {
     tonic::include_proto!("nsfw_detector");
@@ -106,7 +109,7 @@ pub async fn upload_frames_to_gcs(
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VideoRequest {
     video_id: String,
-    publisher_user_id: String,
+    video_info: UploadVideoInfo,
 }
 
 // extract_frames_and_upload API handler which takes video_id as queryparam in axum
@@ -129,7 +132,7 @@ pub async fn extract_frames_and_upload(
     // enqueue qstash job to detect nsfw
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_nsfw_detection(&video_id, &payload.publisher_user_id)
+        .publish_video_nsfw_detection(&video_id, &payload.video_info)
         .await?;
 
     Ok(Json(
@@ -198,7 +201,7 @@ pub async fn nsfw_job(
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id;
-    let publisher_user_id = payload.publisher_user_id;
+    let video_info = payload.video_info;
 
     let nsfw_info = get_video_nsfw_info(video_id.clone()).await?;
 
@@ -207,10 +210,8 @@ pub async fn nsfw_job(
 
     push_nsfw_data_bigquery(bigquery_client, nsfw_info.clone(), video_id.clone()).await?;
 
-    if nsfw_info.is_nsfw {
-        // move video to nsfw bucket in storj
-        let res = move_to_nsfw_bucket(&publisher_user_id, &video_id).await?;
-    }
+    // also push to storj
+    let res = duplicate_to_storj(video_info, nsfw_info.is_nsfw).await?;
 
     // enqueue qstash job to detect nsfw v2
     let qstash_client = state.qstash_client.clone();
@@ -221,19 +222,26 @@ pub async fn nsfw_job(
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
 
-async fn move_to_nsfw_bucket(publisher_use_id: &str, video_id: &str) -> Result<(), AppError> {
+async fn duplicate_to_storj(video_info: UploadVideoInfo, is_nsfw: bool) -> Result<(), AppError> {
     let client = reqwest::Client::new();
+    let duplicate_args = storj_interface::duplicate::Args {
+        publisher_user_id: video_info.publisher_user_id,
+        video_id: video_info.video_id,
+        is_nsfw,
+        metadata: BTreeMap::from([
+            ("post_id".into(), video_info.post_id.to_string()),
+            ("canister_id".into(), video_info.canister_id),
+            ("timestamp".into(), video_info.timestamp),
+        ]),
+    };
 
     client
         .post(
             STORJ_INTERFACE_URL
-                .join("/move-to-nsfw")
+                .join("/duplicate")
                 .expect("url to be valid"),
         )
-        .json(&storj_interface::move2nsfw::Args {
-            publisher_user_id: publisher_use_id.into(),
-            video_id: video_id.into(),
-        })
+        .json(&duplicate_args)
         .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
         .send()
         .await?;

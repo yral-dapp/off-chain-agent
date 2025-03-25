@@ -11,6 +11,7 @@ use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 use crate::{
     canister::upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
     consts::OFF_CHAIN_AGENT_URL,
+    events::event::UploadVideoInfo,
     posts::ReportPostRequest,
 };
 
@@ -65,7 +66,8 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("upstash-delay", "600s")
+            // TODO: bring back delay before merging
+            // .header("upstash-delay", "600s")
             .send()
             .await?;
 
@@ -75,7 +77,7 @@ impl QStashClient {
     pub async fn publish_video_frames(
         &self,
         video_id: &str,
-        publisher_user_id: &str,
+        video_info: &UploadVideoInfo,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_frames")
@@ -84,7 +86,7 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
-            "publisher_user_id": publisher_user_id
+            "video_info": video_info,
         });
 
         self.client
@@ -101,7 +103,7 @@ impl QStashClient {
     pub async fn publish_video_nsfw_detection(
         &self,
         video_id: &str,
-        publisher_user_id: &str,
+        video_info: &UploadVideoInfo,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection")
@@ -110,7 +112,7 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
-            "publisher_user_id": publisher_user_id,
+            "video_info": video_info,
         });
 
         self.client

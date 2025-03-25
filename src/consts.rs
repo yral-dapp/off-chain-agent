@@ -21,7 +21,7 @@ pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
 // TODO: change this back to https://icp-off-chain-agent.fly.dev/ before merging
 pub static OFF_CHAIN_AGENT_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://pr-102-yral-dapp-off-chain-agent.fly.dev/").unwrap());
+    Lazy::new(|| Url::parse("https://pr-167-yral-dapp-off-chain-agent.fly.dev/").unwrap());
 
 pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
 
