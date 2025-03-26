@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::consts::{NSFW_SERVER_URL, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL};
-use anyhow::{Context, Error};
+use anyhow::Error;
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::{
     job::query::QueryRequest,
