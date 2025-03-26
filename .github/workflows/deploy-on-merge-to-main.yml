@@ -55,7 +55,7 @@ jobs:
           flyctl secrets set CF_IMAGES_API_TOKEN="$CF_IMAGES_API_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set NSFW_GRPC_TOKEN="$NSFW_GRPC_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set QSTASH_AUTH_TOKEN="$QSTASH_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
-          flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "$APP_NAME" --stage
+          flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
