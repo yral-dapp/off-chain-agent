@@ -61,11 +61,9 @@ jobs:
           flyctl secrets set CF_IMAGES_API_TOKEN="$CF_IMAGES_API_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set NSFW_GRPC_TOKEN="$NSFW_GRPC_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set QSTASH_AUTH_TOKEN="$QSTASH_AUTH_TOKEN" --app "$APP_NAME" --stage
-          flyctl secrets set STORJ_ACCESS_KEY_ID="$STORJ_ACCESS_KEY_ID" --app "$APP_NAME" --stage
-          flyctl secrets set STORJ_SECRET_KEY="$STORJ_SECRET_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set STORJ_GATEWAY_URL="$STORJ_GATEWAY_URL" --app "$APP_NAME" --stage
+          flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "$APP_NAME" --stage
 
-          flyctl deploy --app $APP_NAME
+          flyctl secrets deploy --app $APP_NAME
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
@@ -83,6 +81,4 @@ jobs:
           CF_IMAGES_API_TOKEN: ${{ secrets.CLOUDFLARE_IMAGES_READ_AND_WRITE_API_TOKEN }}
           NSFW_GRPC_TOKEN: ${{ secrets.TOKEN_TO_SIGN_OUTGOING_CALLS_TO_NSFW_DETECT_SERVICE }}
           QSTASH_AUTH_TOKEN: ${{ secrets.QSTASH_TOKEN }}
-          STORJ_ACCESS_KEY_ID: ${{ secrets.STORJ_ACCESS_KEY_ID }}
-          STORJ_SECRET_KEY: ${{ secrets.STORJ_SECRET_KEY }}
-          STORJ_GATEWAY_URL: ${{ secrets.STORJ_GATEWAY_URL }}
+          STORJ_INTERFACE_TOKEN: ${{ secrets.STORJ_INTERFACE_TOKEN }}
