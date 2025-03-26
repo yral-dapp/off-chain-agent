@@ -208,7 +208,7 @@ pub async fn nsfw_job(
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
 
-    push_nsfw_data_bigquery(bigquery_client, nsfw_info.clone(), video_id.clone()).await?;
+    push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
 
     // enqueue qstash job to detect nsfw v2
     let qstash_client = state.qstash_client.clone();
