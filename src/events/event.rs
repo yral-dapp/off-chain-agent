@@ -9,7 +9,6 @@ use crate::{
     utils::{cf_images::upload_base64_image, time::system_time_to_custom},
     AppError,
 };
-use anyhow::Context;
 use axum::{extract::State, Json};
 use candid::Principal;
 use chrono::{DateTime, Utc};
@@ -412,8 +411,7 @@ pub async fn upload_gcs_impl(
     let file = reqwest::Client::new()
         .get(&url)
         .send()
-        .await
-        .context("Couldn't send get request to cf uid")?
+        .await?
         .bytes_stream();
 
     // write to GCS
@@ -427,7 +425,7 @@ pub async fn upload_gcs_impl(
     hashmap.insert("canister_id".to_string(), canister_id.to_string());
     hashmap.insert("post_id".to_string(), post_id.to_string());
     hashmap.insert("timestamp".to_string(), timestamp_str.to_string());
-    res_obj.metadata = Some(hashmap.clone());
+    res_obj.metadata = Some(hashmap);
 
     // update
     let _ = gcs_client.object().update(&res_obj).await?;
