@@ -210,13 +210,10 @@ pub async fn nsfw_job(
 
     push_nsfw_data_bigquery(bigquery_client, nsfw_info.clone(), video_id.clone()).await?;
 
-    // also push to storj
-    let res = duplicate_to_storj(video_info, nsfw_info.is_nsfw).await?;
-
     // enqueue qstash job to detect nsfw v2
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_nsfw_detection_v2(&video_id)
+        .publish_video_nsfw_detection_v2(&video_id, video_info)
         .await?;
 
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
@@ -315,13 +312,17 @@ pub async fn nsfw_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    const NSFW_THRESHOLD: f32 = 0.5;
     let video_id = payload.video_id;
 
     let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;
+    let is_nsfw = nsfw_prob >= NSFW_THRESHOLD;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
     push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
+
+    duplicate_to_storj(payload.video_info, is_nsfw).await?;
 
     Ok(Json(
         serde_json::json!({ "message": "NSFW v2 job completed" }),

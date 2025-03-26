@@ -129,6 +129,7 @@ impl QStashClient {
     pub async fn publish_video_nsfw_detection_v2(
         &self,
         video_id: &str,
+        video_info: UploadVideoInfo,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection_v2")
@@ -137,6 +138,7 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
+            "video_info": video_info,
         });
 
         // Calculate delay until next :20 minute of any hour
