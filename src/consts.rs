@@ -31,7 +31,7 @@ pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str =
 pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
 
 pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
-    Url::parse("https://storjinterzvpuuk9pt3-1a53e66524f5042a.tec-s1.onthetaedgecloud.com").unwrap()
+    Url::parse("https://storjinter1q7nafg8c2-7d85d53cd8059621.tec-s1.onthetaedgecloud.com").unwrap()
 });
 
 pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
