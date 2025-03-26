@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::consts::{NSFW_SERVER_URL, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL};
+use crate::consts::{NSFW_SERVER_URL, NSFW_THRESHOLD, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL};
 use anyhow::Error;
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::{
@@ -312,7 +312,6 @@ pub async fn nsfw_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    const NSFW_THRESHOLD: f32 = 0.4;
     let video_id = payload.video_id;
 
     let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;

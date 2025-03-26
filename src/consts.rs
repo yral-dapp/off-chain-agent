@@ -1,6 +1,9 @@
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
+/// with nsfw detection v2, nsfw probablity greater or equal to this is considered nsfw
+pub const NSFW_THRESHOLD: f32 = 0.4;
+
 pub static BIGQUERY_INGESTION_URL: Lazy<Url> = Lazy::new(|| {
     Url::parse("https://bigquery.googleapis.com/bigquery/v2/projects/hot-or-not-feed-intelligence/datasets/analytics_335143420/tables/test_events_analytics/insertAll").unwrap()
 });
