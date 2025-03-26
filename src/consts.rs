@@ -21,7 +21,7 @@ pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
 // TODO: change this back to https://icp-off-chain-agent.fly.dev/ before merging
 pub static OFF_CHAIN_AGENT_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://pr-167-yral-dapp-off-chain-agent.fly.dev/").unwrap());
+    Lazy::new(|| Url::parse("https://icp-off-chain-agent.fly.dev/").unwrap());
 
 pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
 
@@ -35,4 +35,4 @@ pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
 });
 
 pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
-    Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").unwrap_or_else(|_| "testtoken".into()));
+    Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").expect("STORJ_INTERFACE_TOKEN to be set"));
