@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
     process::Command,
@@ -225,11 +224,12 @@ async fn duplicate_to_storj(video_info: UploadVideoInfo, is_nsfw: bool) -> Resul
         publisher_user_id: video_info.publisher_user_id,
         video_id: video_info.video_id,
         is_nsfw,
-        metadata: BTreeMap::from([
+        metadata: [
             ("post_id".into(), video_info.post_id.to_string()),
             ("canister_id".into(), video_info.canister_id),
             ("timestamp".into(), video_info.timestamp),
-        ]),
+        ]
+        .into(),
     };
 
     client
