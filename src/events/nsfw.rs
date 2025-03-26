@@ -312,7 +312,7 @@ pub async fn nsfw_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    const NSFW_THRESHOLD: f32 = 0.5;
+    const NSFW_THRESHOLD: f32 = 0.4;
     let video_id = payload.video_id;
 
     let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;
