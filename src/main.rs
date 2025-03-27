@@ -167,7 +167,7 @@ async fn main() -> Result<()> {
     );
 
     // run it
-    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50051)); // TODO: change to 50051
+    let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 50051));
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
     log::info!("listening on {}", addr);

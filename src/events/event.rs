@@ -184,7 +184,7 @@ impl Event {
                 let user_cache_key = format!(
                     "{}{}",
                     user_canister_id,
-                    if nsfw_probability < 0.5 {
+                    if nsfw_probability <= 0.4 {
                         USER_WATCH_HISTORY_CLEAN_SUFFIX
                     } else {
                         USER_WATCH_HISTORY_NSFW_SUFFIX
@@ -236,7 +236,7 @@ impl Event {
             let user_cache_key = format!(
                 "{}{}",
                 user_canister_id,
-                if nsfw_probability < 0.5 {
+                if nsfw_probability <= 0.4 {
                     USER_SUCCESS_HISTORY_CLEAN_SUFFIX
                 } else {
                     USER_SUCCESS_HISTORY_NSFW_SUFFIX
