@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, middleware, response::IntoResponse, Json};
 use candid::Principal;
-use events::{LikeVideoRequest, VideoDurationWatchedRequest};
 use serde::{Deserialize, Serialize};
 use tonic::transport::{Channel, ClientTlsConfig};
 use types::PostRequest;
@@ -21,7 +20,8 @@ use crate::{
     utils::grpc_clients::ml_feed::{ml_feed_client::MlFeedClient, VideoReportRequest},
 };
 
-pub mod events;
+// bulk events are planned through vector
+// pub mod events;
 mod types;
 mod utils;
 mod verify;
@@ -41,13 +41,6 @@ pub fn posts_router(state: Arc<AppState>) -> OpenApiRouter {
 
     router = verified_route!(router, handle_delete_post, DeletePostRequest, state);
     router = verified_route!(router, handle_report_post, ReportPostRequest, state);
-    router = verified_route!(router, events::handle_like_video, LikeVideoRequest, state);
-    router = verified_route!(
-        router,
-        events::handle_video_duration_watched,
-        VideoDurationWatchedRequest,
-        state
-    );
 
     router.with_state(state)
 }

@@ -55,6 +55,7 @@ jobs:
           flyctl secrets set CF_IMAGES_API_TOKEN="$CF_IMAGES_API_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set NSFW_GRPC_TOKEN="$NSFW_GRPC_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set QSTASH_AUTH_TOKEN="$QSTASH_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set ML_FEED_CACHE_REDIS_URL="$ML_FEED_CACHE_REDIS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
@@ -73,6 +74,7 @@ jobs:
           CF_IMAGES_API_TOKEN: ${{ secrets.CLOUDFLARE_IMAGES_READ_AND_WRITE_API_TOKEN }}
           NSFW_GRPC_TOKEN: ${{ secrets.TOKEN_TO_SIGN_OUTGOING_CALLS_TO_NSFW_DETECT_SERVICE }}
           QSTASH_AUTH_TOKEN: ${{ secrets.QSTASH_TOKEN }}
+          ML_FEED_CACHE_REDIS_URL: ${{ secrets.YRAL_ML_FEED_CACHE_REDIS_URL }}
           STORJ_INTERFACE_TOKEN: ${{ secrets.STORJ_INTERFACE_TOKEN }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml
