@@ -22,6 +22,7 @@ use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
 use once_cell::sync::Lazy;
+use private::get_nsfw_probability;
 use qstash::qstash_router;
 use tonic::transport::Server;
 use tower::make::Shared;
@@ -51,6 +52,7 @@ mod error;
 mod events;
 mod offchain_service;
 mod posts;
+mod private;
 mod qstash;
 mod types;
 pub mod utils;
@@ -114,6 +116,7 @@ async fn main() -> Result<()> {
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),
         )
+        .route("/__private/nsfw-probability", post(get_nsfw_probability))
         .route("/extract-frames", post(extract_frames_and_upload))
         .route("/update-global-ml-feed-cache", get(update_ml_feed_cache))
         .route(
