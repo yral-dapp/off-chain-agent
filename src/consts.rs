@@ -1,6 +1,9 @@
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
+/// with nsfw detection v2, nsfw probablity greater or equal to this is considered nsfw
+pub const NSFW_THRESHOLD: f32 = 0.4;
+
 pub static BIGQUERY_INGESTION_URL: Lazy<Url> = Lazy::new(|| {
     Url::parse("https://bigquery.googleapis.com/bigquery/v2/projects/hot-or-not-feed-intelligence/datasets/analytics_335143420/tables/test_events_analytics/insertAll").unwrap()
 });
@@ -28,3 +31,10 @@ pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str =
     "https://yral-ml-feed-cache.go-bazzinga.workers.dev";
 
 pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
+
+pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
+    Url::parse("https://storjinter1q7nafg8c2-7d85d53cd8059621.tec-s1.onthetaedgecloud.com").unwrap()
+});
+
+pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
+    Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").expect("STORJ_INTERFACE_TOKEN to be set"));

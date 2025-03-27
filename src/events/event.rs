@@ -2,7 +2,9 @@ use std::{collections::HashMap, env, sync::Arc, time::UNIX_EPOCH};
 
 use crate::{
     app_state::AppState,
-    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
+    consts::{
+        BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL,
+    },
     events::warehouse_events::WarehouseEvent,
     utils::{cf_images::upload_base64_image, time::system_time_to_custom},
     AppError,
@@ -143,9 +145,10 @@ impl Event {
                 let uid = params["video_id"].as_str().unwrap();
                 let canister_id = params["canister_id"].as_str().unwrap();
                 let post_id = params["post_id"].as_u64().unwrap();
+                let publisher_user_id = params["publisher_user_id"].as_str().unwrap();
 
                 let res = qstash_client
-                    .publish_video(uid, canister_id, post_id, timestamp)
+                    .publish_video(uid, canister_id, post_id, timestamp, publisher_user_id)
                     .await;
                 if res.is_err() {
                     error!(
@@ -387,6 +390,7 @@ pub struct UploadVideoInfo {
     pub canister_id: String,
     pub post_id: u64,
     pub timestamp: String,
+    pub publisher_user_id: String,
 }
 
 pub async fn upload_video_gcs(
@@ -397,13 +401,13 @@ pub async fn upload_video_gcs(
         &payload.video_id,
         &payload.canister_id,
         payload.post_id,
-        payload.timestamp,
+        &payload.timestamp,
     )
     .await?;
 
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_frames(&payload.video_id)
+        .publish_video_frames(&payload.video_id, &payload)
         .await?;
 
     Ok(Json(
@@ -415,7 +419,7 @@ pub async fn upload_gcs_impl(
     uid: &str,
     canister_id: &str,
     post_id: u64,
-    timestamp_str: String,
+    timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
     let url = format!(
         "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
@@ -439,7 +443,7 @@ pub async fn upload_gcs_impl(
     let mut hashmap = HashMap::new();
     hashmap.insert("canister_id".to_string(), canister_id.to_string());
     hashmap.insert("post_id".to_string(), post_id.to_string());
-    hashmap.insert("timestamp".to_string(), timestamp_str);
+    hashmap.insert("timestamp".to_string(), timestamp_str.to_string());
     res_obj.metadata = Some(hashmap);
 
     // update

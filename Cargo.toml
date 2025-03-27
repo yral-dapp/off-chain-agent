@@ -77,6 +77,7 @@ rayon = "1.8"
 uuid = { version = "1.4", features = ["v4", "fast-rng"] }
 yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "088a871f986236bab45ff89e68886f4c8d802449", package = "ml-feed-cache" } # yral-ml-feed-cache = { path = "../yral-common/ml-feed-cache", package = "ml-feed-cache" }
 
+storj-interface = { git = "https://github.com/yral-dapp/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
 
 [build-dependencies]
 tonic-build = "0.12"

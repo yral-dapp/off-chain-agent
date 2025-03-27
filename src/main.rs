@@ -15,11 +15,13 @@ use canister::upgrade_user_token_sns_canister::{
 };
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
+use consts::STORJ_INTERFACE_TOKEN;
 use env_logger::{Builder, Target};
 use events::nsfw::extract_frames_and_upload;
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
+use once_cell::sync::Lazy;
 use qstash::qstash_router;
 use tonic::transport::Server;
 use tower::make::Shared;
@@ -66,6 +68,8 @@ async fn main() -> Result<()> {
     struct ApiDoc;
 
     let conf = AppConfig::load()?;
+
+    Lazy::force(&STORJ_INTERFACE_TOKEN);
 
     Builder::new()
         .filter_level(LevelFilter::Info)
