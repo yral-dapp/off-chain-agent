@@ -1,12 +1,12 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::UNIX_EPOCH};
 
 use anyhow::Context;
 use candid::Principal;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::{future, stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::individual_user_template::{
-    GetPostsOfUserProfileError, IndividualUserTemplate, PostDetailsForFrontend, SystemTime,
+    GetPostsOfUserProfileError, IndividualUserTemplate, PostDetailsForFrontend,
 };
 
 use super::{
@@ -20,7 +20,7 @@ pub(crate) struct Item {
     pub(crate) publisher_user_id: String,
     pub(crate) post_id: u64,
     pub(crate) canister_id: Principal,
-    pub(crate) timestamp: SystemTime,
+    pub(crate) timestamp: String,
     pub(crate) is_nsfw: IsNsfw, // TODO: extra metadata
 }
 
@@ -56,6 +56,12 @@ async fn load_all_posts(
     });
 
     Ok(posts)
+}
+
+fn nanos_to_rfc3339(secs: i64, subsec_nanos: u32) -> String {
+    let time = DateTime::from_timestamp(secs, subsec_nanos).unwrap();
+
+    time.to_rfc3339()
 }
 
 pub(crate) async fn load_items<'a>(
@@ -124,7 +130,10 @@ pub(crate) async fn load_items<'a>(
         .try_flatten_unordered(None)
         .map(|post| {
             post.map(|(canister, is_nsfw, post)| Item {
-                timestamp: post.created_at,
+                timestamp: nanos_to_rfc3339(
+                    post.created_at.secs_since_epoch as i64,
+                    post.created_at.nanos_since_epoch,
+                ),
                 video_id: post.video_uid,
                 publisher_user_id: post.created_by_user_principal_id.to_text(),
                 canister_id: canister,

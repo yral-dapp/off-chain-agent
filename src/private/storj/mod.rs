@@ -14,7 +14,7 @@ use admin::AdminCanisters;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use futures::{StreamExt, TryStreamExt};
+use futures::TryStreamExt;
 use ic_agent::Agent;
 use nsfw::IsNsfw;
 use redis::{aio::MultiplexedConnection, AsyncCommands, JsonAsyncCommands};
