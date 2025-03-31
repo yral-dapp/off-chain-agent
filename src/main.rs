@@ -30,7 +30,6 @@ use tower::steer::Steer;
 use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
-use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::check_auth_grpc;
 use crate::canister::canisters_list_handler;
@@ -87,9 +86,6 @@ async fn main() -> Result<()> {
             events::events_router(shared_state.clone()),
         )
         .split_for_parts();
-
-    let router =
-        router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()));
 
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
