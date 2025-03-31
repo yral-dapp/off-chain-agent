@@ -63,6 +63,7 @@ jobs:
           flyctl secrets set QSTASH_AUTH_TOKEN="$QSTASH_AUTH_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set ML_FEED_CACHE_REDIS_URL="$ML_FEED_CACHE_REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "$APP_NAME" --stage
+          flyctl secrets set STORJ_REDIS_URL="$STORJ_REDIS_URL" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
@@ -83,3 +84,4 @@ jobs:
           QSTASH_AUTH_TOKEN: ${{ secrets.QSTASH_TOKEN }}
           ML_FEED_CACHE_REDIS_URL: ${{ secrets.YRAL_ML_FEED_CACHE_REDIS_URL }}
           STORJ_INTERFACE_TOKEN: ${{ secrets.STORJ_INTERFACE_TOKEN }}
+          STORJ_REDIS_URL: ${{ secrets.STORJ_REDIS_URL }}
