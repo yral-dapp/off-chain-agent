@@ -1,11 +1,12 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::Context;
+use candid::Principal;
 use chrono::{DateTime, Utc};
 use futures::{future, stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::individual_user_template::{
-    GetPostsOfUserProfileError, IndividualUserTemplate, PostDetailsForFrontend,
+    GetPostsOfUserProfileError, IndividualUserTemplate, PostDetailsForFrontend, SystemTime,
 };
 
 use super::{
@@ -18,6 +19,8 @@ pub(crate) struct Item {
     pub(crate) video_id: String,
     pub(crate) publisher_user_id: String,
     pub(crate) post_id: u64,
+    pub(crate) canister_id: Principal,
+    pub(crate) timestamp: SystemTime,
     pub(crate) is_nsfw: IsNsfw, // TODO: extra metadata
 }
 
@@ -83,19 +86,20 @@ pub(crate) async fn load_items<'a>(
         })
         .and_then(|list| future::ok(stream::iter(list).map(anyhow::Ok)))
         .try_flatten_unordered(None)
-        .and_then(move |user_principal| {
+        .and_then(move |user_canister| {
             let admin = admin_for_individual_user.clone();
             async move {
-                let index = admin.individual_user_for(user_principal).await;
+                let index = admin.individual_user_for(user_canister).await;
                 load_all_posts(&index, low_pass)
                     .await
                     .inspect(|posts| {
-                        log::info!("found {} posts for {}", posts.len(), user_principal)
+                        log::info!("found {} posts for {}", posts.len(), user_canister)
                     })
                     .inspect_err(|err| log::info!("{err}"))
+                    .map(|item| (user_canister, item))
             }
         })
-        .and_then(|list| async move {
+        .and_then(|(canister, list)| async move {
             let ids: Vec<_> = list.iter().map(|post| post.video_uid.clone()).collect();
 
             let is_nsfw_search: BTreeMap<String, IsNsfw> =
@@ -105,6 +109,7 @@ pub(crate) async fn load_items<'a>(
                 .into_iter()
                 .map(|post| {
                     (
+                        canister,
                         *is_nsfw_search
                             .get(&post.video_uid)
                             .expect("NsfwResolver to always return nsfw status"),
@@ -118,9 +123,11 @@ pub(crate) async fn load_items<'a>(
         .and_then(|list| future::ok(stream::iter(list).map(anyhow::Ok)))
         .try_flatten_unordered(None)
         .map(|post| {
-            post.map(|(is_nsfw, post)| Item {
+            post.map(|(canister, is_nsfw, post)| Item {
+                timestamp: post.created_at,
                 video_id: post.video_uid,
                 publisher_user_id: post.created_by_user_principal_id.to_text(),
+                canister_id: canister,
                 post_id: post.id,
                 is_nsfw,
             })

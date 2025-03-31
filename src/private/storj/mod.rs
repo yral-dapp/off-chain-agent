@@ -71,9 +71,8 @@ pub async fn fetch(agent: Agent) -> Result<serde_json::Value> {
 
     // the operation is io bound, so this number can be optimized to saturate
     // the network of the machine running the worker
-    const CONCURRENCY_FACTOR: usize = 100;
+    const CONCURRENCY_FACTOR: usize = 500;
     let res = item_stream
-        .take(50)
         .try_for_each_concurrent(CONCURRENCY_FACTOR, |item| {
             let added = &added;
             let skipped = &skipped;
@@ -98,9 +97,10 @@ pub async fn fetch(agent: Agent) -> Result<serde_json::Value> {
                         .await
                         .context("Couldn't push item to work_queue")?;
 
-                    added.fetch_add(1, Ordering::Relaxed);
                     if item.is_nsfw == IsNsfw::Maybe {
                         maybe_nsfw.fetch_add(1, Ordering::Relaxed);
+                    } else {
+                        added.fetch_add(1, Ordering::Relaxed);
                     }
                 } else {
                     skipped.fetch_add(1, Ordering::Relaxed);
