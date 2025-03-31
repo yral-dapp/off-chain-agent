@@ -8,11 +8,30 @@ use google_cloud_bigquery::{
     },
     query::row::Row,
 };
+use storj::fetch;
 
 use crate::{app_state::AppState, AppError};
 
 const NSFW_PROBABILITY_QUERY: &str = "SELECT probability, video_id FROM `hot-or-not-feed-intelligence.yral_ds.video_nsfw_agg` WHERE video_id IN UNNEST(@ids);
 ";
+
+mod storj;
+
+pub async fn kickstart_stage_one(State(app_state): State<Arc<AppState>>) {
+    let agent = app_state.agent.clone();
+
+    tokio::spawn(async move {
+        log::info!("Starting storj backfill stage one");
+        let result = fetch(agent).await;
+        match result {
+            Ok(value) => log::info!(
+                "completed creating work queue!\n{}",
+                serde_json::to_string_pretty(&value).unwrap()
+            ),
+            Err(err) => log::error!("storj backfil state one failed: {err}"),
+        }
+    });
+}
 
 pub async fn get_nsfw_probability(
     State(app_state): State<Arc<AppState>>,

@@ -22,7 +22,7 @@ use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
 use once_cell::sync::Lazy;
-use private::get_nsfw_probability;
+use private::{get_nsfw_probability, kickstart_stage_one};
 use qstash::qstash_router;
 use tonic::transport::Server;
 use tower::make::Shared;
@@ -117,6 +117,7 @@ async fn main() -> Result<()> {
             get(canister::snapshot::get_snapshot_canister),
         )
         .route("/__private/nsfw-probability", post(get_nsfw_probability))
+        .route("/__private/kickstart", get(kickstart_stage_one))
         .route("/extract-frames", post(extract_frames_and_upload))
         .route("/update-global-ml-feed-cache", get(update_ml_feed_cache))
         .route(
