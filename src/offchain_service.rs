@@ -1,9 +1,6 @@
 use std::{collections::HashMap, env, sync::Arc};
 
-use crate::{
-    app_state::AppState, consts::GOOGLE_CHAT_REPORT_SPACE_URL,
-    events::push_notifications::subscribe_device_to_topic, AppError,
-};
+use crate::{app_state::AppState, consts::GOOGLE_CHAT_REPORT_SPACE_URL, AppError};
 use anyhow::{Context, Result};
 use axum::extract::State;
 use candid::Principal;
@@ -14,7 +11,7 @@ use serde_json::{json, Value};
 use yral_canisters_client::individual_user_template::PostStatus;
 use yup_oauth2::ServiceAccountAuthenticator;
 
-use crate::offchain_service::off_chain::{BindDeviceToPrincipalRequest, Empty, ReportPostRequest};
+use crate::offchain_service::off_chain::{Empty, ReportPostRequest};
 use off_chain::off_chain_server::OffChain;
 
 pub mod off_chain {
@@ -96,26 +93,6 @@ impl OffChain for OffChainService {
             return Err(tonic::Status::new(
                 tonic::Code::Unknown,
                 "Error sending data to Google Chat",
-            ));
-        }
-
-        Ok(tonic::Response::new(Empty {}))
-    }
-
-    async fn bind_device_to_principal(
-        &self,
-        request: tonic::Request<BindDeviceToPrincipalRequest>,
-    ) -> core::result::Result<tonic::Response<Empty>, tonic::Status> {
-        let request = request.into_inner();
-        let device_id = request.device_id;
-        let principal_id = request.principal_id;
-
-        let result = subscribe_device_to_topic(&device_id, &principal_id, &self.shared_state).await;
-        if let Err(e) = result {
-            log::error!("Error subscribing principal to topic: {:?}", e);
-            return Err(tonic::Status::new(
-                tonic::Code::Unknown,
-                "Error subscribing principal to topic",
             ));
         }
 
