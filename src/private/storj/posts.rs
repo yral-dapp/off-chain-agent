@@ -4,7 +4,7 @@ use anyhow::Context;
 use candid::Principal;
 use chrono::{DateTime, Utc};
 use futures::{future, stream, StreamExt, TryStreamExt};
-use redis::{aio::MultiplexedConnection, JsonAsyncCommands};
+use redis::{aio::MultiplexedConnection, AsyncCommands, JsonAsyncCommands};
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::individual_user_template::{
     GetPostsOfUserProfileError, IndividualUserTemplate, PostDetailsForFrontend,
@@ -54,23 +54,23 @@ async fn load_all_posts(
     mut con: MultiplexedConnection,
 ) -> anyhow::Result<Vec<PostDetails>> {
     let maybe_res: Option<String> = con
-        .json_get(user.0.to_text(), "$")
+        .get(user.0.to_text())
         .await
         .expect("at least redis to work");
     if let Some(res) = &maybe_res {
-        return Ok(serde_json::from_str::<Vec<Vec<PostDetails>>>(&res)
+        return Ok(serde_json::from_str(&res)
             .inspect_err(|err| {
                 log::error!("cache loading error: {err:?}\ncache raw result: {maybe_res:#?}")
             })
-            .expect("json to be valid because we are the one who set it in the first place")
-            .into_iter()
-            .flatten()
-            .collect());
+            .expect("json to be valid because we are the one who set it in the first place"));
     }
     let res = load_all_posts_inner(user, low_pass).await;
     if let Ok(res) = &res {
         let _: () = con
-            .json_set(user.0.to_text(), "$", res)
+            .set(
+                user.0.to_text(),
+                serde_json::to_string(&res).expect("serialization to go properly"),
+            )
             .await
             .inspect_err(|err| log::error!("redis failed when caching: {err:?}"))
             .expect("at redis to work");
