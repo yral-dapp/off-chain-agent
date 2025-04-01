@@ -58,7 +58,7 @@ async fn load_all_posts(
         .await
         .expect("at least redis to work");
     if let Some(res) = maybe_res {
-        log::debug!("cache hit: {res}");
+        log::info!("cache hit: {res}");
         return Ok(serde_json::from_str(&res)
             .expect("json to be valid because we are the one who set it in the first place"));
     }
@@ -99,7 +99,7 @@ async fn load_all_posts_inner(
 
     posts.retain(|post| {
         let created_at = DateTime::from_timestamp_nanos(post.created_at.nanos_since_epoch as i64);
-        log::debug!("{}", created_at.to_rfc3339());
+        log::info!("{}", created_at.to_rfc3339());
 
         // MUST BE NON-INCLUSIVE
         created_at < low_pass
