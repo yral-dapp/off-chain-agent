@@ -53,16 +53,19 @@ async fn load_all_posts(
     low_pass: DateTime<Utc>,
     mut con: MultiplexedConnection,
 ) -> anyhow::Result<Vec<PostDetails>> {
-    let maybe_res: Vec<String> = con
+    let maybe_res: Option<String> = con
         .json_get(user.0.to_text(), "$")
         .await
         .expect("at least redis to work");
-    if let Some(res) = maybe_res.get(0) {
-        return Ok(serde_json::from_str(&res)
+    if let Some(res) = &maybe_res {
+        return Ok(serde_json::from_str::<Vec<Vec<PostDetails>>>(&res)
             .inspect_err(|err| {
                 log::error!("cache loading error: {err:?}\ncache raw result: {maybe_res:#?}")
             })
-            .expect("json to be valid because we are the one who set it in the first place"));
+            .expect("json to be valid because we are the one who set it in the first place")
+            .into_iter()
+            .flatten()
+            .collect());
     }
     let res = load_all_posts_inner(user, low_pass).await;
     if let Ok(res) = &res {
