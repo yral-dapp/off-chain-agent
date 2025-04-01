@@ -73,7 +73,6 @@ pub async fn fetch(agent: Agent) -> Result<serde_json::Value> {
     // the network of the machine running the worker
     const CONCURRENCY_FACTOR: usize = 500;
     let res = item_stream
-        .take(10)
         .try_for_each_concurrent(CONCURRENCY_FACTOR, |item| {
             let added = &added;
             let skipped = &skipped;

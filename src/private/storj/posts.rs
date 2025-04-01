@@ -4,7 +4,7 @@ use anyhow::Context;
 use candid::Principal;
 use chrono::{DateTime, Utc};
 use futures::{future, stream, StreamExt, TryStreamExt};
-use redis::{aio::MultiplexedConnection, AsyncCommands, JsonAsyncCommands};
+use redis::{aio::MultiplexedConnection, AsyncCommands};
 use serde::{Deserialize, Serialize};
 use yral_canisters_client::individual_user_template::{
     GetPostsOfUserProfileError, IndividualUserTemplate, PostDetailsForFrontend,
@@ -56,7 +56,7 @@ async fn load_all_posts(
     let maybe_res: Option<String> = con
         .get(user.0.to_text())
         .await
-        .expect("at least redis to work");
+        .expect("at least redis to work"); // pof
     if let Some(res) = &maybe_res {
         return Ok(serde_json::from_str(&res)
             .inspect_err(|err| {
@@ -73,7 +73,7 @@ async fn load_all_posts(
             )
             .await
             .inspect_err(|err| log::error!("redis failed when caching: {err:?}"))
-            .expect("at redis to work");
+            .expect("at redis to work"); // pof
     }
 
     res
@@ -90,13 +90,13 @@ async fn load_all_posts_inner(
         let post_res = user
             .get_posts_of_this_user_profile_with_pagination_cursor(page, LIMIT as u64)
             .await
-            .context("Couldn't get post")?;
+            .context("Couldn't get post")?; // pof
 
         use yral_canisters_client::individual_user_template::Result13;
         let post = match post_res {
             Result13::Ok(posts) => posts,
             Result13::Err(GetPostsOfUserProfileError::ReachedEndOfItemsList) => break,
-            Result13::Err(err) => anyhow::bail!("{err:?}"),
+            Result13::Err(err) => unreachable!("we are guaranteed to always stay within limit and pagination cursor can never have invalid bounds: {err:?}"),
         };
 
         posts.extend(post.into_iter())
@@ -114,7 +114,7 @@ async fn load_all_posts_inner(
 }
 
 fn nanos_to_rfc3339(secs: i64, subsec_nanos: u32) -> String {
-    let time = DateTime::from_timestamp(secs, subsec_nanos).unwrap();
+    let time = DateTime::from_timestamp(secs, subsec_nanos).unwrap(); // pof
 
     time.to_rfc3339()
 }
@@ -129,7 +129,7 @@ pub(crate) async fn load_items<'a>(
         .await
         .get_all_subnet_orchestrators()
         .await
-        .context("Couldn't fetch the subnet orchestrator")?;
+        .context("Couldn't fetch the subnet orchestrator")?; // pof, but hasn't failed yet
 
     let admin_for_index = admin.clone();
     let admin_for_individual_user = admin.clone();
@@ -144,7 +144,7 @@ pub(crate) async fn load_items<'a>(
                     .get_user_canister_list()
                     .await
                     .inspect(|users| log::info!("found {} users", users.len()))
-                    .inspect_err(|err| log::info!("{err:?}"))
+                    .inspect_err(|err| log::info!("{err:?}")) // pof, but hasn't failed yet
             }
         })
         .and_then(|list| future::ok(stream::iter(list).map(anyhow::Ok)))
@@ -167,7 +167,7 @@ pub(crate) async fn load_items<'a>(
             let ids: Vec<_> = list.iter().map(|post| post.video_id.clone()).collect();
 
             let is_nsfw_search: BTreeMap<String, IsNsfw> =
-                NsfwResolver::is_nsfw(&ids).await?.into_iter().collect();
+                NsfwResolver::is_nsfw(&ids).await?.into_iter().collect(); // pof
 
             let res: Vec<_> = list
                 .into_iter()
