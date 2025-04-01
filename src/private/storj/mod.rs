@@ -14,7 +14,7 @@ use admin::AdminCanisters;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use ic_agent::Agent;
 use nsfw::IsNsfw;
 use redis::{aio::MultiplexedConnection, AsyncCommands, JsonAsyncCommands};
@@ -54,7 +54,7 @@ pub async fn fetch(agent: Agent) -> Result<serde_json::Value> {
         }
     };
 
-    let item_stream = posts::load_items(Arc::new(admin), low_pass)
+    let item_stream = posts::load_items(Arc::new(admin), low_pass, redis_connection.clone())
         .await
         .context("failed to start item stream");
 
@@ -73,6 +73,7 @@ pub async fn fetch(agent: Agent) -> Result<serde_json::Value> {
     // the network of the machine running the worker
     const CONCURRENCY_FACTOR: usize = 500;
     let res = item_stream
+        .take(10)
         .try_for_each_concurrent(CONCURRENCY_FACTOR, |item| {
             let added = &added;
             let skipped = &skipped;
@@ -112,7 +113,7 @@ pub async fn fetch(agent: Agent) -> Result<serde_json::Value> {
         .context("One of the task returned error");
 
     if let Err(err) = res {
-        anyhow::bail!("failed to load items: {err}");
+        anyhow::bail!("failed to load items: {err:?}");
     }
 
     Ok(json!({
