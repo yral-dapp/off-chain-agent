@@ -22,7 +22,7 @@ pub(crate) struct Item {
     pub(crate) post_id: u64,
     pub(crate) canister_id: Principal,
     pub(crate) timestamp: String,
-    pub(crate) is_nsfw: IsNsfw, // TODO: extra metadata
+    pub(crate) is_nsfw: IsNsfw,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -103,7 +103,11 @@ async fn load_all_posts_inner(
     }
 
     posts.retain(|post| {
-        let created_at = DateTime::from_timestamp_nanos(post.created_at.nanos_since_epoch as i64);
+        let created_at = DateTime::from_timestamp(
+            post.created_at.secs_since_epoch as i64,
+            post.created_at.nanos_since_epoch,
+        )
+        .unwrap();
         log::info!("{}", created_at.to_rfc3339());
 
         // MUST BE NON-INCLUSIVE
