@@ -58,6 +58,7 @@ async fn load_all_posts(
         .await
         .expect("at least redis to work");
     if let Some(res) = maybe_res {
+        log::debug!("cache hit: {res}");
         return Ok(serde_json::from_str(&res)
             .expect("json to be valid because we are the one who set it in the first place"));
     }
