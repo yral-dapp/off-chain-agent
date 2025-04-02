@@ -1,6 +1,10 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use axum::{extract::State, Json};
+use anyhow::anyhow;
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use google_cloud_bigquery::{
     http::{
         job::query::QueryRequest,
@@ -8,6 +12,7 @@ use google_cloud_bigquery::{
     },
     query::row::Row,
 };
+use serde::Deserialize;
 use storj::fetch;
 
 use crate::{app_state::AppState, AppError};
@@ -82,4 +87,24 @@ pub async fn get_nsfw_probability(
     }
 
     Ok(Json(res))
+}
+
+#[derive(Deserialize)]
+struct ObjectDataQuery {
+    id: String,
+}
+
+pub async fn get_object_metadata(
+    Query(ObjectDataQuery { id }): Query<ObjectDataQuery>,
+) -> Result<Json<HashMap<String, String>>, AppError> {
+    let client = cloud_storage::Client::default();
+
+    let object = client
+        .object()
+        .read("yral-videos", &format!("{id}.m4"))
+        .await?;
+
+    let metadata = object.metadata.ok_or(anyhow!("There's no metadata"))?;
+
+    Ok(Json(metadata))
 }
