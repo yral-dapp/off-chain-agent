@@ -19,7 +19,6 @@ use yral_metrics::metrics::sealed_metric::SealedMetric;
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::check_auth_events;
-use crate::consts::VECTOR_DEV_URL;
 use crate::events::push_notifications::dispatch_notif;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::types::DelegatedIdentityWire;
