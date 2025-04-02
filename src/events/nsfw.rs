@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::consts::NSFW_SERVER_URL;
+use crate::consts::{NSFW_SERVER_URL, NSFW_THRESHOLD, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL};
 use anyhow::Error;
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::{
@@ -20,6 +20,8 @@ use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::{metadata::MetadataValue, Request};
 
 use crate::{app_state::AppState, AppError};
+
+use super::event::UploadVideoInfo;
 
 pub mod nsfw_detector {
     tonic::include_proto!("nsfw_detector");
@@ -106,6 +108,7 @@ pub async fn upload_frames_to_gcs(
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VideoRequest {
     video_id: String,
+    video_info: UploadVideoInfo,
 }
 
 // extract_frames_and_upload API handler which takes video_id as queryparam in axum
@@ -128,7 +131,7 @@ pub async fn extract_frames_and_upload(
     // enqueue qstash job to detect nsfw
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_nsfw_detection(&video_id)
+        .publish_video_nsfw_detection(&video_id, &payload.video_info)
         .await?;
 
     Ok(Json(
@@ -183,7 +186,6 @@ struct VideoNSFWData {
     nsfw_ec: String,
     nsfw_gore: String,
 }
-
 #[cfg(feature = "local-bin")]
 pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
@@ -198,20 +200,49 @@ pub async fn nsfw_job(
     Json(payload): Json<VideoRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let video_id = payload.video_id;
+    let video_info = payload.video_info;
 
     let nsfw_info = get_video_nsfw_info(video_id.clone()).await?;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
+
     push_nsfw_data_bigquery(bigquery_client, nsfw_info, video_id.clone()).await?;
 
     // enqueue qstash job to detect nsfw v2
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_nsfw_detection_v2(&video_id)
+        .publish_video_nsfw_detection_v2(&video_id, video_info)
         .await?;
 
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
+}
+
+async fn duplicate_to_storj(video_info: UploadVideoInfo, is_nsfw: bool) -> Result<(), AppError> {
+    let client = reqwest::Client::new();
+    let duplicate_args = storj_interface::duplicate::Args {
+        publisher_user_id: video_info.publisher_user_id,
+        video_id: video_info.video_id,
+        is_nsfw,
+        metadata: [
+            ("post_id".into(), video_info.post_id.to_string()),
+            ("canister_id".into(), video_info.canister_id),
+            ("timestamp".into(), video_info.timestamp),
+        ]
+        .into(),
+    };
+
+    client
+        .post(
+            STORJ_INTERFACE_URL
+                .join("/duplicate")
+                .expect("url to be valid"),
+        )
+        .json(&duplicate_args)
+        .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
+        .send()
+        .await?;
+    Ok(())
 }
 
 pub async fn push_nsfw_data_bigquery(
@@ -284,10 +315,13 @@ pub async fn nsfw_job_v2(
     let video_id = payload.video_id;
 
     let nsfw_prob = get_video_nsfw_info_v2(video_id.clone()).await?;
+    let is_nsfw = nsfw_prob >= NSFW_THRESHOLD;
 
     // push nsfw info to bigquery table using google-cloud-bigquery
     let bigquery_client = state.bigquery_client.clone();
     push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
+
+    duplicate_to_storj(payload.video_info, is_nsfw).await?;
 
     Ok(Json(
         serde_json::json!({ "message": "NSFW v2 job completed" }),

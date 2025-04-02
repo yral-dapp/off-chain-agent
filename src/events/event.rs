@@ -2,9 +2,11 @@ use std::{collections::HashMap, env, sync::Arc, time::UNIX_EPOCH};
 
 use crate::{
     app_state::AppState,
-    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
+    consts::{
+        BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL,
+    },
     events::warehouse_events::WarehouseEvent,
-    utils::cf_images::upload_base64_image,
+    utils::{cf_images::upload_base64_image, time::system_time_to_custom},
     AppError,
 };
 use axum::{extract::State, Json};
@@ -18,6 +20,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use yral_canisters_client::individual_user_template::{
     SuccessHistoryItemV1, SystemTime, WatchHistoryItem,
+};
+use yral_ml_feed_cache::{
+    consts::{
+        USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
+        USER_WATCH_HISTORY_CLEAN_SUFFIX, USER_WATCH_HISTORY_NSFW_SUFFIX,
+    },
+    types::MLFeedCacheHistoryItem,
 };
 
 use super::queries::get_icpump_insert_query;
@@ -136,9 +145,10 @@ impl Event {
                 let uid = params["video_id"].as_str().unwrap();
                 let canister_id = params["canister_id"].as_str().unwrap();
                 let post_id = params["post_id"].as_u64().unwrap();
+                let publisher_user_id = params["publisher_user_id"].as_str().unwrap();
 
                 let res = qstash_client
-                    .publish_video(uid, canister_id, post_id, timestamp)
+                    .publish_video(uid, canister_id, post_id, timestamp, publisher_user_id)
                     .await;
                 if res.is_err() {
                     error!(
@@ -157,29 +167,35 @@ impl Event {
 
             tokio::spawn(async move {
                 let percent_watched = params["percentage_watched"].as_f64().unwrap();
+                let nsfw_probability = params["nsfw_probability"].as_f64().unwrap_or_default();
 
-                if percent_watched >= 90.0 {
-                    let user_canister_id = params["canister_id"].as_str().unwrap();
-                    let user_canister_id_principal =
-                        Principal::from_text(user_canister_id).unwrap();
-                    let user_canister = app_state.individual_user(user_canister_id_principal);
+                let user_canister_id = params["canister_id"].as_str().unwrap();
 
-                    let publisher_canister_id = params["publisher_canister_id"].as_str().unwrap();
-                    let publisher_canister_id_principal =
-                        Principal::from_text(publisher_canister_id).unwrap();
+                let watch_history_item = MLFeedCacheHistoryItem {
+                    canister_id: user_canister_id.to_string(),
+                    item_type: "video_duration_watched".to_string(),
+                    nsfw_probability: nsfw_probability as f32,
+                    post_id: params["post_id"].as_u64().unwrap(),
+                    video_id: params["video_id"].as_str().unwrap().to_string(),
+                    timestamp: std::time::SystemTime::now(),
+                    percent_watched: percent_watched as f32,
+                };
 
-                    let watch_history_item = WatchHistoryItem {
-                        post_id: params["post_id"].as_u64().unwrap(),
-                        viewed_at: system_time_to_custom(std::time::SystemTime::now()),
-                        percentage_watched: percent_watched as f32,
-                        publisher_canister_id: publisher_canister_id_principal,
-                        cf_video_id: params["video_id"].as_str().unwrap().to_string(),
-                    };
-
-                    let res = user_canister.update_watch_history(watch_history_item).await;
-                    if res.is_err() {
-                        log::error!("Error updating watch history: {:?}", res.err());
+                let user_cache_key = format!(
+                    "{}{}",
+                    user_canister_id,
+                    if nsfw_probability <= 0.4 {
+                        USER_WATCH_HISTORY_CLEAN_SUFFIX
+                    } else {
+                        USER_WATCH_HISTORY_NSFW_SUFFIX
                     }
+                );
+                let res = app_state
+                    .ml_feed_cache
+                    .add_user_watch_history_items(&user_cache_key, vec![watch_history_item])
+                    .await;
+                if res.is_err() {
+                    error!("Error adding user watch history items: {:?}", res.err());
                 }
             });
         }
@@ -196,7 +212,7 @@ impl Event {
         }
         if self.event.event == "video_duration_watched" {
             percent_watched = params["percentage_watched"].as_f64().unwrap();
-            if percent_watched < 95.0 {
+            if percent_watched < 30.0 {
                 return;
             }
         }
@@ -205,27 +221,33 @@ impl Event {
 
         tokio::spawn(async move {
             let user_canister_id = params["canister_id"].as_str().unwrap();
-            let user_canister_id_principal = Principal::from_text(user_canister_id).unwrap();
-            let user_canister = app_state.individual_user(user_canister_id_principal);
+            let nsfw_probability = params["nsfw_probability"].as_f64().unwrap_or_default();
 
-            let publisher_canister_id = params["publisher_canister_id"].as_str().unwrap();
-            let publisher_canister_id_principal =
-                Principal::from_text(publisher_canister_id).unwrap();
-
-            let success_history_item = SuccessHistoryItemV1 {
-                post_id: params["post_id"].as_u64().unwrap(),
-                interacted_at: system_time_to_custom(std::time::SystemTime::now()),
-                publisher_canister_id: publisher_canister_id_principal,
-                cf_video_id: params["video_id"].as_str().unwrap().to_string(),
-                percentage_watched: percent_watched as f32,
+            let success_history_item = MLFeedCacheHistoryItem {
+                canister_id: user_canister_id.to_string(),
                 item_type,
+                nsfw_probability: nsfw_probability as f32,
+                post_id: params["post_id"].as_u64().unwrap(),
+                video_id: params["video_id"].as_str().unwrap().to_string(),
+                timestamp: std::time::SystemTime::now(),
+                percent_watched: percent_watched as f32,
             };
 
-            let res = user_canister
-                .update_success_history(success_history_item)
+            let user_cache_key = format!(
+                "{}{}",
+                user_canister_id,
+                if nsfw_probability <= 0.4 {
+                    USER_SUCCESS_HISTORY_CLEAN_SUFFIX
+                } else {
+                    USER_SUCCESS_HISTORY_NSFW_SUFFIX
+                }
+            );
+            let res = app_state
+                .ml_feed_cache
+                .add_user_success_history_items(&user_cache_key, vec![success_history_item])
                 .await;
             if res.is_err() {
-                log::error!("Error updating success history: {:?}", res.err());
+                error!("Error adding user success history items: {:?}", res.err());
             }
         });
     }
@@ -292,17 +314,6 @@ async fn stream_to_bigquery(
     match response.status().is_success() {
         true => Ok(()),
         false => Err(format!("Failed to stream data - {:?}", response.text().await?).into()),
-    }
-}
-
-fn system_time_to_custom(time: std::time::SystemTime) -> SystemTime {
-    let duration = time
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-
-    SystemTime {
-        nanos_since_epoch: duration.subsec_nanos(),
-        secs_since_epoch: duration.as_secs(),
     }
 }
 
@@ -379,6 +390,7 @@ pub struct UploadVideoInfo {
     pub canister_id: String,
     pub post_id: u64,
     pub timestamp: String,
+    pub publisher_user_id: String,
 }
 
 pub async fn upload_video_gcs(
@@ -389,13 +401,13 @@ pub async fn upload_video_gcs(
         &payload.video_id,
         &payload.canister_id,
         payload.post_id,
-        payload.timestamp,
+        &payload.timestamp,
     )
     .await?;
 
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .publish_video_frames(&payload.video_id)
+        .publish_video_frames(&payload.video_id, &payload)
         .await?;
 
     Ok(Json(
@@ -407,7 +419,7 @@ pub async fn upload_gcs_impl(
     uid: &str,
     canister_id: &str,
     post_id: u64,
-    timestamp_str: String,
+    timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
     let url = format!(
         "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
@@ -431,7 +443,7 @@ pub async fn upload_gcs_impl(
     let mut hashmap = HashMap::new();
     hashmap.insert("canister_id".to_string(), canister_id.to_string());
     hashmap.insert("post_id".to_string(), post_id.to_string());
-    hashmap.insert("timestamp".to_string(), timestamp_str);
+    hashmap.insert("timestamp".to_string(), timestamp_str.to_string());
     res_obj.metadata = Some(hashmap);
 
     // update

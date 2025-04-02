@@ -11,6 +11,8 @@ use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 use crate::{
     canister::upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
     consts::OFF_CHAIN_AGENT_URL,
+    events::event::UploadVideoInfo,
+    posts::ReportPostRequest,
 };
 
 #[derive(Clone, Debug)]
@@ -46,6 +48,7 @@ impl QStashClient {
         canister_id: &str,
         post_id: u64,
         timestamp_str: String,
+        publisher_user_id: &str,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/upload_video_gcs").unwrap();
 
@@ -55,6 +58,7 @@ impl QStashClient {
             "canister_id": canister_id,
             "post_id": post_id,
             "timestamp": timestamp_str,
+            "publisher_user_id": publisher_user_id
         });
 
         self.client
@@ -62,14 +66,18 @@ impl QStashClient {
             .json(&req)
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
-            .header("upstash-delay", format!("600s"))
+            .header("upstash-delay", "600s")
             .send()
             .await?;
 
         Ok(())
     }
 
-    pub async fn publish_video_frames(&self, video_id: &str) -> Result<(), anyhow::Error> {
+    pub async fn publish_video_frames(
+        &self,
+        video_id: &str,
+        video_info: &UploadVideoInfo,
+    ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_frames")
             .unwrap();
@@ -77,6 +85,7 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
+            "video_info": video_info,
         });
 
         self.client
@@ -90,7 +99,11 @@ impl QStashClient {
         Ok(())
     }
 
-    pub async fn publish_video_nsfw_detection(&self, video_id: &str) -> Result<(), anyhow::Error> {
+    pub async fn publish_video_nsfw_detection(
+        &self,
+        video_id: &str,
+        video_info: &UploadVideoInfo,
+    ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection")
             .unwrap();
@@ -98,6 +111,7 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
+            "video_info": video_info,
         });
 
         self.client
@@ -114,6 +128,7 @@ impl QStashClient {
     pub async fn publish_video_nsfw_detection_v2(
         &self,
         video_id: &str,
+        video_info: UploadVideoInfo,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL
             .join("qstash/enqueue_video_nsfw_detection_v2")
@@ -122,6 +137,7 @@ impl QStashClient {
         let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
         let req = serde_json::json!({
             "video_id": video_id,
+            "video_info": video_info,
         });
 
         // Calculate delay until next :20 minute of any hour
@@ -236,6 +252,26 @@ impl QStashClient {
             .header(CONTENT_TYPE, "application/json")
             .header("upstash-method", "POST")
             .header("upstash-retries", "0")
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn publish_report_post(
+        &self,
+        report_request: ReportPostRequest,
+    ) -> Result<(), anyhow::Error> {
+        let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/report_post").unwrap();
+
+        let url = self.base_url.join(&format!("publish/{}", off_chain_ep))?;
+        let req = serde_json::json!(report_request);
+
+        self.client
+            .post(url)
+            .json(&req)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
             .send()
             .await?;
 

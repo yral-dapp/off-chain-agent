@@ -123,3 +123,16 @@ pub fn check_auth_grpc_offchain_mlfeed(req: Request<()>) -> Result<Request<()>, 
 
     Ok(req)
 }
+
+pub fn check_auth_events(req_token: Option<String>) -> Result<(), anyhow::Error> {
+    let mut token = env::var("GRPC_AUTH_TOKEN").expect("GRPC_AUTH_TOKEN is required");
+    let mut yral_cloudflare_worker_token = env::var("YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN")
+        .expect("YRAL_CLOUDFLARE_WORKER_GRPC_AUTH_TOKEN is required");
+    token.retain(|c| !c.is_whitespace());
+    yral_cloudflare_worker_token.retain(|c| !c.is_whitespace());
+
+    match req_token {
+        Some(t) if token == t || t == yral_cloudflare_worker_token => Ok(()),
+        _ => Err(anyhow::anyhow!("No valid auth token")),
+    }
+}

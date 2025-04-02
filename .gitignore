@@ -1,5 +1,6 @@
 /target
 /.direnv
 gha-creds-*.json
-.DS_Store
+.env
+**/.DS_Store
 google_service_account.json

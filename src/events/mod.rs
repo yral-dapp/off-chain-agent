@@ -1,10 +1,20 @@
+use axum::extract::State;
+use axum::response::IntoResponse;
+use axum::Json;
 use candid::Principal;
+use event::Event;
+use http::{header, StatusCode};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::error::Error;
 use std::sync::Arc;
+use utoipa::ToSchema;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
+use crate::auth::check_auth_events;
 use crate::events::push_notifications::dispatch_notif;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::AppState;
@@ -36,25 +46,10 @@ impl WarehouseEvents for WarehouseEventsService {
         let request = request.into_inner();
         let event = event::Event::new(request);
 
-        let params: Value = serde_json::from_str(&event.event.params).expect("Invalid JSON");
-        let event_type: &str = &event.event.event;
-
-        #[cfg(not(feature = "local-bin"))]
-        event.stream_to_bigquery(&shared_state.clone());
-
-        event.upload_to_gcs(&shared_state.clone());
-
-        event.update_watch_history(&shared_state.clone());
-
-        event.update_success_history(&shared_state.clone());
-
-        #[cfg(not(feature = "local-bin"))]
-        event.stream_to_firestore(&shared_state.clone());
-
-        #[cfg(not(feature = "local-bin"))]
-        event.stream_to_bigquery_token_metadata(&shared_state.clone());
-
-        let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
+        process_event_impl(event, shared_state).await.map_err(|e| {
+            log::error!("Failed to process event grpc: {}", e);
+            tonic::Status::internal("Failed to process event")
+        })?;
 
         Ok(tonic::Response::new(Empty {}))
     }
@@ -110,235 +105,88 @@ impl VideoUploadSuccessful {
     }
 }
 
-// #[derive(Debug, Serialize, Deserialize)]
-// struct CFStreamResult {
-//     result: Vec<CFStream>,
-// }
+pub fn events_router(state: Arc<AppState>) -> OpenApiRouter {
+    OpenApiRouter::new()
+        .routes(routes!(post_event))
+        .with_state(state)
+}
 
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// struct CFStream {
-//     uid: String,
-//     created: String,
-// }
+#[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
+pub struct EventRequest {
+    event: String,
+    params: String,
+}
 
-// pub async fn test_cloudflare(
-//     Query(params): Query<HashMap<String, String>>,
-// ) -> Result<(), AppError> {
-//     // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
-//     // Query param start 2021-05-03T00:00:00Z
-//     let startdate = params.get("startdate").unwrap().clone();
-//     let thresh = params.get("thresh").unwrap().parse::<usize>().unwrap();
+#[utoipa::path(
+    post,
+    path = "",
+    request_body = EventRequest,
+    tag = "events",
+    responses(
+        (status = 200, description = "Event sent successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+async fn post_event(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<EventRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let auth_token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim_start_matches("Bearer ").to_string());
 
-//     let url = format!(
-//         "https://api.cloudflare.com/client/v4/accounts/{}/stream",
-//         CLOUDFLARE_ACCOUNT_ID
-//     );
-//     let bearer_token = env::var("CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN")?;
+    check_auth_events(auth_token).map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
 
-//     let client = reqwest::Client::new();
-//     let mut num_vids = 0;
-//     let mut start_time = startdate;
-//     let mut cnt = 0;
-//     let mut hashset: HashSet<String> = HashSet::new();
+    let warehouse_event = WarehouseEvent {
+        event: payload.event,
+        params: payload.params,
+    };
 
-//     loop {
-//         let response = client
-//             .get(&url)
-//             .bearer_auth(&bearer_token)
-//             .query(&[("asc", "true"), ("start", &start_time)])
-//             .send()
-//             .await?;
-//         // log::info!("Response: {:?}", response);
-//         if response.status() != 200 {
-//             log::error!(
-//                 "Failed to get response from Cloudflare: {:?}",
-//                 response.text().await?
-//             );
-//             return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
-//         }
+    let event = Event::new(warehouse_event);
 
-//         let body = response.text().await?;
-//         let result: CFStreamResult = serde_json::from_str(&body)?;
-//         let mut result_vec = result.result.clone();
+    process_event_impl(event, state.clone())
+        .await
+        .map_err(|e| {
+            log::error!("Failed to process event rest: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to process event".to_string(),
+            )
+        })?;
 
-//         // add uids to hashset
-//         for r in &result_vec {
-//             hashset.insert(r.uid.clone());
+    Ok((StatusCode::OK, "Event processed".to_string()))
+}
 
-//             if hashset.len() >= thresh {
-//                 break;
-//             }
-//         }
+async fn process_event_impl(
+    event: Event,
+    shared_state: Arc<AppState>,
+) -> Result<(), anyhow::Error> {
+    let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
+        log::error!("Failed to parse params: {}", e);
+        anyhow::anyhow!("Failed to parse params: {}", e)
+    })?;
 
-//         if cnt > 0 {
-//             result_vec.remove(0);
-//         }
+    let event_type: &str = &event.event.event;
 
-//         num_vids += result_vec.len();
-//         if result_vec.len() == 0 {
-//             break;
-//         }
-//         let last = &result.result[result.result.len() - 1];
-//         start_time = last.created.clone();
-//         cnt += 1;
+    #[cfg(not(feature = "local-bin"))]
+    event.stream_to_bigquery(&shared_state.clone());
 
-//         if cnt > 10000 {
-//             log::info!("Breaking after 10000 iterations");
-//             break;
-//         }
+    event.upload_to_gcs(&shared_state.clone());
 
-//         if hashset.len() >= thresh {
-//             // hashset retain only 100 elements
-//             log::error!("Last: {:?}", last);
-//             break;
-//         }
-//     }
+    event.update_watch_history(&shared_state.clone());
 
-//     log::info!("Total number of videos: {}", num_vids);
-//     log::info!("Total number of videos in hashset: {}", hashset.len());
-//     // log::info!("Hashset: {:?}", hashset);
+    event.update_success_history(&shared_state.clone());
 
-//     // call upload_gcs
-//     tokio::spawn(async move {
-//         const PARALLEL_REQUESTS: usize = 50;
-//         let futures = hashset
-//             .iter()
-//             .map(|uid| upload_gcs(&uid))
-//             .collect::<Vec<_>>();
+    #[cfg(not(feature = "local-bin"))]
+    event.stream_to_firestore(&shared_state.clone());
 
-//         let stream = futures::stream::iter(futures)
-//             .boxed()
-//             .buffer_unordered(PARALLEL_REQUESTS);
-//         let results = stream.collect::<Vec<Result<(), anyhow::Error>>>().await;
+    #[cfg(not(feature = "local-bin"))]
+    event.stream_to_bigquery_token_metadata(&shared_state.clone());
 
-//         for r in results {
-//             match r {
-//                 Ok(_) => continue,
-//                 Err(e) => log::error!("Failed to upload to GCS: {:?}", e),
-//             }
-//         }
-//     });
+    let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
 
-//     Ok(())
-// }
-
-// pub async fn test_cloudflare_v2(
-//     Query(params): Query<HashMap<String, String>>,
-// ) -> Result<(), AppError> {
-//     // Get Request to https://api.cloudflare.com/client/v4/accounts/{account_id}/stream
-//     // Query param start 2021-05-03T00:00:00Z
-//     let startdate = params.get("startdate").unwrap().clone();
-//     let thresh = params.get("thresh").unwrap().parse::<usize>().unwrap();
-
-//     let url = format!(
-//         "https://api.cloudflare.com/client/v4/accounts/{}/stream",
-//         CLOUDFLARE_ACCOUNT_ID
-//     );
-//     let bearer_token = env::var("CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN")?;
-
-//     let client = reqwest::Client::new();
-//     let mut num_vids = 0;
-//     let mut start_time = startdate;
-//     let mut cnt = 0;
-//     let mut hashset: HashSet<String> = HashSet::new();
-
-//     loop {
-//         let response = client
-//             .get(&url)
-//             .bearer_auth(&bearer_token)
-//             .query(&[("asc", "true"), ("start", &start_time)])
-//             .send()
-//             .await?;
-//         // log::info!("Response: {:?}", response);
-//         if response.status() != 200 {
-//             log::error!(
-//                 "Failed to get response from Cloudflare: {:?}",
-//                 response.text().await?
-//             );
-//             return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
-//         }
-
-//         let body = response.text().await?;
-//         let result: CFStreamResult = serde_json::from_str(&body)?;
-//         let mut result_vec = result.result.clone();
-
-//         // add uids to hashset
-//         for r in &result_vec {
-//             hashset.insert(r.uid.clone());
-
-//             if hashset.len() >= thresh {
-//                 log::error!("Last above: {:?}", r);
-//                 break;
-//             }
-//         }
-
-//         if cnt > 0 {
-//             result_vec.remove(0);
-//         }
-
-//         num_vids += result_vec.len();
-//         if result_vec.len() == 0 {
-//             break;
-//         }
-//         let last = &result.result[result.result.len() - 1];
-//         start_time = last.created.clone();
-//         cnt += 1;
-
-//         if cnt > 10000 {
-//             log::info!("Breaking after 10000 iterations");
-//             break;
-//         }
-
-//         if hashset.len() >= thresh {
-//             // hashset retain only 100 elements
-//             log::error!("Last: {:?}", last);
-//             break;
-//         }
-//     }
-
-//     log::info!("Total number of videos: {}", num_vids);
-//     log::info!("Total number of videos in hashset: {}", hashset.len());
-//     // log::info!("Hashset: {:?}", hashset);
-
-//     Ok(())
-// }
-
-// pub async fn get_cf_info(Query(params): Query<HashMap<String, String>>) -> Result<(), AppError> {
-//     let uid = params.get("uid").unwrap().clone();
-//     let bearer_token = env::var("CLOUDFLARE_STREAM_READ_AND_LIST_ACCESS_TOKEN")?;
-
-//     // CALL GET https://api.cloudflare.com/client/v4/accounts/{account_id}/stream/{identifier}
-//     let url = format!(
-//         "https://api.cloudflare.com/client/v4/accounts/{}/stream/{}",
-//         CLOUDFLARE_ACCOUNT_ID, uid
-//     );
-
-//     let client = reqwest::Client::new();
-//     let response = client.get(&url).bearer_auth(&bearer_token).send().await?;
-
-//     if response.status() != 200 {
-//         log::error!(
-//             "Failed to get response from Cloudflare: {:?}",
-//             response.text().await?
-//         );
-//         return Err(anyhow::anyhow!("Failed to get response from Cloudflare").into());
-//     }
-
-//     let body = response.text().await?;
-//     log::info!("Response: {:?}", body);
-
-//     Ok(())
-// }
-
-// pub async fn test_gcs(Query(params): Query<HashMap<String, String>>) -> Result<(), AppError> {
-//     // Call GET https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{uid}/downloads/default.mp4 and download the video content
-
-//     let uid = params.get("uid").unwrap().clone();
-
-//     tokio::spawn(async move {
-//         let res = upload_gcs(&uid).await;
-//         log::info!("Upload GCS Response: {:?}", res);
-//     });
-
-//     Ok(())
-// }
+    Ok(())
+}

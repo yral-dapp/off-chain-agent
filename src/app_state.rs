@@ -13,6 +13,7 @@ use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
+use yral_ml_feed_cache::MLFeedCacheState;
 use yup_oauth2::hyper_rustls::HttpsConnector;
 use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
 
@@ -31,6 +32,8 @@ pub struct AppState {
     pub qstash_client: QStashClient,
     #[cfg(not(feature = "local-bin"))]
     pub gcs_client: Arc<cloud_storage::Client>,
+    #[cfg(not(feature = "local-bin"))]
+    pub ml_feed_cache: MLFeedCacheState,
 }
 
 impl AppState {
@@ -50,6 +53,8 @@ impl AppState {
             qstash_client: init_qstash_client().await,
             #[cfg(not(feature = "local-bin"))]
             gcs_client: Arc::new(cloud_storage::Client::default()),
+            #[cfg(not(feature = "local-bin"))]
+            ml_feed_cache: MLFeedCacheState::new().await,
         }
     }
 
@@ -100,7 +105,7 @@ pub fn init_yral_metadata_client(conf: &AppConfig) -> MetadataClient<true> {
 }
 
 pub async fn init_agent() -> Agent {
-    #[cfg(not(feature = "local-bin"))]
+    #[cfg(not(any(feature = "local-bin", feature = "use-local-agent")))]
     {
         let pk = env::var("RECLAIM_CANISTER_PEM").expect("$RECLAIM_CANISTER_PEM is not set");
 
@@ -127,7 +132,7 @@ pub async fn init_agent() -> Agent {
         agent
     }
 
-    #[cfg(feature = "local-bin")]
+    #[cfg(any(feature = "local-bin", feature = "use-local-agent"))]
     {
         let agent = Agent::builder()
             .with_url("https://ic0.app")

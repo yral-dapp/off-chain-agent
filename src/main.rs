@@ -15,14 +15,21 @@ use canister::upgrade_user_token_sns_canister::{
 };
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
+use consts::STORJ_INTERFACE_TOKEN;
 use env_logger::{Builder, Target};
 use events::nsfw::extract_frames_and_upload;
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
+use once_cell::sync::Lazy;
 use qstash::qstash_router;
+use tonic::transport::Server;
 use tower::make::Shared;
 use tower::steer::Steer;
+use tower_http::cors::CorsLayer;
+use utoipa::OpenApi;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::check_auth_grpc;
 use crate::canister::canisters_list_handler;
@@ -39,9 +46,11 @@ mod auth;
 pub mod canister;
 mod config;
 mod consts;
+mod duplicate_video;
 mod error;
 mod events;
 mod offchain_service;
+mod posts;
 mod qstash;
 mod types;
 pub mod utils;
@@ -50,7 +59,17 @@ use app_state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    #[derive(OpenApi)]
+    #[openapi(
+        tags(
+            (name = "OFF_CHAIN", description = "Off Chain Agent API")
+        )
+    )]
+    struct ApiDoc;
+
     let conf = AppConfig::load()?;
+
+    Lazy::force(&STORJ_INTERFACE_TOKEN);
 
     Builder::new()
         .filter_level(LevelFilter::Info)
@@ -58,6 +77,17 @@ async fn main() -> Result<()> {
         .init();
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
+
+    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .nest("/api/v1/posts", posts::posts_router(shared_state.clone()))
+        .nest(
+            "/api/v1/events",
+            events::events_router(shared_state.clone()),
+        )
+        .split_for_parts();
+
+    let router =
+        router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()));
 
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
@@ -91,6 +121,8 @@ async fn main() -> Result<()> {
             get(update_ml_feed_cache_nsfw),
         )
         .nest("/qstash", qstash_routes)
+        .nest_service("/", router)
+        .layer(CorsLayer::permissive())
         .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
@@ -99,27 +131,29 @@ async fn main() -> Result<()> {
         .build_v1()
         .unwrap();
 
-    let mut grpc = tonic::service::Routes::builder();
-    grpc.add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
-        WarehouseEventsService {
-            shared_state: shared_state.clone(),
-        },
-        check_auth_grpc,
-    )))
-    .add_service(tonic_web::enable(OffChainServer::with_interceptor(
-        OffChainService {
-            shared_state: shared_state.clone(),
-        },
-        check_auth_grpc,
-    )))
-    .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
-        OffChainCanisterService {
-            shared_state: shared_state.clone(),
-        },
-        check_auth_grpc_offchain_mlfeed,
-    )))
-    .add_service(reflection_service);
-    let grpc_axum = grpc.routes().into_axum_router();
+    let grpc_axum = Server::builder()
+        .accept_http1(true)
+        .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
+            WarehouseEventsService {
+                shared_state: shared_state.clone(),
+            },
+            check_auth_grpc,
+        )))
+        .add_service(tonic_web::enable(OffChainServer::with_interceptor(
+            OffChainService {
+                shared_state: shared_state.clone(),
+            },
+            check_auth_grpc,
+        )))
+        .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
+            OffChainCanisterService {
+                shared_state: shared_state.clone(),
+            },
+            check_auth_grpc_offchain_mlfeed,
+        )))
+        .add_service(reflection_service)
+        .into_service()
+        .into_axum_router();
 
     let http_grpc = Steer::new(
         vec![http, grpc_axum],
