@@ -6,6 +6,7 @@ use crate::{
         BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL,
     },
     events::warehouse_events::WarehouseEvent,
+    qstash::client::{QStashClient, VideoPublisherData},
     utils::{cf_images::upload_base64_image, time::system_time_to_custom},
     AppError,
 };
@@ -391,6 +392,7 @@ pub struct UploadVideoInfo {
     pub post_id: u64,
     pub timestamp: String,
     pub publisher_user_id: String,
+    pub channel_id: Option<String>,
 }
 
 pub async fn upload_video_gcs(
@@ -448,6 +450,54 @@ pub async fn upload_gcs_impl(
 
     // update
     let _ = gcs_client.object().update(&res_obj).await?;
+
+    Ok(())
+}
+
+pub async fn on_video_upload_success(
+    video_id: &str,
+    video_url: &str,
+    canister_id: &str,
+    post_id: u64,
+    timestamp: String,
+    publisher_user_id: &str,
+    channel_id: Option<String>,
+    qstash_client: &QStashClient,
+) -> Result<(), anyhow::Error> {
+    let publisher_data = VideoPublisherData {
+        canister_id: canister_id.to_string(),
+        publisher_principal: publisher_user_id.to_string(),
+        post_id,
+    };
+
+    qstash_client
+        .publish_video_hash_indexing(video_id, video_url, publisher_data)
+        .await?;
+
+    log::info!("VideoHash Indexing completed for video: {}", video_id);
+
+    qstash_client
+        .publish_video(
+            video_id,
+            canister_id,
+            post_id,
+            timestamp.clone(),
+            publisher_user_id,
+        )
+        .await?;
+
+    let video_info = UploadVideoInfo {
+        video_id: video_id.to_string(),
+        canister_id: canister_id.to_string(),
+        post_id,
+        publisher_user_id: publisher_user_id.to_string(),
+        timestamp: timestamp.clone(),
+        channel_id,
+    };
+
+    qstash_client
+        .publish_video_nsfw_detection_v2(video_id, video_info.clone())
+        .await?;
 
     Ok(())
 }

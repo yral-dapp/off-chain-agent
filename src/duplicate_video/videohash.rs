@@ -86,7 +86,6 @@ fn create_ram_temp_dir(prefix: &str) -> Result<PathBuf, Box<dyn Error + Send + S
 /// VideoHash represents a perceptual hash of a video
 #[derive(Debug, Clone)]
 pub struct VideoHash {
-    /// The binary hash string (64 characters of '0' and '1')
     pub hash: String,
 }
 
@@ -97,6 +96,52 @@ impl VideoHash {
         let hash = Self::fast_hash(video_path)?;
         log::info!("Total processing time: {:?}", start.elapsed());
         Ok(Self { hash })
+    }
+
+    pub fn from_url(url: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        log::info!("Generating video hash from URL: {}", url);
+
+        // Check if it's already a file:// URL - we can optimize this case
+        if url.starts_with("file://") {
+            if let Some(path_str) = url.strip_prefix("file://") {
+                // For file:// URLs, we can use the direct path method
+                // which is already optimized and tested
+                let path = Path::new(path_str);
+                if path.exists() {
+                    return Self::new(path);
+                }
+            }
+        }
+
+        // For remote URLs, download to a temporary file first
+        // This ensures we use the same optimized file-based processing
+        let temp_dir = TempDir::new("videohash")?;
+        let temp_file = temp_dir.path().join("temp_video.mp4");
+
+        log::info!(
+            "Downloading video from URL to temporary file: {:?}",
+            temp_file
+        );
+
+        // Use FFmpeg to download and convert the URL to a local file
+        // This preserves all video characteristics while ensuring consistent processing
+        let status = Command::new("ffmpeg")
+            .args(&[
+                "-y", // Overwrite output files
+                "-i",
+                url, // Input URL
+                "-c",
+                "copy", // Copy without re-encoding
+                temp_file.to_str().unwrap(),
+            ])
+            .status()?;
+
+        if !status.success() {
+            return Err("Failed to download video from URL".into());
+        }
+
+        // Now that we have a local file, use the standard optimized hash method
+        Self::new(&temp_file)
     }
 
     pub fn fast_hash(video_path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
