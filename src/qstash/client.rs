@@ -9,11 +9,16 @@ use reqwest::{Client, Url};
 use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 
 use crate::{
+    app_state,
     canister::upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
     consts::OFF_CHAIN_AGENT_URL,
+    duplicate_video::videohash::VideoHash,
     events::event::UploadVideoInfo,
     posts::ReportPostRequest,
 };
+use cloud_storage::Client as GcsClient;
+use google_cloud_bigquery::http::job::query::QueryRequest;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 pub struct QStashClient {
@@ -277,4 +282,209 @@ impl QStashClient {
 
         Ok(())
     }
+
+    pub async fn publish_video_hash_indexing(
+        &self,
+        video_id: &str,
+        video_url: &str,
+        publisher_data: VideoPublisherData,
+    ) -> Result<(), anyhow::Error> {
+        log::info!("Calculating videohash for video URL: {}", video_url);
+        let video_hash = VideoHash::from_url(video_url)
+            .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
+
+        self.store_videohash_original(video_id, &video_hash.hash)
+            .await?;
+
+        log::info!("Calling VideoHash Indexer service for video: {}", video_id);
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("https://videohash-indexer.fly.dev/api/index")
+            .json(&serde_json::json!({
+                "videoUrl": video_url,
+                "hash": video_hash.hash,
+                "videoId": video_id
+            }))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status(); // Store status before consuming response
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!(
+                "VideoHash Indexer API failed: {} - {}",
+                status,
+                error_text
+            ));
+        }
+
+        let indexer_response: VideoHashIndexerResponse = response.json().await?;
+
+        if indexer_response.match_found {
+            if let Some(match_details) = indexer_response.match_details {
+                self.store_duplicate_video(
+                    video_id,
+                    &video_hash.hash,
+                    &match_details,
+                    &publisher_data,
+                )
+                .await?;
+
+                log::info!(
+                    "Duplicate video detected: {} is similar to {} (score: {})",
+                    video_id,
+                    match_details.video_id,
+                    match_details.similarity_percentage
+                );
+            }
+        } else {
+            self.store_unique_video(video_id, &video_hash.hash).await?;
+            log::info!("Unique video recorded: {}", video_id);
+        }
+
+        Ok(())
+    }
+
+    async fn store_videohash_original(
+        &self,
+        video_id: &str,
+        hash: &str,
+    ) -> Result<(), anyhow::Error> {
+        let bigquery_client = app_state::init_bigquery_client().await;
+
+        let query = format!(
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
+             (video_id, videohash, created_at) 
+             VALUES ('{}', '{}', TIMESTAMP '{}')",
+            video_id,
+            hash,
+            chrono::Utc::now().to_rfc3339()
+        );
+
+        let request = QueryRequest {
+            query,
+            ..Default::default()
+        };
+
+        log::info!(
+            "Storing hash in videohash_original for video_id: {}",
+            video_id
+        );
+
+        bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &request)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn store_unique_video(&self, video_id: &str, hash: &str) -> Result<(), anyhow::Error> {
+        let bigquery_client = app_state::init_bigquery_client().await;
+
+        let query = format!(
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique` 
+             (video_id, videohash, created_at) 
+             VALUES ('{}', '{}', TIMESTAMP '{}')",
+            video_id,
+            hash,
+            chrono::Utc::now().to_rfc3339()
+        );
+
+        let request = QueryRequest {
+            query,
+            ..Default::default()
+        };
+
+        log::info!(
+            "Storing unique video in video_unique for video_id: {}",
+            video_id
+        );
+
+        bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &request)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn store_duplicate_video(
+        &self,
+        video_id: &str,
+        hash: &str,
+        match_details: &MatchDetails,
+        publisher_data: &VideoPublisherData,
+    ) -> Result<(), anyhow::Error> {
+        let bigquery_client = app_state::init_bigquery_client().await;
+
+        let exact_duplicate = match_details.similarity_percentage > 99.0;
+
+        let query = format!(
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.duplicate_video` (
+                publisher_canister_id, publisher_principal, post_id,
+                original_video_id, parent_video_id, parent_canister_id,
+                parent_principal, parent_post_id, exact_duplicate,
+                duplication_score, created_at
+            ) VALUES (
+                '{}', '{}', {},
+                '{}', '{}', '{}',
+                '{}', {}, {},
+                {}, TIMESTAMP '{}'
+            )",
+            publisher_data.canister_id,
+            publisher_data.publisher_principal,
+            publisher_data.post_id,
+            video_id,
+            match_details.video_id,
+            publisher_data.canister_id,
+            publisher_data.publisher_principal,
+            publisher_data.post_id,
+            exact_duplicate,
+            match_details.similarity_percentage,
+            chrono::Utc::now().to_rfc3339()
+        );
+
+        let request = QueryRequest {
+            query,
+            ..Default::default()
+        };
+
+        log::info!(
+            "Storing duplicate video in duplicate_video: original={}, parent={}, score={}",
+            video_id,
+            match_details.video_id,
+            match_details.similarity_percentage
+        );
+
+        bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &request)
+            .await?;
+
+        Ok(())
+    }
+}
+
+// Add these structures to support the indexer API response
+#[derive(Debug, Deserialize)]
+struct VideoHashIndexerResponse {
+    match_found: bool,
+    match_details: Option<MatchDetails>,
+    hash_added: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct MatchDetails {
+    video_id: String,
+    similarity_percentage: f64,
+    is_duplicate: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct VideoPublisherData {
+    pub canister_id: String,
+    pub publisher_principal: String,
+    pub post_id: u64,
 }
