@@ -101,7 +101,7 @@ pub async fn get_object_metadata(
 
     let object = client
         .object()
-        .read("yral-videos", &format!("{id}.m4"))
+        .read("yral-videos", &format!("{id}.mp4"))
         .await?;
 
     let metadata = object.metadata.ok_or(anyhow!("There's no metadata"))?;
