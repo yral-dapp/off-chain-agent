@@ -38,6 +38,3 @@ pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
 
 pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
     Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").expect("STORJ_INTERFACE_TOKEN to be set"));
-
-pub static VECTOR_DEV_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://vector-dev-yral.fly.dev/").unwrap());

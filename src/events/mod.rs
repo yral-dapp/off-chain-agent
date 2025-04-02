@@ -208,7 +208,6 @@ async fn process_event_impl(
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct EventBulkRequest {
     pub delegated_identity_wire: DelegatedIdentityWire,
-    // #[schema(value_type = Object)]
     pub events: Vec<AnalyticsEvent>,
 }
 
@@ -243,7 +242,7 @@ async fn handle_bulk_events(
         metric_events.push(req_event);
 
         if let Err(e) = process_event_impl(event, state.clone()).await {
-            log::error!("Failed to process event rest: {}", e);
+            log::error!("Failed to process event rest: {}", e); // not sending any error to the client as it is a bulk request
         }
     }
 
