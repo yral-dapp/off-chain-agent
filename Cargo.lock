@@ -4352,7 +4352,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?rev=088a871f986236bab45ff89e68886f4c8d802449#088a871f986236bab45ff89e68886f4c8d802449"
+source = "git+https://github.com/yral-dapp/yral-common?rev=fff8f83ed5967213453498d8e222ce93957c5e7a#fff8f83ed5967213453498d8e222ce93957c5e7a"
 dependencies = [
  "anyhow",
  "bb8",
@@ -4361,7 +4361,6 @@ dependencies = [
  "redis-macros",
  "serde",
  "serde-redis",
- "serde_bytes",
  "serde_json",
  "utoipa",
 ]
@@ -7935,12 +7934,12 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?rev=fff8f83ed5967213453498d8e222ce93957c5e7a#fff8f83ed5967213453498d8e222ce93957c5e7a"
 dependencies = [
  "candid",
  "log",
  "reqwest 0.12.15",
  "serde",
- "serde_json",
  "serde_with 3.12.0",
  "trait-variant",
  "utoipa",
