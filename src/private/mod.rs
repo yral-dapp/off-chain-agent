@@ -90,8 +90,8 @@ pub async fn get_nsfw_probability(
 }
 
 #[derive(Deserialize)]
-struct ObjectDataQuery {
-    id: String,
+pub struct ObjectDataQuery {
+    pub id: String,
 }
 
 pub async fn get_object_metadata(
