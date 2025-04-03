@@ -22,9 +22,10 @@ pub const CLOUDFLARE_ACCOUNT_ID: &str = "a209c523d2d9646cc56227dbe6ce3ede";
 
 pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
-// TODO: change back to https://icp-off-chain-agent.fly.dev/
+// TODO: make this an environment variable that is set to point to pr deployment
+// url in prs and to prod url when deploying to main
 pub static OFF_CHAIN_AGENT_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://pr-174-yral-dapp-off-chain-agent.fly.dev/").unwrap());
+    Lazy::new(|| Url::parse("https://icp-off-chain-agent.fly.dev/").unwrap());
 
 pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
 
