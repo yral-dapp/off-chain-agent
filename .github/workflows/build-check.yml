@@ -26,9 +26,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install prereqs
-        run: |
-          sudo apt-get install protobuf-compiler musl-tools
+      - name: Cache and Install prereqs
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: protobuf-compiler musl-tools
+          version: 1.0 # cache version, for manual invalidation
 
       - name: Rust Setup
         uses: dtolnay/rust-toolchain@master
