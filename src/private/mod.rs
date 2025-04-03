@@ -1,10 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use axum::{
     extract::{Query, State},
     Json,
 };
+use candid::Principal;
 use google_cloud_bigquery::{
     http::{
         job::query::QueryRequest,
@@ -14,6 +15,7 @@ use google_cloud_bigquery::{
 };
 use serde::Deserialize;
 use storj::fetch;
+use storj::AdminCanisters;
 
 use crate::{app_state::AppState, AppError};
 
@@ -107,4 +109,37 @@ pub async fn get_object_metadata(
     let metadata = object.metadata.ok_or(anyhow!("There's no metadata"))?;
 
     Ok(Json(metadata))
+}
+
+pub async fn get_all_principal_id_pair(
+    State(app_state): State<Arc<AppState>>,
+) -> Result<Json<Vec<(Principal, Principal)>>, AppError> {
+    let admin = AdminCanisters::new(app_state.agent.clone());
+
+    let subs = admin
+        .platform_orchestrator()
+        .await
+        .get_all_subnet_orchestrators()
+        .await
+        .context("Couldn't fetch the subnet orchestrator")?;
+
+    let mut res = Vec::new();
+
+    for sub in subs {
+        let list = admin
+            .user_index_with(sub)
+            .await
+            .get_user_id_and_canister_list()
+            .await
+            .context(format!(
+                "Couldn't get user id and canister list for SO({sub})"
+            ))?;
+
+        res.extend(
+            list.into_iter()
+                .map(|(principal, canister)| (canister, principal)),
+        );
+    }
+
+    Ok(Json(res))
 }

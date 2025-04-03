@@ -10,7 +10,7 @@ use std::{
     },
 };
 
-use admin::AdminCanisters;
+pub use admin::AdminCanisters;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
