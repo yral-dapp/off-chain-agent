@@ -51,6 +51,7 @@ mod consts;
 mod duplicate_video;
 mod error;
 mod events;
+pub mod metrics;
 mod offchain_service;
 mod posts;
 mod private;

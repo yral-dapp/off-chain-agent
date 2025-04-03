@@ -20,8 +20,6 @@ use crate::{
     utils::grpc_clients::ml_feed::{ml_feed_client::MlFeedClient, VideoReportRequest},
 };
 
-// bulk events are planned through vector
-// pub mod events;
 mod types;
 mod utils;
 mod verify;

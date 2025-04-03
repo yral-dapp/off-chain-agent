@@ -1,16 +1,13 @@
-use std::{collections::HashMap, env, sync::Arc, time::UNIX_EPOCH};
+use std::{collections::HashMap, env, sync::Arc};
 
 use crate::{
     app_state::AppState,
-    consts::{
-        BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL,
-    },
+    consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
     events::warehouse_events::WarehouseEvent,
-    utils::{cf_images::upload_base64_image, time::system_time_to_custom},
+    utils::cf_images::upload_base64_image,
     AppError,
 };
 use axum::{extract::State, Json};
-use candid::Principal;
 use chrono::{DateTime, Utc};
 use firestore::errors::FirestoreError;
 use google_cloud_bigquery::http::job::query::QueryRequest;
@@ -18,9 +15,6 @@ use log::error;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use yral_canisters_client::individual_user_template::{
-    SuccessHistoryItemV1, SystemTime, WatchHistoryItem,
-};
 use yral_ml_feed_cache::{
     consts::{
         USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
@@ -65,6 +59,7 @@ pub struct ICPumpTokenMetadata {
     is_nsfw: bool,
 }
 
+#[derive(Debug)]
 pub struct Event {
     pub event: WarehouseEvent,
 }
