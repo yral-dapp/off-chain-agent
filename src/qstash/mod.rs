@@ -38,7 +38,7 @@ use crate::{
     },
     consts::ICP_LEDGER_CANISTER_ID,
     events::{
-        event::upload_video_gcs,
+        event::{storj::storj_ingest, upload_video_gcs},
         nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
     },
     posts::qstash_report_post,
@@ -430,6 +430,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(upgrade_user_token_sns_canister_for_entire_network),
         )
         .route("/report_post", post(qstash_report_post))
+        .route("/storj_ingest", post(storj_ingest))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,

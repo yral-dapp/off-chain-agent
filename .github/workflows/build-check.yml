@@ -45,6 +45,9 @@ jobs:
       #   run: |
       #     cargo fmt --check
       #     cargo clippy --no-deps --all-features --release -- -Dwarnings
+      - name: Use rust cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Build
         run: cargo build --release --target x86_64-unknown-linux-musl
         env:

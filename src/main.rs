@@ -17,6 +17,7 @@ use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
 use consts::STORJ_INTERFACE_TOKEN;
 use env_logger::{Builder, Target};
+use events::event::storj::enqueue_storj_backfill_item;
 use events::nsfw::extract_frames_and_upload;
 use http::header::CONTENT_TYPE;
 use log::LevelFilter;
@@ -120,6 +121,10 @@ async fn main() -> Result<()> {
         .route(
             "/update-global-ml-feed-cache-nsfw",
             get(update_ml_feed_cache_nsfw),
+        )
+        .route(
+            "/enqueue_storj_backfill_item",
+            post(enqueue_storj_backfill_item),
         )
         .nest("/qstash", qstash_routes)
         .nest_service("/", router)
