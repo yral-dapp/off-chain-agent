@@ -22,6 +22,9 @@ use http::header::CONTENT_TYPE;
 use log::LevelFilter;
 use offchain_service::report_approved_handler;
 use once_cell::sync::Lazy;
+use private::{
+    get_all_principal_id_pair, get_nsfw_probability, get_object_metadata, kickstart_stage_one,
+};
 use qstash::qstash_router;
 use tonic::transport::Server;
 use tower::make::Shared;
@@ -29,7 +32,6 @@ use tower::steer::Steer;
 use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
-use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::check_auth_grpc;
 use crate::canister::canisters_list_handler;
@@ -52,6 +54,7 @@ mod events;
 pub mod metrics;
 mod offchain_service;
 mod posts;
+mod private;
 mod qstash;
 mod types;
 pub mod utils;
@@ -87,9 +90,6 @@ async fn main() -> Result<()> {
         )
         .split_for_parts();
 
-    let router =
-        router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()));
-
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
     let http = Router::new()
@@ -115,6 +115,10 @@ async fn main() -> Result<()> {
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),
         )
+        .route("/__private/nsfw-probability", post(get_nsfw_probability))
+        .route("/__private/kickstart", get(kickstart_stage_one))
+        .route("/__private/get_metadata", get(get_object_metadata))
+        .route("/__private/get_user_ids", get(get_all_principal_id_pair))
         .route("/extract-frames", post(extract_frames_and_upload))
         .route("/update-global-ml-feed-cache", get(update_ml_feed_cache))
         .route(
