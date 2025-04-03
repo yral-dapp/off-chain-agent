@@ -1,22 +1,27 @@
 use axum::extract::State;
 use axum::response::IntoResponse;
-use axum::Json;
+use axum::{middleware, Json};
 use candid::Principal;
+use chrono::Utc;
 use event::Event;
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::error::Error;
 use std::sync::Arc;
+use types::AnalyticsEvent;
 use utoipa::ToSchema;
-use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::router::{OpenApiRouter, UtoipaMethodRouterExt};
 use utoipa_axum::routes;
+use verify::verify_event_bulk_request;
+use yral_metrics::metrics::sealed_metric::SealedMetric;
 
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::check_auth_events;
 use crate::events::push_notifications::dispatch_notif;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
+use crate::types::DelegatedIdentityWire;
 use crate::AppState;
 use serde_json::Value;
 
@@ -30,6 +35,8 @@ pub mod event;
 pub mod nsfw;
 pub mod push_notifications;
 pub mod queries;
+pub mod types;
+pub mod verify;
 
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
@@ -108,6 +115,12 @@ impl VideoUploadSuccessful {
 pub fn events_router(state: Arc<AppState>) -> OpenApiRouter {
     OpenApiRouter::new()
         .routes(routes!(post_event))
+        .routes(
+            routes!(handle_bulk_events).layer(middleware::from_fn_with_state(
+                state.clone(),
+                verify_event_bulk_request,
+            )),
+        )
         .with_state(state)
 }
 
@@ -189,4 +202,56 @@ async fn process_event_impl(
     let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
 
     Ok(())
+}
+
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
+pub struct EventBulkRequest {
+    pub delegated_identity_wire: DelegatedIdentityWire,
+    pub events: Vec<AnalyticsEvent>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct VerifiedEventBulkRequest {
+    pub events: Vec<AnalyticsEvent>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/bulk",
+    request_body = EventBulkRequest,
+    tag = "events",
+    responses(
+        (status = 200, description = "Bulk event success"),
+        (status = 400, description = "Bulk event failed"),
+        (status = 500, description = "Internal server error"),
+        (status = 403, description = "Forbidden"),
+    )
+)]
+async fn handle_bulk_events(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<VerifiedEventBulkRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let mut metric_events = Vec::new();
+    for req_event in request.events {
+        let event = Event::new(WarehouseEvent {
+            event: req_event.tag(),
+            params: req_event.params().to_string(),
+        });
+
+        metric_events.push(req_event);
+
+        if let Err(e) = process_event_impl(event, state.clone()).await {
+            log::error!("Failed to process event rest: {}", e); // not sending any error to the client as it is a bulk request
+        }
+    }
+
+    if let Err(e) = state
+        .metrics
+        .push_list("metrics_list".into(), metric_events)
+        .await
+    {
+        log::error!("Failed to push metrics to vector: {}", e);
+    }
+
+    Ok((StatusCode::OK, "Events processed".to_string()))
 }

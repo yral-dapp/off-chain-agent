@@ -1,5 +1,6 @@
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
+use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use anyhow::{anyhow, Context, Result};
@@ -34,6 +35,7 @@ pub struct AppState {
     pub gcs_client: Arc<cloud_storage::Client>,
     #[cfg(not(feature = "local-bin"))]
     pub ml_feed_cache: MLFeedCacheState,
+    pub metrics: CfMetricTx,
 }
 
 impl AppState {
@@ -55,6 +57,7 @@ impl AppState {
             gcs_client: Arc::new(cloud_storage::Client::default()),
             #[cfg(not(feature = "local-bin"))]
             ml_feed_cache: MLFeedCacheState::new().await,
+            metrics: init_metrics(),
         }
     }
 

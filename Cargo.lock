@@ -4352,7 +4352,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?rev=088a871f986236bab45ff89e68886f4c8d802449#088a871f986236bab45ff89e68886f4c8d802449"
+source = "git+https://github.com/yral-dapp/yral-common?rev=fff8f83ed5967213453498d8e222ce93957c5e7a#fff8f83ed5967213453498d8e222ce93957c5e7a"
 dependencies = [
  "anyhow",
  "bb8",
@@ -4361,7 +4361,6 @@ dependencies = [
  "redis-macros",
  "serde",
  "serde-redis",
- "serde_bytes",
  "serde_json",
  "utoipa",
 ]
@@ -4605,6 +4604,7 @@ dependencies = [
  "uuid",
  "yral-canisters-client",
  "yral-metadata-client",
+ "yral-metrics",
  "yral-qstash-types",
  "yup-oauth2",
 ]
@@ -7118,6 +7118,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "trait-variant"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70977707304198400eb4835a78f6a9f928bf41bba420deb8fdb175cd965d77a7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.100",
+]
+
+[[package]]
 name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7918,6 +7929,21 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "yral-identity",
+]
+
+[[package]]
+name = "yral-metrics"
+version = "0.1.0"
+source = "git+https://github.com/yral-dapp/yral-common?rev=fff8f83ed5967213453498d8e222ce93957c5e7a#fff8f83ed5967213453498d8e222ce93957c5e7a"
+dependencies = [
+ "candid",
+ "log",
+ "reqwest 0.12.15",
+ "serde",
+ "serde_with 3.12.0",
+ "trait-variant",
+ "utoipa",
+ "web-time",
 ]
 
 [[package]]
