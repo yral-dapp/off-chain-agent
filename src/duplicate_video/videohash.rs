@@ -99,6 +99,44 @@ impl VideoHash {
         Ok(Self { hash })
     }
 
+    pub fn from_url(url: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        log::info!("Generating video hash from URL: {}", url);
+
+        if url.starts_with("file://") {
+            if let Some(path_str) = url.strip_prefix("file://") {
+                let path = Path::new(path_str);
+                if path.exists() {
+                    return Self::new(path);
+                }
+            }
+        }
+
+        let temp_dir = TempDir::new("videohash")?;
+        let temp_file = temp_dir.path().join("temp_video.mp4");
+
+        log::info!(
+            "Downloading video from URL to temporary file: {:?}",
+            temp_file
+        );
+
+        let status = Command::new("ffmpeg")
+            .args(&[
+                "-y", 
+                "-i",
+                url, 
+                "-c",
+                "copy", 
+                temp_file.to_str().unwrap(),
+            ])
+            .status()?;
+
+        if !status.success() {
+            return Err("Failed to download video from URL".into());
+        }
+
+        Self::new(&temp_file)
+    }
+
     pub fn fast_hash(video_path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
         let start = Instant::now();
 
