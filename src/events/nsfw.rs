@@ -5,7 +5,10 @@ use std::{
     sync::Arc,
 };
 
-use crate::consts::{NSFW_SERVER_URL, NSFW_THRESHOLD, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL};
+use crate::{
+    consts::{NSFW_SERVER_URL, NSFW_THRESHOLD, STORJ_INTERFACE_TOKEN, STORJ_INTERFACE_URL},
+    qstash::client::QStashClient,
+};
 use anyhow::Error;
 use axum::{extract::State, Json};
 use google_cloud_bigquery::http::{
@@ -218,8 +221,11 @@ pub async fn nsfw_job(
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
 
-async fn duplicate_to_storj(video_info: UploadVideoInfo, is_nsfw: bool) -> Result<(), AppError> {
-    let client = reqwest::Client::new();
+async fn duplicate_to_storj(
+    qstash: &QStashClient,
+    video_info: UploadVideoInfo,
+    is_nsfw: bool,
+) -> Result<(), AppError> {
     let duplicate_args = storj_interface::duplicate::Args {
         publisher_user_id: video_info.publisher_user_id,
         video_id: video_info.video_id,
@@ -232,16 +238,8 @@ async fn duplicate_to_storj(video_info: UploadVideoInfo, is_nsfw: bool) -> Resul
         .into(),
     };
 
-    client
-        .post(
-            STORJ_INTERFACE_URL
-                .join("/duplicate")
-                .expect("url to be valid"),
-        )
-        .json(&duplicate_args)
-        .bearer_auth(STORJ_INTERFACE_TOKEN.as_str())
-        .send()
-        .await?;
+    qstash.duplicate_to_storj(duplicate_args).await?;
+
     Ok(())
 }
 
@@ -321,7 +319,7 @@ pub async fn nsfw_job_v2(
     let bigquery_client = state.bigquery_client.clone();
     push_nsfw_data_bigquery_v2(bigquery_client, nsfw_prob, video_id.clone()).await?;
 
-    duplicate_to_storj(payload.video_info, is_nsfw).await?;
+    duplicate_to_storj(&state.qstash_client, payload.video_info, is_nsfw).await?;
 
     Ok(Json(
         serde_json::json!({ "message": "NSFW v2 job completed" }),

@@ -25,6 +25,8 @@ use yral_ml_feed_cache::{
 
 use super::queries::get_icpump_insert_query;
 
+pub mod storj;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct TokenListItem {
     user_id: String,
