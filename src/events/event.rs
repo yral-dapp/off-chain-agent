@@ -1,9 +1,9 @@
-use std::{collections::HashMap, env, sync::Arc};
-
+use crate::consts::OFF_CHAIN_AGENT_URL;
 use crate::{
     app_state::AppState,
     consts::{BIGQUERY_INGESTION_URL, CLOUDFLARE_ACCOUNT_ID},
     events::warehouse_events::WarehouseEvent,
+    qstash::duplicate::VideoPublisherData,
     utils::cf_images::upload_base64_image,
     AppError,
 };
@@ -11,10 +11,12 @@ use axum::{extract::State, Json};
 use chrono::{DateTime, Utc};
 use firestore::errors::FirestoreError;
 use google_cloud_bigquery::http::job::query::QueryRequest;
+use http::header::CONTENT_TYPE;
 use log::error;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::{collections::HashMap, env, sync::Arc};
 use yral_ml_feed_cache::{
     consts::{
         USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
@@ -59,6 +61,18 @@ pub struct ICPumpTokenMetadata {
     pub created_at: String,
     #[serde(default)]
     is_nsfw: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DuplicateVideoEvent {
+    pub original_video_id: String,
+    pub parent_video_id: String,
+    pub similarity_percentage: f64,
+    pub exact_duplicate: bool,
+    pub publisher_canister_id: String,
+    pub publisher_principal: String,
+    pub post_id: u64,
+    pub timestamp: String,
 }
 
 #[derive(Debug)]
@@ -152,6 +166,107 @@ impl Event {
                         "upload_to_gcs: Error sending data to qstash: {:?}",
                         res.err()
                     );
+                }
+            });
+        }
+    }
+
+    pub fn check_video_deduplication(&self, app_state: &AppState) {
+        if self.event.event == "video_upload_successful" {
+            let params: Value = match serde_json::from_str(&self.event.params) {
+                Ok(params) => params,
+                Err(e) => {
+                    error!(
+                        "Failed to parse video_upload_successful event params: {}",
+                        e
+                    );
+                    return;
+                }
+            };
+
+            let qstash_client = app_state.qstash_client.clone();
+
+            tokio::spawn(async move {
+                // Extract required fields with error handling
+                let video_id = match params.get("video_id").and_then(|v| v.as_str()) {
+                    Some(id) => id,
+                    None => {
+                        error!("Missing video_id in video_upload_successful event");
+                        return;
+                    }
+                };
+
+                let canister_id = match params.get("canister_id").and_then(|v| v.as_str()) {
+                    Some(id) => id,
+                    None => {
+                        error!("Missing canister_id in video_upload_successful event");
+                        return;
+                    }
+                };
+
+                let post_id = match params.get("post_id").and_then(|v| v.as_u64()) {
+                    Some(id) => id,
+                    None => {
+                        error!("Missing post_id in video_upload_successful event");
+                        return;
+                    }
+                };
+
+                let publisher_user_id =
+                    match params.get("publisher_user_id").and_then(|v| v.as_str()) {
+                        Some(id) => id,
+                        None => {
+                            error!("Missing publisher_user_id in video_upload_successful event");
+                            return;
+                        }
+                    };
+
+                // Construct video URL
+                let video_url = format!(
+                    "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
+                    video_id
+                );
+
+                log::info!("Sending video for deduplication check: {}", video_id);
+
+                // Create request for video_deduplication endpoint
+                let off_chain_ep = OFF_CHAIN_AGENT_URL
+                    .join("qstash/video_deduplication")
+                    .unwrap();
+                let url = qstash_client
+                    .base_url
+                    .join(&format!("publish/{}", off_chain_ep))
+                    .unwrap();
+
+                let request_data = serde_json::json!({
+                    "video_id": video_id,
+                    "video_url": video_url,
+                    "publisher_data": {
+                        "canister_id": canister_id,
+                        "publisher_principal": publisher_user_id,
+                        "post_id": post_id
+                    }
+                });
+
+                // Send to the "/video_deduplication" endpoint via QStash
+                let result = qstash_client
+                    .client
+                    .post(url)
+                    .json(&request_data)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("upstash-method", "POST")
+                    .send()
+                    .await;
+
+                match result {
+                    Ok(_) => log::info!(
+                        "Video deduplication check successfully queued for video_id: {}",
+                        video_id
+                    ),
+                    Err(e) => error!(
+                        "Failed to queue video deduplication check for video_id {}: {:?}",
+                        video_id, e
+                    ),
                 }
             });
         }
@@ -388,6 +503,7 @@ pub struct UploadVideoInfo {
     pub post_id: u64,
     pub timestamp: String,
     pub publisher_user_id: String,
+    pub channel_id: Option<String>,
 }
 
 pub async fn upload_video_gcs(

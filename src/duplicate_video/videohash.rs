@@ -120,14 +120,7 @@ impl VideoHash {
         );
 
         let status = Command::new("ffmpeg")
-            .args(&[
-                "-y", 
-                "-i",
-                url, 
-                "-c",
-                "copy", 
-                temp_file.to_str().unwrap(),
-            ])
+            .args(&["-y", "-i", url, "-c", "copy", temp_file.to_str().unwrap()])
             .status()?;
 
         if !status.success() {
