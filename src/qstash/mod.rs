@@ -516,10 +516,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(upgrade_sns_creator_dao_canister),
         )
         .route("/video_deduplication", post(video_deduplication_handler))
-        .route(
-            "/deduplication_completed",
-            post(video_hash_indexing_handler),
-        )
+        // .route(
+        //     "/deduplication_completed",
+        //     post(video_hash_indexing_handler),
+        // )
         .route("/upload_video_gcs", post(upload_video_gcs))
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))

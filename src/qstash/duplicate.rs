@@ -118,14 +118,13 @@ impl<'a> VideoHashDuplication<'a> {
                     timestamp: chrono::Utc::now().to_rfc3339(),
                 };
 
-                self.publish_duplicate_video_event(duplicate_event).await?;
+                // self.publish_duplicate_video_event(duplicate_event).await?;
             }
         } else {
             // For unique videos
             self.store_unique_video(video_id, &video_hash.hash).await?;
             log::info!("Unique video recorded: {}", video_id);
 
-            // Only proceed with normal video processing for unique videos
             let timestamp = chrono::Utc::now().to_rfc3339();
             publish_video_callback(
                 video_id,
@@ -137,13 +136,13 @@ impl<'a> VideoHashDuplication<'a> {
         }
 
         // Publish "de-duplication_check_done" event regardless of whether it's duplicate or not
-        self.publish_deduplication_completed(
-            video_id,
-            &publisher_data.canister_id,
-            publisher_data.post_id,
-            &publisher_data.publisher_principal,
-        )
-        .await?;
+        // self.publish_deduplication_completed(
+        //     video_id,
+        //     &publisher_data.canister_id,
+        //     publisher_data.post_id,
+        //     &publisher_data.publisher_principal,
+        // )
+        // .await?;
 
         Ok(())
     }
@@ -290,7 +289,7 @@ impl<'a> VideoHashDuplication<'a> {
                     timestamp: chrono::Utc::now().to_rfc3339(),
                 };
 
-                self.publish_duplicate_video_event(duplicate_event).await?;
+                // self.publish_duplicate_video_event(duplicate_event).await?;
             }
         } else {
             // For unique videos
@@ -310,13 +309,13 @@ impl<'a> VideoHashDuplication<'a> {
         }
 
         // Publish "de-duplication_check_done" event regardless of whether it's duplicate or not
-        self.publish_deduplication_completed(
-            video_id,
-            &publisher_data.canister_id,
-            publisher_data.post_id,
-            &publisher_data.publisher_principal,
-        )
-        .await?;
+        // self.publish_deduplication_completed(
+        //     video_id,
+        //     &publisher_data.canister_id,
+        //     publisher_data.post_id,
+        //     &publisher_data.publisher_principal,
+        // )
+        // .await?;
 
         Ok(())
     }
