@@ -330,10 +330,8 @@ impl<'a> VideoHashDuplication<'a> {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', TIMESTAMP '{}')",
-            video_id,
-            hash,
-            chrono::Utc::now().to_rfc3339()
+             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
+            video_id, hash
         );
 
         let request = QueryRequest {
@@ -360,10 +358,8 @@ impl<'a> VideoHashDuplication<'a> {
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique` 
              (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', TIMESTAMP '{}')",
-            video_id,
-            hash,
-            chrono::Utc::now().to_rfc3339()
+             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
+            video_id, hash
         );
 
         let request = QueryRequest {
@@ -405,7 +401,7 @@ impl<'a> VideoHashDuplication<'a> {
                 '{}', '{}', {},
                 '{}', '{}', '{}',
                 '{}', {}, {},
-                {}, TIMESTAMP '{}'
+                {}, CURRENT_TIMESTAMP()
             )",
             publisher_data.canister_id,
             publisher_data.publisher_principal,
@@ -416,8 +412,7 @@ impl<'a> VideoHashDuplication<'a> {
             publisher_data.publisher_principal,
             publisher_data.post_id,
             exact_duplicate,
-            match_details.similarity_percentage,
-            chrono::Utc::now().to_rfc3339()
+            match_details.similarity_percentage
         );
 
         let request = QueryRequest {
