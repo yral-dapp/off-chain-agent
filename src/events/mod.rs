@@ -187,10 +187,11 @@ async fn process_event_impl(
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery(&shared_state.clone());
 
-    event.upload_to_gcs(&shared_state.clone());
+    event.check_video_deduplication(&shared_state.clone());
+
+    // event.upload_to_gcs(&shared_state.clone());
 
     event.update_watch_history(&shared_state.clone());
-
     event.update_success_history(&shared_state.clone());
 
     #[cfg(not(feature = "local-bin"))]

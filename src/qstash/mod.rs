@@ -13,6 +13,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use http::StatusCode;
 use ic_agent::{identity::DelegatedIdentity, Identity};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
+use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use tower::ServiceBuilder;
 use verify::verify_qstash_message;
@@ -27,6 +28,7 @@ use yral_canisters_client::{
 };
 use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 
+use crate::qstash::duplicate::VideoPublisherData;
 use crate::{
     app_state::AppState,
     canister::upgrade_user_token_sns_canister::{
@@ -37,14 +39,15 @@ use crate::{
         SnsCanisters, VerifyUpgradeProposalRequest,
     },
     consts::ICP_LEDGER_CANISTER_ID,
+    duplicate_video::videohash::VideoHash,
     events::{
         event::{storj::storj_ingest, upload_video_gcs},
         nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
     },
     posts::qstash_report_post,
 };
-
 pub mod client;
+pub mod duplicate;
 
 #[derive(Clone)]
 pub struct QStashState {
@@ -405,6 +408,105 @@ async fn upgrade_user_token_sns_canister_for_entire_network(
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct VideoHashIndexingRequest {
+    video_id: String,
+    video_url: String,
+    publisher_data: VideoPublisherData,
+}
+
+async fn video_hash_indexing_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<VideoHashIndexingRequest>,
+) -> Result<Response, StatusCode> {
+    log::info!("Processing video hash indexing for URL: {}", req.video_url);
+
+    let publisher_data = VideoPublisherData {
+        canister_id: req.publisher_data.canister_id.clone(),
+        publisher_principal: req.publisher_data.publisher_principal.clone(),
+        post_id: req.publisher_data.post_id,
+    };
+
+    state
+        .qstash_client
+        .publish_video_hash_indexing(&req.video_id, &req.video_url, publisher_data)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to index video hash: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body("Video hash indexed successfully".into())
+        .unwrap();
+
+    Ok(response)
+}
+
+async fn video_deduplication_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<VideoHashIndexingRequest>,
+) -> Result<Response, StatusCode> {
+    log::info!(
+        "Processing video deduplication for video ID: {}",
+        req.video_id
+    );
+
+    let publisher_data = VideoPublisherData {
+        canister_id: req.publisher_data.canister_id.clone(),
+        publisher_principal: req.publisher_data.publisher_principal.clone(),
+        post_id: req.publisher_data.post_id,
+    };
+
+    let duplication_handler = duplicate::VideoHashDuplication::new(
+        &state.qstash_client.client,
+        &state.qstash_client.base_url,
+    );
+
+    let qstash_client = state.qstash_client.clone();
+
+    if let Err(e) = duplication_handler
+        .process_video_deduplication(
+            &req.video_id,
+            &req.video_url,
+            publisher_data,
+            move |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
+                // Clone the values to ensure they have 'static lifetime
+                let vid_id = vid_id.to_string();
+                let canister_id = canister_id.to_string();
+                let publisher_user_id = publisher_user_id.to_string();
+
+                // Use the cloned qstash_client instead of accessing through state
+                let qstash_client = qstash_client.clone();
+
+                Box::pin(async move {
+                    qstash_client
+                        .publish_video(
+                            &vid_id,
+                            &canister_id,
+                            post_id,
+                            timestamp,
+                            &publisher_user_id,
+                        )
+                        .await
+                })
+            },
+        )
+        .await
+    {
+        log::error!("Video deduplication failed: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body("Video deduplication check completed".into())
+        .unwrap();
+
+    Ok(response)
+}
+
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
@@ -413,6 +515,11 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/upgrade_sns_creator_dao_canister",
             post(upgrade_sns_creator_dao_canister),
         )
+        .route("/video_deduplication", post(video_deduplication_handler))
+        // .route(
+        //     "/deduplication_completed",
+        //     post(video_hash_indexing_handler),
+        // )
         .route("/upload_video_gcs", post(upload_video_gcs))
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))

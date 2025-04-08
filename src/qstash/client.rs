@@ -9,16 +9,23 @@ use reqwest::{Client, Url};
 use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 
 use crate::{
+    app_state,
     canister::upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
     consts::OFF_CHAIN_AGENT_URL,
+    duplicate_video::videohash::VideoHash,
     events::event::UploadVideoInfo,
     posts::ReportPostRequest,
+    qstash::duplicate::{DuplicateVideoEvent, VideoHashDuplication, VideoPublisherData},
 };
+use cloud_storage::Client as GcsClient;
+use futures::future::BoxFuture;
+use google_cloud_bigquery::http::job::query::QueryRequest;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 pub struct QStashClient {
-    client: Client,
-    base_url: Arc<Url>,
+    pub client: Client,
+    pub base_url: Arc<Url>,
 }
 
 impl QStashClient {
@@ -42,6 +49,41 @@ impl QStashClient {
         }
     }
 
+    pub async fn publish_video_hash_indexing(
+        &self,
+        video_id: &str,
+        video_url: &str,
+        publisher_data: VideoPublisherData,
+    ) -> Result<(), anyhow::Error> {
+        let duplication_handler = VideoHashDuplication::new(&self.client, &self.base_url);
+
+        duplication_handler
+            .process_video_deduplication(
+                video_id,
+                video_url,
+                publisher_data,
+                |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
+                    // Clone the string references to own the data
+                    let vid_id = vid_id.to_string();
+                    let canister_id = canister_id.to_string();
+                    let publisher_user_id = publisher_user_id.to_string();
+
+                    // Create a boxed future from an async block
+                    Box::pin(async move {
+                        self.publish_video(
+                            &vid_id,
+                            &canister_id,
+                            post_id,
+                            timestamp,
+                            &publisher_user_id,
+                        )
+                        .await
+                    })
+                },
+            )
+            .await
+    }
+
     pub async fn duplicate_to_storj(
         &self,
         data: storj_interface::duplicate::Args,
@@ -60,6 +102,17 @@ impl QStashClient {
             .await?;
 
         Ok(())
+    }
+
+    pub async fn publish_duplicate_video_event(
+        &self,
+        duplicate_event: DuplicateVideoEvent,
+    ) -> Result<(), anyhow::Error> {
+        let duplication_handler = VideoHashDuplication::new(&self.client, &self.base_url);
+
+        duplication_handler
+            .publish_duplicate_video_event(duplicate_event)
+            .await
     }
 
     pub async fn publish_video(
@@ -164,14 +217,13 @@ impl QStashClient {
         let now = chrono::Utc::now();
         let current_minute = now.minute();
         let minutes_until_20 = if current_minute >= 20 {
-            60 - current_minute + 20 // Wait for next hour's :20
+            60 - current_minute + 20
         } else {
-            20 - current_minute // Wait for this hour's :20
+            20 - current_minute
         };
 
-        // Convert to seconds and add random jitter between 0-600 seconds
         let jitter = (now.nanosecond() % 601) as u32;
-        let delay_seconds = minutes_until_20 * 60 + jitter + 3600; // add 1 hour to the delay to compensate for bigquery buffer time
+        let delay_seconds = minutes_until_20 * 60 + jitter + 3600;
 
         self.client
             .post(url)
