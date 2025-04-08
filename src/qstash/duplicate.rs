@@ -66,7 +66,7 @@ impl<'a> VideoHashDuplication<'a> {
         // Call the video hash indexer API to check for duplicates
         let client = reqwest::Client::new();
         let response = client
-            .post("https://videohash-indexer.fly.dev/api/index")
+            .post("https://videohash-indexer.fly.dev/search")
             .json(&serde_json::json!({
                 "videoUrl": video_url,
                 "hash": video_hash.hash,
@@ -237,7 +237,7 @@ impl<'a> VideoHashDuplication<'a> {
         // Call the video hash indexer API to check for duplicates
         let client = reqwest::Client::new();
         let response = client
-            .post("https://videohash-indexer.fly.dev/api/index")
+            .post("https://videohash-indexer.fly.dev/search")
             .json(&serde_json::json!({
                 "videoUrl": video_url,
                 "hash": video_hash.hash,
