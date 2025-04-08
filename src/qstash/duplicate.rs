@@ -68,9 +68,8 @@ impl<'a> VideoHashDuplication<'a> {
         let response = client
             .post("https://videohash-indexer.fly.dev/search")
             .json(&serde_json::json!({
-                "videoUrl": video_url,
+                "video_id": video_id,
                 "hash": video_hash.hash,
-                "videoId": video_id
             }))
             .send()
             .await?;
@@ -239,9 +238,8 @@ impl<'a> VideoHashDuplication<'a> {
         let response = client
             .post("https://videohash-indexer.fly.dev/search")
             .json(&serde_json::json!({
-                "videoUrl": video_url,
+                "video_id": video_id,
                 "hash": video_hash.hash,
-                "videoId": video_id
             }))
             .send()
             .await?;
