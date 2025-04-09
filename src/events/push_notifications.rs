@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use crate::app_state::AppState;
 use anyhow::Result;
+use candid::Principal;
 use serde_json::Value;
 
 struct Notification {
@@ -21,17 +24,26 @@ async fn notify_principal(
         .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
         .await;
 
+    let metadata_client = &app_state.yral_metadata_client;
+    let user_principal = Principal::from_str(target_principal).unwrap();
+    let user_metadata = metadata_client
+        .get_user_metadata(user_principal)
+        .await?
+        .ok_or("metadata for principal not found")?;
+    let notification_key = user_metadata
+        .notification_key
+        .ok_or("notification key not found")?;
     let data = format!(
         r#"{{
             "message": {{
-                "topic": "{}",
+                "token": "{}",
                 "notification": {{
                     "title": "{}",
                     "body": "{}"
                 }}
             }}
         }}"#,
-        target_principal, notif.title, notif.body
+        notification_key.key, notif.title, notif.body
     );
 
     let response = client
@@ -47,38 +59,6 @@ async fn notify_principal(
     } else {
         log::error!("Error sending notification: {:?}", response);
         return Err(anyhow::anyhow!("Error sending notification").into());
-    }
-
-    Ok(())
-}
-
-pub async fn subscribe_device_to_topic(
-    target_principal: &str,
-    topic: &str,
-    app_state: &AppState,
-) -> Result<()> {
-    log::error!("Subscribing\n{}\nto topic\n{}", target_principal, topic);
-    let client = reqwest::Client::new();
-    let url = format!(
-        "https://iid.googleapis.com/iid/v1/{}/rel/topics/{}",
-        target_principal, topic
-    );
-    let token = app_state
-        .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
-        .await;
-
-    let response = client
-        .post(url)
-        .header("Authorization", format!("Bearer {}", token))
-        .header("access_token_auth", "true")
-        .send()
-        .await;
-
-    if response.is_ok() && response.as_ref().unwrap().status().is_success() {
-        log::info!("Subscribed to topic successfully");
-    } else {
-        log::error!("Error subscribing to topic: {:?}", response);
-        return Err(anyhow::anyhow!("Error subscribing to topic"));
     }
 
     Ok(())
