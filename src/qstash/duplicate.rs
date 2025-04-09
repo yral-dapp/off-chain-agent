@@ -390,16 +390,16 @@ impl<'a> VideoHashDuplication<'a> {
         let bigquery_client = app_state::init_bigquery_client().await;
         let exact_duplicate = match_details.similarity_percentage > 99.0;
         let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.duplicate_video` (
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.duplicate_videos` (
                 publisher_canister_id, publisher_principal, post_id,
                 original_video_id, parent_video_id, parent_canister_id,
                 parent_principal, parent_post_id, exact_duplicate,
-                duplication_score, created_at
+                duplication_score
             ) VALUES (
                 '{}', '{}', {},
                 '{}', '{}', NULL,
                 NULL, NULL, {},
-                {}, CURRENT_TIMESTAMP()
+                {}
             )",
             publisher_data.canister_id,
             publisher_data.publisher_principal,
