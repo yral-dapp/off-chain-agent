@@ -121,6 +121,8 @@ impl VideoHash {
 
         let status = Command::new("ffmpeg")
             .args(&["-y", "-i", url, "-c", "copy", temp_file.to_str().unwrap()])
+            .stdout(Stdio::null())  
+            .stderr(Stdio::null())  
             .status()?;
 
         if !status.success() {
@@ -153,6 +155,8 @@ impl VideoHash {
                 "default=noprint_wrappers=1:nokey=1",
                 video_path.to_str().unwrap(),
             ])
+            .stdout(Stdio::inherit())  
+            .stderr(Stdio::null())     
             .output()?;
 
         let duration: f32 = String::from_utf8_lossy(&duration_output.stdout)
