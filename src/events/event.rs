@@ -255,7 +255,6 @@ impl Event {
                     .json(&request_data)
                     .header(CONTENT_TYPE, "application/json")
                     .header("upstash-method", "POST")
-                    .header("upstash-delay", "600s")
                     .send()
                     .await;
 

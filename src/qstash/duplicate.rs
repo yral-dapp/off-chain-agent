@@ -259,7 +259,9 @@ impl<'a> VideoHashDuplication<'a> {
         let indexer_response: VideoHashIndexerResponse = response.json().await?;
         log::info!("VideoHash Indexer response: {:?}", indexer_response);
 
-        if indexer_response.match_found {
+        let is_duplicate = indexer_response.match_found;
+
+        if is_duplicate {
             // A similar video was found - record as duplicate
             if let Some(match_details) = indexer_response.match_details {
                 self.store_duplicate_video(
@@ -278,7 +280,7 @@ impl<'a> VideoHashDuplication<'a> {
                 );
 
                 let exact_duplicate = match_details.similarity_percentage > 99.0;
-                let duplicate_event = DuplicateVideoEvent {
+                let _duplicate_event = DuplicateVideoEvent {
                     original_video_id: video_id.to_string(),
                     parent_video_id: match_details.video_id.clone(),
                     similarity_percentage: match_details.similarity_percentage,
@@ -288,34 +290,22 @@ impl<'a> VideoHashDuplication<'a> {
                     post_id: publisher_data.post_id,
                     timestamp: chrono::Utc::now().to_rfc3339(),
                 };
-
-                // self.publish_duplicate_video_event(duplicate_event).await?;
             }
         } else {
-            // For unique videos
             self.store_unique_video(video_id, &video_hash.hash).await?;
             log::info!("Unique video recorded: {}", video_id);
-
-            // Only proceed with normal video processing for unique videos
-            let timestamp = chrono::Utc::now().to_rfc3339();
-            publish_video_callback(
-                video_id,
-                &publisher_data.canister_id,
-                publisher_data.post_id,
-                timestamp,
-                &publisher_data.publisher_principal,
-            )
-            .await?;
         }
 
-        // Publish "de-duplication_check_done" event regardless of whether it's duplicate or not
-        // self.publish_deduplication_completed(
-        //     video_id,
-        //     &publisher_data.canister_id,
-        //     publisher_data.post_id,
-        //     &publisher_data.publisher_principal,
-        // )
-        // .await?;
+        // Always proceed with normal video processing, regardless of duplicate status
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        publish_video_callback(
+            video_id,
+            &publisher_data.canister_id,
+            publisher_data.post_id,
+            timestamp,
+            &publisher_data.publisher_principal,
+        )
+        .await?;
 
         Ok(())
     }
