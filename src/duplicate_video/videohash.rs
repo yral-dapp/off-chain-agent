@@ -92,21 +92,23 @@ pub struct VideoHash {
 
 impl VideoHash {
     /// Create a new VideoHash from a video file path
-    pub fn new(video_path: &Path) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub async fn new(video_path: &Path) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let start = Instant::now();
-        let hash = Self::fast_hash(video_path)?;
+        let video_path = video_path.to_path_buf();
+        let hash = tokio::task::spawn_blocking(move || Self::fast_hash(&video_path)).await??;
+
         log::info!("Total processing time: {:?}", start.elapsed());
         Ok(Self { hash })
     }
 
-    pub fn from_url(url: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub async fn from_url(url: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
         log::info!("Generating video hash from URL: {}", url);
 
         if url.starts_with("file://") {
             if let Some(path_str) = url.strip_prefix("file://") {
                 let path = Path::new(path_str);
                 if path.exists() {
-                    return Self::new(path);
+                    return Self::new(path).await;
                 }
             }
         }
@@ -121,15 +123,17 @@ impl VideoHash {
 
         let status = Command::new("ffmpeg")
             .args(&["-y", "-i", url, "-c", "copy", temp_file.to_str().unwrap()])
-            .stdout(Stdio::null())  
-            .stderr(Stdio::null())  
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()?;
 
         if !status.success() {
             return Err("Failed to download video from URL".into());
         }
+        let temp_file_path = temp_file.clone();
+        let hash = tokio::task::spawn_blocking(move || Self::fast_hash(&temp_file_path)).await??;
 
-        Self::new(&temp_file)
+        Ok(Self { hash })
     }
 
     pub fn fast_hash(video_path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
@@ -155,8 +159,8 @@ impl VideoHash {
                 "default=noprint_wrappers=1:nokey=1",
                 video_path.to_str().unwrap(),
             ])
-            .stdout(Stdio::inherit())  
-            .stderr(Stdio::null())     
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::null())
             .output()?;
 
         let duration: f32 = String::from_utf8_lossy(&duration_output.stdout)

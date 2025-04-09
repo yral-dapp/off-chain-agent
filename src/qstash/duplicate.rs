@@ -57,6 +57,7 @@ impl<'a> VideoHashDuplication<'a> {
     ) -> Result<(), anyhow::Error> {
         log::info!("Calculating videohash for video URL: {}", video_url);
         let video_hash = VideoHash::from_url(video_url)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
 
         // Store the original hash regardless of duplication status
@@ -227,6 +228,7 @@ impl<'a> VideoHashDuplication<'a> {
     ) -> Result<(), anyhow::Error> {
         log::info!("Calculating videohash for video URL: {}", video_url);
         let video_hash = VideoHash::from_url(video_url)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
 
         // Store the original hash regardless of duplication status
@@ -414,7 +416,7 @@ impl<'a> VideoHashDuplication<'a> {
         //     // First check if rows is Some, then access the first element
         //     if let Some(rows) = response.rows {
         //         if let Some(row) = rows.first() {
-        //             // Access by position based on the query's field order 
+        //             // Access by position based on the query's field order
         //             if row.f.len() > 0 {
         //                 // Use to_string_lossy to convert the Value to a string
         //                 if let Some(v) = row.f[0].v.as_str() {
@@ -423,7 +425,7 @@ impl<'a> VideoHashDuplication<'a> {
         //                     parent_canister_id = format!("{:?}", row.f[0].v);
         //                 }
         //             }
-                    
+
         //             if row.f.len() > 1 {
         //                 if let Some(v) = row.f[1].v.as_str() {
         //                     parent_principal = v.to_string();
@@ -431,7 +433,7 @@ impl<'a> VideoHashDuplication<'a> {
         //                     parent_principal = format!("{:?}", row.f[1].v);
         //                 }
         //             }
-                    
+
         //             if row.f.len() > 2 {
         //                 // For the post_id (a number), first try to extract as a string, then parse
         //                 if let Some(v) = row.f[2].v.as_str() {
@@ -466,9 +468,9 @@ impl<'a> VideoHashDuplication<'a> {
             publisher_data.post_id,
             video_id,
             match_details.video_id,
-            parent_canister_id,  
-            parent_principal,    
-            parent_post_id,      
+            parent_canister_id,
+            parent_principal,
+            parent_post_id,
             exact_duplicate,
             match_details.similarity_percentage
         );
