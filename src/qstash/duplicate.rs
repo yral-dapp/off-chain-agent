@@ -388,69 +388,7 @@ impl<'a> VideoHashDuplication<'a> {
         publisher_data: &VideoPublisherData,
     ) -> Result<(), anyhow::Error> {
         let bigquery_client = app_state::init_bigquery_client().await;
-
-        // Default parent data (in case we can't find the actual parent data)
-        let mut parent_canister_id = "unknown".to_string();
-        let mut parent_principal = "unknown".to_string();
-        let mut parent_post_id = 0;
-
-        // First, let's try to get the parent video's metadata from BigQuery
-        let parent_query = format!(
-            "SELECT publisher_canister_id, publisher_principal, post_id 
-             FROM `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
-             WHERE video_id = '{}' 
-             LIMIT 1",
-            match_details.video_id
-        );
-
-        let parent_request = QueryRequest {
-            query: parent_query,
-            ..Default::default()
-        };
-
-        // if let Ok(response) = bigquery_client
-        //     .job()
-        //     .query("hot-or-not-feed-intelligence", &parent_request)
-        //     .await
-        // {
-        //     // First check if rows is Some, then access the first element
-        //     if let Some(rows) = response.rows {
-        //         if let Some(row) = rows.first() {
-        //             // Access by position based on the query's field order
-        //             if row.f.len() > 0 {
-        //                 // Use to_string_lossy to convert the Value to a string
-        //                 if let Some(v) = row.f[0].v.as_str() {
-        //                     parent_canister_id = v.to_string();
-        //                 } else {
-        //                     parent_canister_id = format!("{:?}", row.f[0].v);
-        //                 }
-        //             }
-
-        //             if row.f.len() > 1 {
-        //                 if let Some(v) = row.f[1].v.as_str() {
-        //                     parent_principal = v.to_string();
-        //                 } else {
-        //                     parent_principal = format!("{:?}", row.f[1].v);
-        //                 }
-        //             }
-
-        //             if row.f.len() > 2 {
-        //                 // For the post_id (a number), first try to extract as a string, then parse
-        //                 if let Some(v) = row.f[2].v.as_str() {
-        //                     if let Ok(id) = v.parse::<u64>() {
-        //                         parent_post_id = id;
-        //                     }
-        //                 } else if let Some(n) = row.f[2].v.as_i64() {
-        //                     parent_post_id = n as u64;
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-
         let exact_duplicate = match_details.similarity_percentage > 99.0;
-
-        // Now use the parent data in our query
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.duplicate_video` (
                 publisher_canister_id, publisher_principal, post_id,
@@ -459,8 +397,8 @@ impl<'a> VideoHashDuplication<'a> {
                 duplication_score, created_at
             ) VALUES (
                 '{}', '{}', {},
-                '{}', '{}', '{}',
-                '{}', {}, {},
+                '{}', '{}', NULL,
+                NULL, NULL, {},
                 {}, CURRENT_TIMESTAMP()
             )",
             publisher_data.canister_id,
@@ -468,14 +406,10 @@ impl<'a> VideoHashDuplication<'a> {
             publisher_data.post_id,
             video_id,
             match_details.video_id,
-            parent_canister_id,
-            parent_principal,
-            parent_post_id,
             exact_duplicate,
             match_details.similarity_percentage
         );
 
-        // Rest of the function remains the same
         let request = QueryRequest {
             query,
             ..Default::default()
