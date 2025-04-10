@@ -24,10 +24,15 @@ use log::LevelFilter;
 use offchain_service::report_approved_handler;
 use once_cell::sync::Lazy;
 use qstash::qstash_router;
+use sentry_tower::{NewSentryLayer, SentryHttpLayer};
 use tonic::transport::Server;
 use tower::make::Shared;
 use tower::steer::Steer;
+use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
+use tracing::instrument;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
@@ -59,8 +64,7 @@ pub mod utils;
 
 use app_state::AppState;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+async fn main_impl() -> Result<()> {
     #[derive(OpenApi)]
     #[openapi(
         tags(
@@ -73,12 +77,16 @@ async fn main() -> Result<()> {
 
     Lazy::force(&STORJ_INTERFACE_TOKEN);
 
-    Builder::new()
-        .filter_level(LevelFilter::Info)
-        .target(Target::Stdout)
-        .init();
+    // Builder::new()
+    //     .filter_level(LevelFilter::Info)
+    //     .target(Target::Stdout)
+    //     .init();
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
+
+    let sentry_tower_layer = ServiceBuilder::new()
+        .layer(NewSentryLayer::new_from_top())
+        .layer(SentryHttpLayer::with_transaction());
 
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/api/v1/posts", posts::posts_router(shared_state.clone()))
@@ -129,6 +137,7 @@ async fn main() -> Result<()> {
         .nest("/qstash", qstash_routes)
         .nest_service("/", router)
         .layer(CorsLayer::permissive())
+        .layer(sentry_tower_layer)
         .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
@@ -183,10 +192,53 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+fn main() {
+    let _guard = sentry::init((
+        "https://9a2d5e94760b78c84361380a30eae9ef@sentry.yral.com/2",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            debug: true,
+            traces_sample_rate: 1.0,
+            ..Default::default()
+        },
+    ));
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                // axum logs rejections from built-in extractors with the `axum::rejection`
+                // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
+                format!(
+                    "{}=debug,tower_http=debug,axum::rejection=trace",
+                    env!("CARGO_CRATE_NAME")
+                )
+                .into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .with(sentry_tracing::layer())
+        .init();
+
+    sentry::capture_message("Hello World by Komal 3!", sentry::Level::Info);
+
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            main_impl().await.unwrap();
+        });
+}
+
+#[instrument]
 async fn health_handler() -> (StatusCode, &'static str) {
+    // delay 5 secs
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
     log::info!("Health check");
     log::warn!("Health check");
     log::error!("Health check");
+    sentry::capture_message("Hello World by Komal 4!", sentry::Level::Info);
 
     (StatusCode::OK, "OK")
 }

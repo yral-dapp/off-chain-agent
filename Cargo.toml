@@ -79,6 +79,31 @@ yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "
 storj-interface = { git = "https://github.com/yral-dapp/storj-interface", rev = "b824766e5a528deafa56fbb01ecb9f7e09a79e50", version = "0.1.0" }
 # yral-metrics = { path = "../yral-common/metrics" }
 yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "fff8f83ed5967213453498d8e222ce93957c5e7a" }
+sentry = { version = "0.37.0", default-features = false, features = [
+    "tower",
+    "rustls",
+    "sentry-anyhow",
+    "serde_json",
+    "tower-http",
+    "backtrace",
+    "contexts",
+    "debug-images",
+    "panic",
+    "release-health",
+    "reqwest",
+    "http-client",
+] }
+sentry-tower = { version = "0.37.0", features = [
+    "axum",
+    "http",
+    "axum-matched-path",
+    "url",
+] }
+tracing = "0.1.41"
+sentry-tracing = "0.37.0"
+tracing-log = "0.2.0"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-futures = "0.2.5"
 
 [build-dependencies]
 tonic-build = "0.12"
