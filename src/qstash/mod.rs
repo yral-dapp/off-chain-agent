@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, State},
     middleware::{self},
     response::Response,
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use candid::{Decode, Encode, Nat, Principal};
@@ -28,6 +28,9 @@ use yral_canisters_client::{
 };
 use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 
+use crate::duplicate_video::backfill::{
+    backfill_status_handler, failed_videos_handler, videohash_backfill_handler,
+};
 use crate::qstash::duplicate::VideoPublisherData;
 use crate::{
     app_state::AppState,
@@ -516,6 +519,9 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(upgrade_sns_creator_dao_canister),
         )
         .route("/video_deduplication", post(video_deduplication_handler))
+        .route("/backfill/videohash", post(videohash_backfill_handler))
+        .route("/backfill/status", get(backfill_status_handler))
+        .route("/backfill/failed", get(failed_videos_handler))
         // .route(
         //     "/deduplication_completed",
         //     post(video_hash_indexing_handler),
