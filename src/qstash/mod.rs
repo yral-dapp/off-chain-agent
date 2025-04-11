@@ -28,10 +28,6 @@ use yral_canisters_client::{
 };
 use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 
-use crate::duplicate_video::backfill::{
-    backfill_status_handler, failed_videos_handler, videohash_backfill_handler,
-};
-use crate::qstash::duplicate::VideoPublisherData;
 use crate::{
     app_state::AppState,
     canister::upgrade_user_token_sns_canister::{
@@ -49,6 +45,11 @@ use crate::{
     },
     posts::qstash_report_post,
 };
+use crate::{
+    duplicate_video::backfill::process_single_video, qstash::duplicate::VideoPublisherData,
+};
+
+use crate::duplicate_video::backfill::trigger_videohash_backfill;
 pub mod client;
 pub mod duplicate;
 
@@ -510,6 +511,19 @@ async fn video_deduplication_handler(
     Ok(response)
 }
 
+pub fn api_router<S>(app_state: Arc<AppState>) -> Router<S> {
+    Router::new()
+        // Admin route OUTSIDE QStash middleware
+        .route(
+            "/admin/backfill/videohash",
+            post(trigger_videohash_backfill),
+        )
+        // Other unprotected routes
+        .nest("/qstash", qstash_router(app_state.clone()))
+        .with_state(app_state)
+}
+
+// QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
@@ -519,9 +533,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(upgrade_sns_creator_dao_canister),
         )
         .route("/video_deduplication", post(video_deduplication_handler))
-        .route("/backfill/videohash", post(videohash_backfill_handler))
-        .route("/backfill/status", get(backfill_status_handler))
-        .route("/backfill/failed", get(failed_videos_handler))
         // .route(
         //     "/deduplication_completed",
         //     post(video_hash_indexing_handler),
@@ -544,6 +555,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/report_post", post(qstash_report_post))
         .route("/storj_ingest", post(storj_ingest))
+        .route("/process_single_video", post(process_single_video))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
