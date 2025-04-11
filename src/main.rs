@@ -65,7 +65,6 @@ pub mod utils;
 
 use app_state::AppState;
 
-#[instrument]
 async fn main_impl() -> Result<()> {
     #[derive(OpenApi)]
     #[openapi(
