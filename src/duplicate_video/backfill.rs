@@ -84,6 +84,29 @@ async fn execute_backfill(
     let bigquery_client = app_state::init_bigquery_client().await;
     info!("BigQuery client initialized successfully");
 
+    // Add this before your main query
+    let count_query = format!(
+        "SELECT COUNT(*) as count FROM `hot-or-not-feed-intelligence`.`yral_ds`.`video_object_table` AS t
+        WHERE SUBSTR(uri, 18, LENGTH(uri) - 21) NOT IN (
+          SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.videohash_original`
+        )"
+    );
+
+    info!("Checking total unprocessed videos...");
+    let count_request = QueryRequest {
+        query: count_query,
+        ..Default::default()
+    };
+
+    if let Ok(resp) = bigquery_client.job().query("hot-or-not-feed-intelligence", &count_request).await {
+        if let Some(rows) = resp.rows {
+            if !rows.is_empty() {
+                let count_str = format!("{:?}", rows[0].f[0].v);
+                info!("Total unprocessed videos: {}", count_str);
+            }
+        }
+    }
+
     // Simplified query to just get videos needing hash generation
     let query = format!(
         "SELECT
@@ -122,11 +145,15 @@ async fn execute_backfill(
         };
 
     let rows = match response.rows {
-        Some(rows) => rows,
-        None => return Ok(0),
+        Some(rows) => {
+            info!("Found {} videos to process", rows.len());
+            rows
+        }
+        None => {
+            info!("Query returned no rows - all videos may already be processed");
+            return Ok(0);
+        }
     };
-
-    info!("Found {} videos to process", rows.len());
 
     // Queue each video to QStash for processing
     let mut queued_count = 0;
