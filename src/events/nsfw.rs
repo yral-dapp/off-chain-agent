@@ -45,20 +45,25 @@ fn create_output_directory(video_id: &str) -> Result<PathBuf, Error> {
     Ok(output_dir)
 }
 
-pub fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec<Vec<u8>>, Error> {
+pub async fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec<Vec<u8>>, Error> {
     let output_pattern = output_dir.join("output-%04d.jpg");
+    let video_path_clone = video_path.to_string();
+    let output_pattern_str = output_pattern.to_string_lossy().to_string();
 
-    let status = Command::new("ffmpeg")
-        .arg("-loglevel")
-        .arg("error")
-        .arg("-i")
-        .arg(video_path)
-        .arg("-vf")
-        .arg("fps=1")
-        .arg("-pix_fmt")
-        .arg("rgb24")
-        .arg(output_pattern.clone())
-        .status()?;
+    let status = tokio::task::spawn_blocking(move || {
+        Command::new("ffmpeg")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-i")
+            .arg(&video_path_clone)
+            .arg("-vf")
+            .arg("fps=1")
+            .arg("-pix_fmt")
+            .arg("rgb24")
+            .arg(&output_pattern_str)
+            .status()
+    })
+    .await??;
 
     if !status.success() {
         return Err(anyhow::anyhow!("Failed to extract frames"));
@@ -125,7 +130,7 @@ pub async fn extract_frames_and_upload(
         video_id
     );
     let output_dir = create_output_directory(&video_id)?;
-    let frames = extract_frames(&video_path, output_dir.clone())?;
+    let frames = extract_frames(&video_path, output_dir.clone()).await?;
     #[cfg(not(feature = "local-bin"))]
     upload_frames_to_gcs(&state.gcs_client, frames, &video_id).await?;
     // delete output directory

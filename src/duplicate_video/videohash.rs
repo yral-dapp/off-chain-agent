@@ -92,21 +92,23 @@ pub struct VideoHash {
 
 impl VideoHash {
     /// Create a new VideoHash from a video file path
-    pub fn new(video_path: &Path) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub async fn new(video_path: &Path) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let start = Instant::now();
-        let hash = Self::fast_hash(video_path)?;
+        let video_path = video_path.to_path_buf();
+        let hash = tokio::task::spawn_blocking(move || Self::fast_hash(&video_path)).await??;
+
         log::info!("Total processing time: {:?}", start.elapsed());
         Ok(Self { hash })
     }
 
-    pub fn from_url(url: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub async fn from_url(url: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
         log::info!("Generating video hash from URL: {}", url);
 
         if url.starts_with("file://") {
             if let Some(path_str) = url.strip_prefix("file://") {
                 let path = Path::new(path_str);
                 if path.exists() {
-                    return Self::new(path);
+                    return Self::new(path).await;
                 }
             }
         }
@@ -119,15 +121,27 @@ impl VideoHash {
             temp_file
         );
 
-        let status = Command::new("ffmpeg")
-            .args(&["-y", "-i", url, "-c", "copy", temp_file.to_str().unwrap()])
-            .status()?;
+        // Clone needed values for the spawn_blocking closure
+        let url_clone = url.to_string();
+        let temp_file_path = temp_file.to_str().unwrap().to_string();
 
-        if !status.success() {
+        // Use spawn_blocking for ffmpeg download
+        let download_status = tokio::task::spawn_blocking(move || {
+            Command::new("ffmpeg")
+                .args(&["-y", "-i", &url_clone, "-c", "copy", &temp_file_path])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+        })
+        .await??;
+
+        if !download_status.success() {
             return Err("Failed to download video from URL".into());
         }
 
-        Self::new(&temp_file)
+        let hash = Self::new(&temp_file).await?.hash;
+
+        Ok(Self { hash })
     }
 
     pub fn fast_hash(video_path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
@@ -143,6 +157,12 @@ impl VideoHash {
             .to_string_lossy()
             .to_string();
 
+        // Use spawn_blocking for ffprobe
+        // This is technically incorrect as this is already in a blocking context,
+        // but since fast_hash is already called from spawn_blocking in VideoHash::new,
+        // we'll skip adding another spawn_blocking here to avoid nesting.
+
+        let video_path_str = video_path.to_str().unwrap().to_string();
         let duration_output = Command::new("ffprobe")
             .args([
                 "-v",
@@ -151,8 +171,10 @@ impl VideoHash {
                 "format=duration",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
-                video_path.to_str().unwrap(),
+                &video_path_str,
             ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::null())
             .output()?;
 
         let duration: f32 = String::from_utf8_lossy(&duration_output.stdout)
@@ -269,7 +291,7 @@ impl VideoHash {
     ) -> Result<Vec<bool>, Box<dyn Error + Send + Sync>> {
         let num_frames = frames.len();
 
-        if num_frames == 1 {
+        if (num_frames == 1) {
             let gray = frames[0]
                 .resize_exact(GRID_SIZE, GRID_SIZE, FilterType::Triangle)
                 .grayscale()
