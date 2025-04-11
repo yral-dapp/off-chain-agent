@@ -36,6 +36,7 @@ use crate::auth::check_auth_grpc;
 use crate::canister::canisters_list_handler;
 use crate::canister::reclaim_canisters::reclaim_canisters_handler;
 use crate::canister::snapshot::{backup_job_handler, backup_job_handler_without_auth};
+use crate::duplicate_video::backfill::trigger_videohash_backfill;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
 use crate::offchain_service::off_chain::off_chain_server::OffChainServer;
@@ -93,6 +94,11 @@ async fn main() -> Result<()> {
 
     // build our application with a route
     let qstash_routes = qstash_router(shared_state.clone());
+
+    let admin_routes = Router::new()
+        .route("/backfill/videohash", post(trigger_videohash_backfill))
+        .with_state(shared_state.clone());
+
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
@@ -126,6 +132,7 @@ async fn main() -> Result<()> {
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
+        .nest("/admin", admin_routes)
         .nest("/qstash", qstash_routes)
         .nest_service("/", router)
         .layer(CorsLayer::permissive())
