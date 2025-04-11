@@ -57,7 +57,7 @@ jobs:
           flyctl secrets set QSTASH_AUTH_TOKEN="$QSTASH_AUTH_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set ML_FEED_CACHE_REDIS_URL="$ML_FEED_CACHE_REDIS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "icp-off-chain-agent" --stage
-          flyctl screets set VIDEOHASH_BACKFILL_TOKEN""$VIDEOHASH_BACKFILL_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set "VIDEOHASH_BACKFILL_TOKEN=$VIDEOHASH_BACKFILL_TOKEN" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
