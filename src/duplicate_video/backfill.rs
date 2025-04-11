@@ -136,10 +136,6 @@ async fn execute_backfill(
         let canister_id = canister_id_raw
             .trim_matches(|c| c == '"' || c == '\\')
             .to_string();
-        if canister_id.is_empty() {
-            continue;
-        }
-
         let post_id_raw = format!("{:?}", row.f[2].v);
         let post_id_str = post_id_raw.trim_matches(|c| c == '"' || c == '\\');
         let post_id = match post_id_str.parse::<u64>() {
