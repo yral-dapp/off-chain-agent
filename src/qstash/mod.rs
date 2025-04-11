@@ -16,6 +16,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use tower::ServiceBuilder;
+use tracing::instrument;
 use verify::verify_qstash_message;
 use yral_canisters_client::{
     individual_user_template::{DeployedCdaoCanisters, IndividualUserTemplate},
@@ -415,6 +416,7 @@ struct VideoHashIndexingRequest {
     publisher_data: VideoPublisherData,
 }
 
+#[instrument(skip(state))]
 async fn video_hash_indexing_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VideoHashIndexingRequest>,
@@ -444,6 +446,7 @@ async fn video_hash_indexing_handler(
     Ok(response)
 }
 
+#[instrument(skip(state))]
 async fn video_deduplication_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VideoHashIndexingRequest>,
@@ -507,6 +510,7 @@ async fn video_deduplication_handler(
     Ok(response)
 }
 
+#[instrument(skip(app_state))]
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
@@ -516,10 +520,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(upgrade_sns_creator_dao_canister),
         )
         .route("/video_deduplication", post(video_deduplication_handler))
-        // .route(
-        //     "/deduplication_completed",
-        //     post(video_hash_indexing_handler),
-        // )
         .route("/upload_video_gcs", post(upload_video_gcs))
         .route("/enqueue_video_frames", post(extract_frames_and_upload))
         .route("/enqueue_video_nsfw_detection", post(nsfw_job))
@@ -529,7 +529,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(verify_sns_canister_upgrade_proposal),
         )
         .route(
-            "/upgrade_all_sns_canisters_for_a_user_canister/:individual_user_canister_id",
+            "/upgrade_all_sns_canisters_for_a_user_canister/{individual_user_canister_id}",
             post(upgrade_all_sns_canisters_for_a_user_canister),
         )
         .route(

@@ -25,6 +25,7 @@ use offchain_service::report_approved_handler;
 use once_cell::sync::Lazy;
 use qstash::qstash_router;
 use sentry_tower::{NewSentryLayer, SentryHttpLayer};
+use tonic::service::Routes;
 use tonic::transport::Server;
 use tower::make::Shared;
 use tower::steer::Steer;
@@ -64,6 +65,7 @@ pub mod utils;
 
 use app_state::AppState;
 
+#[instrument]
 async fn main_impl() -> Result<()> {
     #[derive(OpenApi)]
     #[openapi(
@@ -76,11 +78,6 @@ async fn main_impl() -> Result<()> {
     let conf = AppConfig::load()?;
 
     Lazy::force(&STORJ_INTERFACE_TOKEN);
-
-    // Builder::new()
-    //     .filter_level(LevelFilter::Info)
-    //     .target(Target::Stdout)
-    //     .init();
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
 
@@ -104,16 +101,11 @@ async fn main_impl() -> Result<()> {
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
-        .route(
-            "/start_backup_without_auth",
-            get(backup_job_handler_without_auth),
-        )
         .route("/canisters_list", get(canisters_list_handler))
-        .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
         .route("/import-video", post(upload_user_video_handler))
         .route(
-            "/upgrade_user_token_sns_canister/:individual_user_canister_id",
+            "/upgrade_user_token_sns_canister/{individual_user_canister_id}",
             post(upgrade_user_token_sns_canister_handler),
         )
         .route(
@@ -124,18 +116,12 @@ async fn main_impl() -> Result<()> {
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),
         )
-        .route("/extract-frames", post(extract_frames_and_upload))
-        .route("/update-global-ml-feed-cache", get(update_ml_feed_cache))
-        .route(
-            "/update-global-ml-feed-cache-nsfw",
-            get(update_ml_feed_cache_nsfw),
-        )
         .route(
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
         .nest("/qstash", qstash_routes)
-        .nest_service("/", router)
+        .fallback_service(router)
         .layer(CorsLayer::permissive())
         .layer(sentry_tower_layer)
         .with_state(shared_state.clone());
@@ -146,29 +132,29 @@ async fn main_impl() -> Result<()> {
         .build_v1()
         .unwrap();
 
-    let grpc_axum = Server::builder()
-        .accept_http1(true)
-        .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
+    let grpc_axum = Routes::builder()
+        .routes()
+        .add_service(WarehouseEventsServer::with_interceptor(
             WarehouseEventsService {
                 shared_state: shared_state.clone(),
             },
             check_auth_grpc,
-        )))
-        .add_service(tonic_web::enable(OffChainServer::with_interceptor(
+        ))
+        .add_service(OffChainServer::with_interceptor(
             OffChainService {
                 shared_state: shared_state.clone(),
             },
             check_auth_grpc,
-        )))
-        .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
+        ))
+        .add_service(OffChainCanisterServer::with_interceptor(
             OffChainCanisterService {
                 shared_state: shared_state.clone(),
             },
             check_auth_grpc_offchain_mlfeed,
-        )))
+        ))
         .add_service(reflection_service)
-        .into_service()
-        .into_axum_router();
+        .into_axum_router()
+        .layer(NewSentryLayer::new_from_top());
 
     let http_grpc = Steer::new(
         vec![http, grpc_axum],
@@ -197,8 +183,8 @@ fn main() {
         "https://9a2d5e94760b78c84361380a30eae9ef@sentry.yral.com/2",
         sentry::ClientOptions {
             release: sentry::release_name!(),
-            debug: true,
-            traces_sample_rate: 1.0,
+            // debug: true,
+            traces_sample_rate: 1.0, //TODO: Change to 0.3 in production
             ..Default::default()
         },
     ));
@@ -219,8 +205,6 @@ fn main() {
         .with(sentry_tracing::layer())
         .init();
 
-    sentry::capture_message("Hello World by Komal 3!", sentry::Level::Info);
-
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -232,13 +216,9 @@ fn main() {
 
 #[instrument]
 async fn health_handler() -> (StatusCode, &'static str) {
-    // delay 5 secs
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
     log::info!("Health check");
     log::warn!("Health check");
     log::error!("Health check");
-    sentry::capture_message("Hello World by Komal 4!", sentry::Level::Info);
 
     (StatusCode::OK, "OK")
 }
