@@ -80,7 +80,9 @@ async fn execute_backfill(
     batch_size: usize,
     parallelism: usize,
 ) -> anyhow::Result<usize> {
+    info!("Initializing BigQuery client...");
     let bigquery_client = app_state::init_bigquery_client().await;
+    info!("BigQuery client initialized successfully");
 
     // Simplified query to just get videos needing hash generation
     let query = format!(
@@ -97,16 +99,27 @@ async fn execute_backfill(
         LIMIT {}",
         batch_size
     );
+    info!("Executing BigQuery query: {}", query);
 
     let request = QueryRequest {
         query,
         ..Default::default()
     };
 
-    let response = bigquery_client
+    info!("Sending query to BigQuery...");
+    let response = match bigquery_client
         .job()
         .query("hot-or-not-feed-intelligence", &request)
-        .await?;
+        .await {
+            Ok(resp) => {
+                info!("BigQuery query executed successfully");
+                resp
+            },
+            Err(e) => {
+                error!("BigQuery query failed: {}", e);
+                return Err(anyhow::anyhow!("BigQuery query failed: {}", e));
+            }
+        };
 
     let rows = match response.rows {
         Some(rows) => rows,
