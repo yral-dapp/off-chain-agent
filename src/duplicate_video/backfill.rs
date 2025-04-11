@@ -149,7 +149,7 @@ async fn execute_backfill(
                     "Invalid post_id format for video {}: {} - {}",
                     video_id, post_id_str, e
                 );
-                continue;
+                0
             }
         };
 
@@ -201,10 +201,10 @@ async fn queue_video_to_qstash(
         }
     });
 
-    // Set up the QStash endpoint - using the existing video_deduplication endpoint
-    // This uses the existing deduplication logic that performs all needed steps
+    // Use the dedicated process_single_video endpoint for backfill jobs
+    // This avoids the full pipeline that video_deduplication would trigger
     let off_chain_ep = OFF_CHAIN_AGENT_URL
-        .join("qstash/video_deduplication")
+        .join("qstash/process_single_video")
         .unwrap();
     let url = qstash_client
         .base_url
@@ -265,25 +265,9 @@ pub async fn process_single_video(
             &req.video_url,
             req.publisher_data,
             move |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
-                // Clone the string references to own the data for the future
-                let vid_id = vid_id.to_string();
-                let canister_id = canister_id.to_string();
-                let publisher_user_id = publisher_user_id.to_string();
-
-                // Create a boxed future from the publish_video call
-                Box::pin(async move {
-                    // Upload to GCS as part of the callback
-                    crate::events::event::upload_gcs_impl(
-                        &vid_id,
-                        &canister_id,
-                        post_id,
-                        &timestamp,
-                    )
-                    .await?;
-
-                    info!("Successfully uploaded video {} to GCS", vid_id);
-                    Ok(())
-                })
+                // Empty closure - we don't want to continue the pipeline for old videos
+                info!("Skipping GCS upload for backfilled video: {}", vid_id);
+                Box::pin(async { Ok(()) })
             },
         )
         .await

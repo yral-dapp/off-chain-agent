@@ -510,19 +510,6 @@ async fn video_deduplication_handler(
 
     Ok(response)
 }
-
-pub fn api_router<S>(app_state: Arc<AppState>) -> Router<S> {
-    Router::new()
-        // Admin route OUTSIDE QStash middleware
-        .route(
-            "/admin/backfill/videohash",
-            post(trigger_videohash_backfill),
-        )
-        // Other unprotected routes
-        .nest("/qstash", qstash_router(app_state.clone()))
-        .with_state(app_state)
-}
-
 // QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
