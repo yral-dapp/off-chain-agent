@@ -17,6 +17,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, env, sync::Arc};
+use tracing::instrument;
 use yral_ml_feed_cache::{
     consts::{
         USER_SUCCESS_HISTORY_CLEAN_SUFFIX, USER_SUCCESS_HISTORY_NSFW_SUFFIX,
@@ -507,6 +508,7 @@ pub struct UploadVideoInfo {
     pub channel_id: Option<String>,
 }
 
+#[instrument(skip(state))]
 pub async fn upload_video_gcs(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UploadVideoInfo>,

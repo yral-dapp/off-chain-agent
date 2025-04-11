@@ -4,6 +4,7 @@ use axum::{extract::State, http::StatusCode, middleware, response::IntoResponse,
 use candid::Principal;
 use serde::{Deserialize, Serialize};
 use tonic::transport::{Channel, ClientTlsConfig};
+use tracing::instrument;
 use types::PostRequest;
 use utils::{get_agent_from_delegated_identity_wire, insert_video_delete_row_to_bigquery};
 use utoipa::ToSchema;
@@ -34,6 +35,7 @@ macro_rules! verified_route {
     };
 }
 
+#[instrument(skip(state))]
 pub fn posts_router(state: Arc<AppState>) -> OpenApiRouter {
     let mut router = OpenApiRouter::new();
 
@@ -43,7 +45,7 @@ pub fn posts_router(state: Arc<AppState>) -> OpenApiRouter {
     router.with_state(state)
 }
 
-#[derive(Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
 pub struct DeletePostRequest {
     #[schema(value_type = String)]
     canister_id: Principal,
@@ -63,6 +65,7 @@ pub struct DeletePostRequest {
         (status = 403, description = "Forbidden"),
     )
 )]
+#[instrument(skip(state, verified_request))]
 async fn handle_delete_post(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<DeletePostRequest>>,
@@ -116,7 +119,7 @@ async fn handle_delete_post(
     Ok((StatusCode::OK, "Post deleted".to_string()))
 }
 
-#[derive(Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
 pub struct ReportPostRequest {
     #[schema(value_type = String)]
     pub canister_id: Principal,
@@ -128,7 +131,7 @@ pub struct ReportPostRequest {
     pub user_principal: Principal,
     pub reason: String,
 }
-
+#[instrument(skip(state, verified_request))]
 #[utoipa::path(
     post,
     path = "/report",
