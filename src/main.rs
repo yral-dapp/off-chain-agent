@@ -183,8 +183,8 @@ fn main() {
         "https://9a2d5e94760b78c84361380a30eae9ef@sentry.yral.com/2",
         sentry::ClientOptions {
             release: sentry::release_name!(),
-            // debug: true,
-            traces_sample_rate: 1.0, //TODO: Change to 0.3 in production
+            // debug: true, // use when debugging sentry issues
+            traces_sample_rate: 0.3,
             ..Default::default()
         },
     ));

@@ -6,6 +6,7 @@ use http::{
     HeaderMap, HeaderValue,
 };
 use reqwest::{Client, Url};
+use tracing::instrument;
 use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 
 use crate::{
@@ -49,6 +50,7 @@ impl QStashClient {
         }
     }
 
+    #[instrument(skip(self))]
     pub async fn publish_video_hash_indexing(
         &self,
         video_id: &str,
@@ -84,6 +86,7 @@ impl QStashClient {
             .await
     }
 
+    #[instrument(skip(self))]
     pub async fn duplicate_to_storj(
         &self,
         data: storj_interface::duplicate::Args,
@@ -104,6 +107,7 @@ impl QStashClient {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn publish_duplicate_video_event(
         &self,
         duplicate_event: DuplicateVideoEvent,
@@ -115,6 +119,7 @@ impl QStashClient {
             .await
     }
 
+    #[instrument(skip(self))]
     pub async fn publish_video(
         &self,
         video_id: &str,
@@ -145,6 +150,7 @@ impl QStashClient {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn publish_video_frames(
         &self,
         video_id: &str,
@@ -171,6 +177,7 @@ impl QStashClient {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn publish_video_nsfw_detection(
         &self,
         video_id: &str,
@@ -197,6 +204,7 @@ impl QStashClient {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn publish_video_nsfw_detection_v2(
         &self,
         video_id: &str,
@@ -329,6 +337,7 @@ impl QStashClient {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn publish_report_post(
         &self,
         report_request: ReportPostRequest,
