@@ -185,7 +185,9 @@ impl VideoHash {
         let file_size = fs::metadata(video_path).map(|m| m.len()).unwrap_or(0);
         let is_small_file = file_size < 10_000_000;
 
-        let sample_rate = if is_small_file {
+        let sample_rate = if duration < 2.0 {
+            duration / 2.0
+        } else if is_small_file {
             2.0
         } else if duration > MAX_FRAMES as f32 * 2.0 {
             duration / (MAX_FRAMES as f32)
@@ -201,15 +203,27 @@ impl VideoHash {
             "-preset ultrafast"
         };
 
-        let ffmpeg_args = format!(
-            "-i \"{}\" {} {} -vf \"fps=1/{},scale=-1:{}\" -q:v 2 {}",
-            video_path.to_str().unwrap(),
-            threads_param,
-            extra_opts,
-            sample_rate,
-            FRAME_SIZE,
-            output_pattern
-        );
+        let ffmpeg_args = if duration < 2.0 {
+            // For very short videos, extract a specific number of frames
+            format!(
+                "-i \"{}\" {} {} -vf \"select='eq(n,0)',scale=-1:{}\" -q:v 2 {}",
+                video_path.to_str().unwrap(),
+                threads_param,
+                extra_opts,
+                FRAME_SIZE,
+                output_pattern
+            )
+        } else {
+            format!(
+                "-i \"{}\" {} {} -vf \"fps=1/{},scale=-1:{}\" -q:v 2 {}",
+                video_path.to_str().unwrap(),
+                threads_param,
+                extra_opts,
+                sample_rate,
+                FRAME_SIZE,
+                output_pattern
+            )
+        };
 
         log::debug!("Running FFmpeg with args: {}", ffmpeg_args);
 
