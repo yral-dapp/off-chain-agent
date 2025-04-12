@@ -84,17 +84,20 @@ async fn execute_backfill(
     let bigquery_client = app_state::init_bigquery_client().await;
     info!("BigQuery client initialized successfully");
 
-    // Simplified query to just get videos needing hash generation
+    // Alternative version if the field name is different
     let query = format!(
         "SELECT
           SUBSTR(uri, 18, LENGTH(uri) - 21) as video_id,
           (SELECT value FROM UNNEST(t.metadata) WHERE name = 'canister_id') AS canister_id,
-          (SELECT value FROM UNNEST(t.metadata) WHERE name = 'post_id') AS post_id
+          (SELECT value FROM UNNEST(t.metadata) WHERE name = 'post_id') AS post_id,
+          t.size
         FROM
           `hot-or-not-feed-intelligence`.`yral_ds`.`video_object_table` AS t
-        WHERE SUBSTR(uri, 18, LENGTH(uri) - 21) NOT IN (
-          SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.videohash_original`
-        )
+        WHERE 
+          SUBSTR(uri, 18, LENGTH(uri) - 21) NOT IN (
+            SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.videohash_original`
+          )
+          AND (t.size IS NOT NULL AND t.size > 50)  /* Safely filter out small/null sizes */
         ORDER BY updated ASC
         LIMIT {}",
         batch_size
