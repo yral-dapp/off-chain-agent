@@ -80,9 +80,8 @@ async fn execute_backfill(
     batch_size: usize,
     parallelism: usize,
 ) -> anyhow::Result<usize> {
-    info!("Initializing BigQuery client...");
-    let bigquery_client = app_state::init_bigquery_client().await;
-    info!("BigQuery client initialized successfully");
+    info!("Using existing BigQuery client from app state");
+    let bigquery_client = &state.bigquery_client;
 
     let query = format!(
         "SELECT
