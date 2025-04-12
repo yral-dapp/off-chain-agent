@@ -138,11 +138,22 @@ async fn execute_backfill(
             continue;
         }
 
-        // Extract values using debug formatting and string manipulation
-        let video_id_raw = format!("{:?}", row.f[0].v);
-        let video_id = video_id_raw
-            .trim_matches(|c| c == '"' || c == '\\')
-            .to_string();
+        let video_id = match &row.f[0].v {
+            // If it's already a string type, use it directly
+            google_cloud_bigquery::http::tabledata::list::Value::String(s) => s.clone(),
+            other => {
+                // For other types, use debug formatting but extract just the ID
+                let raw = format!("{:?}", other);
+                // Extract just the ID from String("ID") format
+                if raw.starts_with("String(") {
+                    raw.trim_start_matches("String(\"")
+                        .trim_end_matches("\")")
+                        .to_string()
+                } else {
+                    raw.trim_matches(|c| c == '"' || c == '\\').to_string()
+                }
+            }
+        };
         if video_id.is_empty() {
             continue;
         }
