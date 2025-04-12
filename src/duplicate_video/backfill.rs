@@ -95,7 +95,7 @@ async fn execute_backfill(
           SUBSTR(uri, 18, LENGTH(uri) - 21) NOT IN (
             SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.videohash_original`
           )
-          AND t.size > 100000  /* Require at least 100KB for videos */
+          AND t.size > 10000  /* Require at least 10KB for videos */
         ORDER BY updated ASC
         LIMIT {}",
         batch_size
