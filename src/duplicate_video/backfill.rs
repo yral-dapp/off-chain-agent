@@ -103,6 +103,7 @@ async fn execute_backfill(
 
     let request = QueryRequest {
         query,
+        timeout_ms: Some(200000),
         ..Default::default()
     };
 
@@ -110,16 +111,17 @@ async fn execute_backfill(
     let response = match bigquery_client
         .job()
         .query("hot-or-not-feed-intelligence", &request)
-        .await {
-            Ok(resp) => {
-                info!("BigQuery query executed successfully");
-                resp
-            },
-            Err(e) => {
-                error!("BigQuery query failed: {}", e);
-                return Err(anyhow::anyhow!("BigQuery query failed: {}", e));
-            }
-        };
+        .await
+    {
+        Ok(resp) => {
+            info!("BigQuery query executed successfully");
+            resp
+        }
+        Err(e) => {
+            error!("BigQuery query failed: {}", e);
+            return Err(anyhow::anyhow!("BigQuery query failed: {}", e));
+        }
+    };
 
     let rows = match response.rows {
         Some(rows) => rows,
