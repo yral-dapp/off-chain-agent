@@ -84,20 +84,18 @@ async fn execute_backfill(
     let bigquery_client = app_state::init_bigquery_client().await;
     info!("BigQuery client initialized successfully");
 
-    // Alternative version if the field name is different
     let query = format!(
         "SELECT
           SUBSTR(uri, 18, LENGTH(uri) - 21) as video_id,
           (SELECT value FROM UNNEST(t.metadata) WHERE name = 'canister_id') AS canister_id,
-          (SELECT value FROM UNNEST(t.metadata) WHERE name = 'post_id') AS post_id,
-          t.size
+          (SELECT value FROM UNNEST(t.metadata) WHERE name = 'post_id') AS post_id
         FROM
           `hot-or-not-feed-intelligence`.`yral_ds`.`video_object_table` AS t
         WHERE 
           SUBSTR(uri, 18, LENGTH(uri) - 21) NOT IN (
             SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.videohash_original`
           )
-          AND (t.size IS NOT NULL AND t.size > 50)  /* Safely filter out small/null sizes */
+          AND t.size > 100000  /* Require at least 100KB for videos */
         ORDER BY updated ASC
         LIMIT {}",
         batch_size
@@ -148,7 +146,7 @@ async fn execute_backfill(
                 // For other types, use debug formatting but extract just the ID
                 let raw = format!("{:?}", other);
                 // Extract just the ID from String("ID") format
-                if raw.starts_with("String(") {
+                if raw.contains("String(\"") {
                     raw.trim_start_matches("String(\"")
                         .trim_end_matches("\")")
                         .to_string()
@@ -271,23 +269,30 @@ pub async fn process_single_video(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ProcessVideoRequest>,
 ) -> Result<Json<ProcessVideoResponse>, StatusCode> {
-    info!(
-        "Processing video ID: {} at URL: {}",
-        req.video_id, req.video_url
+    // Clean up video_id if it still contains String wrapper
+    let clean_video_id = if req.video_id.starts_with("String(\"") && req.video_id.ends_with("\")") {
+        req.video_id[8..req.video_id.len() - 2].to_string()
+    } else {
+        req.video_id
+    };
+
+    let clean_video_url = format!(
+        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
+        clean_video_id
     );
 
-    // Create VideoHashDuplication handler
+    info!(
+        "Processing video ID: {} at URL: {}",
+        clean_video_id, clean_video_url
+    );
+
     let duplication_handler =
         VideoHashDuplication::new(&state.qstash_client.client, &state.qstash_client.base_url);
 
-    // Clone QStash client for the callback
-    let qstash_client = state.qstash_client.clone();
-
-    // Use the existing process_video_deduplication function
     match duplication_handler
         .process_video_deduplication(
-            &req.video_id,
-            &req.video_url,
+            &clean_video_id,
+            &clean_video_url,
             req.publisher_data,
             move |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
                 // Empty closure - we don't want to continue the pipeline for old videos
@@ -298,14 +303,14 @@ pub async fn process_single_video(
         .await
     {
         Ok(_) => {
-            info!("Successfully processed video {}", req.video_id);
+            info!("Successfully processed video {}", clean_video_id);
             Ok(Json(ProcessVideoResponse {
-                message: format!("Successfully processed video {}", req.video_id),
+                message: format!("Successfully processed video {}", clean_video_id),
                 status: "success".to_string(),
             }))
         }
         Err(e) => {
-            error!("Failed to process video {}: {}", req.video_id, e);
+            error!("Failed to process video {}: {}", clean_video_id, e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
