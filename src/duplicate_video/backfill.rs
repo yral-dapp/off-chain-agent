@@ -246,7 +246,7 @@ async fn queue_video_to_qstash(
     } else {
         qstash_client
             .base_url
-            .join(&format!("publish/queue/{}/{}", queue_name, off_chain_ep))?
+            .join(&format!("enqueue/{}/{}", queue_name, off_chain_ep))?
     };
 
     // Send to QStash with flow control
