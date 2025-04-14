@@ -94,7 +94,7 @@ async fn execute_backfill(
           SUBSTR(uri, 18, LENGTH(uri) - 21) NOT IN (
             SELECT video_id FROM `hot-or-not-feed-intelligence.yral_ds.videohash_original`
           )
-          AND t.size > 10000  /* Require at least 10KB for videos */
+          AND t.size > 100000  /* Require at least 100KB for videos */
         ORDER BY updated ASC
         LIMIT {}",
         batch_size
@@ -224,7 +224,6 @@ async fn queue_video_to_qstash(
     });
 
     // Use the dedicated process_single_video endpoint for backfill jobs
-    // This avoids the full pipeline that video_deduplication would trigger
     let off_chain_ep = OFF_CHAIN_AGENT_URL
         .join("qstash/process_single_video")
         .unwrap();
@@ -244,6 +243,7 @@ async fn queue_video_to_qstash(
             "Upstash-Flow-Control-Value",
             format!("Parallelism={}", parallelism),
         )
+        .header("Upstash-Deduplication-Id", video_id)
         .send()
         .await?;
 
