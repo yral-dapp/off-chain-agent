@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, State},
     middleware::{self},
     response::Response,
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use candid::{Decode, Encode, Nat, Principal};
@@ -29,7 +29,6 @@ use yral_canisters_client::{
 };
 use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 
-use crate::qstash::duplicate::VideoPublisherData;
 use crate::{
     app_state::AppState,
     canister::upgrade_user_token_sns_canister::{
@@ -47,6 +46,11 @@ use crate::{
     },
     posts::qstash_report_post,
 };
+use crate::{
+    duplicate_video::backfill::process_single_video, qstash::duplicate::VideoPublisherData,
+};
+
+use crate::duplicate_video::backfill::trigger_videohash_backfill;
 pub mod client;
 pub mod duplicate;
 
@@ -511,6 +515,7 @@ async fn video_deduplication_handler(
 }
 
 #[instrument(skip(app_state))]
+// QStash router remains the same but without the admin route
 pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
     Router::new()
         .route("/claim_tokens", post(claim_tokens_from_first_neuron))
@@ -538,6 +543,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/report_post", post(qstash_report_post))
         .route("/storj_ingest", post(storj_ingest))
+        .route("/process_single_video", post(process_single_video))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,

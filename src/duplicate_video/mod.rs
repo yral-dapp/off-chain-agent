@@ -1,3 +1,4 @@
+pub mod backfill;
 pub mod videohash;
 
 #[cfg(test)]
