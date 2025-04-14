@@ -211,7 +211,7 @@ async fn queue_video_to_qstash(
     canister_id: &str,
     post_id: u64,
     parallelism: usize,
-    queue_name: &str, // New parameter for queue name
+    queue_name: &str,
 ) -> anyhow::Result<()> {
     use crate::consts::OFF_CHAIN_AGENT_URL;
     use http::header::CONTENT_TYPE;
@@ -222,7 +222,7 @@ async fn queue_video_to_qstash(
         video_id
     );
 
-    // Create request payload - this is specifically for backfill
+    // Create request payload
     let request_data = serde_json::json!({
         "video_id": video_id,
         "video_url": video_url,
@@ -238,35 +238,56 @@ async fn queue_video_to_qstash(
         .join("qstash/process_single_video")
         .unwrap();
     
-    // Updated URL to use QStash queue feature
-    let url = if queue_name.is_empty() {
-        qstash_client
+    // Build URL based on whether we're using a queue or not
+    let request_builder = if queue_name.is_empty() {
+        // Standard publishing: add flow control for concurrent processing
+        let url = qstash_client
             .base_url
-            .join(&format!("publish/{}", off_chain_ep))?
+            .join(&format!("publish/{}", off_chain_ep))?;
+            
+        qstash_client
+            .client
+            .post(url)
+            .json(&request_data)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            .header("Upstash-Flow-Control-Key", "VIDEOHASH_BACKFILL")
+            .header(
+                "Upstash-Flow-Control-Value",
+                format!("Parallelism={}", parallelism),
+            )
     } else {
-        qstash_client
+        let url = qstash_client
             .base_url
-            .join(&format!("enqueue/{}/{}", queue_name, off_chain_ep))?
+            .join(&format!("enqueue/{}/{}", queue_name, off_chain_ep))?;
+            
+        qstash_client
+            .client
+            .post(url)
+            .json(&request_data)
+            .header(CONTENT_TYPE, "application/json")
+            .header("upstash-method", "POST")
+            // Optional: Set max execution attempts
+            .header("Upstash-Retries", "3")
     };
-
-    // Send to QStash with flow control
-    qstash_client
-        .client
-        .post(url)
-        .json(&request_data)
-        .header(CONTENT_TYPE, "application/json")
-        .header("upstash-method", "POST")
-        .header("Upstash-Flow-Control-Key", "VIDEOHASH_BACKFILL")
-        .header(
-            "Upstash-Flow-Control-Value",
-            format!("Parallelism={}", parallelism),
-        )
+    
+    // Always add deduplication header
+    let response = request_builder
         .header("Upstash-Deduplication-Id", video_id)
         .send()
         .await?;
+    
+    if !response.status().is_success() {
+        let status = response.status();
+        let error = response.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!(
+            "Failed to queue video: Status {}, Error: {}", 
+            status, error
+        ));
+    }
 
-    info!("Queued video_id [{}] for processing in queue [{}]", video_id, 
-          if queue_name.is_empty() { "default" } else { queue_name });
+    info!("Queued video_id [{}] for processing in queue [{}]", 
+          video_id, if queue_name.is_empty() { "default" } else { queue_name });
     Ok(())
 }
 
