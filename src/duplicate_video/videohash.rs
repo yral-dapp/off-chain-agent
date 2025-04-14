@@ -147,7 +147,6 @@ impl VideoHash {
     pub fn fast_hash(video_path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
         let start = Instant::now();
 
-        // Use the TempDir struct instead of manual cleanup
         let temp_dir = TempDir::new("videohash")?;
         log::debug!("Using temp directory: {:?}", temp_dir.path());
 
@@ -182,17 +181,16 @@ impl VideoHash {
             .parse()
             .unwrap_or(0.0);
 
-        let file_size = fs::metadata(video_path).map(|m| m.len()).unwrap_or(0);
-        let is_small_file = file_size < 10_000_000;
-
-        let sample_rate = if duration < 2.0 {
-            duration / 2.0
-        } else if is_small_file {
-            2.0
-        } else if duration > MAX_FRAMES as f32 * 2.0 {
-            duration / (MAX_FRAMES as f32)
+        let fps = if duration < 3.0 {
+            0.8 // Extract a frame every 1.25 seconds for very short videos
+        } else if duration < 5.0 {
+            0.5 // Same as 1/2.0
+        } else if duration < 15.0 {
+            0.3
+        } else if duration < 30.0 {
+            0.1
         } else {
-            SAMPLE_RATE
+            0.05 // Very low rate for long videos
         };
 
         let threads_param = "-threads 0";
@@ -203,39 +201,29 @@ impl VideoHash {
             "-preset ultrafast"
         };
 
-        let ffmpeg_args = if duration < 2.0 {
-            // For very short videos, extract a specific number of frames
-            format!(
-                "-i \"{}\" {} {} -vf \"select='eq(n,0)',scale=-1:{}\" -q:v 2 {}",
-                video_path.to_str().unwrap(),
-                threads_param,
-                extra_opts,
-                FRAME_SIZE,
-                output_pattern
-            )
-        } else {
-            format!(
-                "-i \"{}\" {} {} -vf \"fps=1/{},scale=-1:{}\" -q:v 2 {}",
-                video_path.to_str().unwrap(),
-                threads_param,
-                extra_opts,
-                sample_rate,
-                FRAME_SIZE,
-                output_pattern
-            )
-        };
+        let ffmpeg_args = format!(
+            "-t 300 -i \"{}\" {} {} -vf \"fps={},scale=-1:{}\" -q:v 2 {}",
+            video_path.to_str().unwrap(),
+            threads_param,
+            extra_opts,
+            fps,
+            FRAME_SIZE,
+            output_pattern
+        );
 
         log::debug!("Running FFmpeg with args: {}", ffmpeg_args);
 
-        let output = Command::new("sh")
-            .args(["-c", &format!("ffmpeg {}", ffmpeg_args)])
+        let status = Command::new("sh")
+            .args(["-c", &format!("timeout 300 ffmpeg {}", ffmpeg_args)])
             .stderr(Stdio::null())
             .stdout(Stdio::null())
             .status()?;
 
-        if !output.success() {
-            // No need to manually clean up - will happen in Drop
-            return Err("Failed to extract frames with ffmpeg".into());
+        if !status.success() {
+            // No need for manual cleanup - will happen in Drop
+            return Err(
+                "Failed to extract frames with ffmpeg (possibly timed out after 5 minutes)".into(),
+            );
         }
 
         let mut frame_paths = Vec::new();

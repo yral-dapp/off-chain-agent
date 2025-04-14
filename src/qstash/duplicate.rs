@@ -86,7 +86,11 @@ impl<'a> VideoHashDuplication<'a> {
         }
 
         let indexer_response: VideoHashIndexerResponse = response.json().await?;
-        log::info!("VideoHash Indexer response for video_id [{}]: {:?}", video_id, indexer_response);
+        log::info!(
+            "VideoHash Indexer response for video_id [{}]: {:?}",
+            video_id,
+            indexer_response
+        );
 
         if indexer_response.match_found {
             // A similar video was found - record as duplicate
@@ -257,7 +261,11 @@ impl<'a> VideoHashDuplication<'a> {
         }
 
         let indexer_response: VideoHashIndexerResponse = response.json().await?;
-        log::info!("VideoHash Indexer response for video_id [{}]: {:?}", video_id, indexer_response);
+        log::info!(
+            "VideoHash Indexer response for video_id [{}]: {:?}",
+            video_id,
+            indexer_response
+        );
 
         let is_duplicate = indexer_response.match_found;
 
