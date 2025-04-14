@@ -86,7 +86,7 @@ impl<'a> VideoHashDuplication<'a> {
         }
 
         let indexer_response: VideoHashIndexerResponse = response.json().await?;
-        log::info!("VideoHash Indexer response: {:?}", indexer_response);
+        log::info!("VideoHash Indexer response for video_id [{}]: {:?}", video_id, indexer_response);
 
         if indexer_response.match_found {
             // A similar video was found - record as duplicate
@@ -100,7 +100,7 @@ impl<'a> VideoHashDuplication<'a> {
                 .await?;
 
                 log::info!(
-                    "Duplicate video detected: {} is similar to {} (score: {})",
+                    "Duplicate video detected: video_id [{}] is similar to parent_video_id [{}] (score: {})",
                     video_id,
                     match_details.video_id,
                     match_details.similarity_percentage
@@ -123,7 +123,7 @@ impl<'a> VideoHashDuplication<'a> {
         } else {
             // For unique videos
             self.store_unique_video(video_id, &video_hash.hash).await?;
-            log::info!("Unique video recorded: {}", video_id);
+            log::info!("Unique video recorded: video_id [{}]", video_id);
 
             let timestamp = chrono::Utc::now().to_rfc3339();
             publish_video_callback(
@@ -159,7 +159,7 @@ impl<'a> VideoHashDuplication<'a> {
         let req = serde_json::json!(duplicate_event);
 
         log::info!(
-            "Publishing duplicate video event: original={}, parent={}, score={}",
+            "Publishing duplicate video event: video_id [{}], parent_video_id [{}], score={}",
             duplicate_event.original_video_id,
             duplicate_event.parent_video_id,
             duplicate_event.similarity_percentage
@@ -197,7 +197,7 @@ impl<'a> VideoHashDuplication<'a> {
         });
 
         log::info!(
-            "Publishing deduplication completed event for video: {}",
+            "Publishing deduplication completed event for video_id [{}]",
             video_id
         );
 
@@ -257,7 +257,7 @@ impl<'a> VideoHashDuplication<'a> {
         }
 
         let indexer_response: VideoHashIndexerResponse = response.json().await?;
-        log::info!("VideoHash Indexer response: {:?}", indexer_response);
+        log::info!("VideoHash Indexer response for video_id [{}]: {:?}", video_id, indexer_response);
 
         let is_duplicate = indexer_response.match_found;
 
@@ -273,7 +273,7 @@ impl<'a> VideoHashDuplication<'a> {
                 .await?;
 
                 log::info!(
-                    "Duplicate video detected: {} is similar to {} (score: {})",
+                    "Duplicate video detected: video_id [{}] is similar to parent_video_id [{}] (score: {})",
                     video_id,
                     match_details.video_id,
                     match_details.similarity_percentage
@@ -293,7 +293,7 @@ impl<'a> VideoHashDuplication<'a> {
             }
         } else {
             self.store_unique_video(video_id, &video_hash.hash).await?;
-            log::info!("Unique video recorded: {}", video_id);
+            log::info!("Unique video recorded: video_id [{}]", video_id);
         }
 
         // Always proceed with normal video processing, regardless of duplicate status
@@ -330,7 +330,7 @@ impl<'a> VideoHashDuplication<'a> {
         };
 
         log::info!(
-            "Storing hash in videohash_original for video_id: {}",
+            "Storing hash in videohash_original for video_id [{}]",
             video_id
         );
 
@@ -358,7 +358,7 @@ impl<'a> VideoHashDuplication<'a> {
         };
 
         log::info!(
-            "Storing unique video in video_unique for video_id: {}",
+            "Storing unique video in video_unique for video_id [{}]",
             video_id
         );
 
@@ -406,7 +406,7 @@ impl<'a> VideoHashDuplication<'a> {
         };
 
         log::info!(
-            "Storing duplicate video in duplicate_video: original={}, parent={}, score={}",
+            "Storing duplicate video in duplicate_video: video_id [{}], parent_video_id [{}], score={}",
             video_id,
             match_details.video_id,
             match_details.similarity_percentage
