@@ -24,10 +24,16 @@ use log::LevelFilter;
 use offchain_service::report_approved_handler;
 use once_cell::sync::Lazy;
 use qstash::qstash_router;
+use sentry_tower::{NewSentryLayer, SentryHttpLayer};
+use tonic::service::Routes;
 use tonic::transport::Server;
 use tower::make::Shared;
 use tower::steer::Steer;
+use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
+use tracing::instrument;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
@@ -60,8 +66,7 @@ pub mod utils;
 
 use app_state::AppState;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+async fn main_impl() -> Result<()> {
     #[derive(OpenApi)]
     #[openapi(
         tags(
@@ -74,12 +79,11 @@ async fn main() -> Result<()> {
 
     Lazy::force(&STORJ_INTERFACE_TOKEN);
 
-    Builder::new()
-        .filter_level(LevelFilter::Info)
-        .target(Target::Stdout)
-        .init();
-
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
+
+    let sentry_tower_layer = ServiceBuilder::new()
+        .layer(NewSentryLayer::new_from_top())
+        .layer(SentryHttpLayer::with_transaction());
 
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/api/v1/posts", posts::posts_router(shared_state.clone()))
@@ -102,16 +106,11 @@ async fn main() -> Result<()> {
     let http = Router::new()
         .route("/healthz", get(health_handler))
         .route("/start_backup", get(backup_job_handler))
-        .route(
-            "/start_backup_without_auth",
-            get(backup_job_handler_without_auth),
-        )
         .route("/canisters_list", get(canisters_list_handler))
-        .route("/reclaim_canisters", get(reclaim_canisters_handler))
         .route("/report-approved", post(report_approved_handler))
         .route("/import-video", post(upload_user_video_handler))
         .route(
-            "/upgrade_user_token_sns_canister/:individual_user_canister_id",
+            "/upgrade_user_token_sns_canister/{individual_user_canister_id}",
             post(upgrade_user_token_sns_canister_handler),
         )
         .route(
@@ -122,20 +121,15 @@ async fn main() -> Result<()> {
             "/get-snapshot",
             get(canister::snapshot::get_snapshot_canister),
         )
-        .route("/extract-frames", post(extract_frames_and_upload))
-        .route("/update-global-ml-feed-cache", get(update_ml_feed_cache))
-        .route(
-            "/update-global-ml-feed-cache-nsfw",
-            get(update_ml_feed_cache_nsfw),
-        )
         .route(
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
         .nest("/admin", admin_routes)
         .nest("/qstash", qstash_routes)
-        .nest_service("/", router)
+        .fallback_service(router)
         .layer(CorsLayer::permissive())
+        .layer(sentry_tower_layer)
         .with_state(shared_state.clone());
 
     let reflection_service = tonic_reflection::server::Builder::configure()
@@ -144,29 +138,29 @@ async fn main() -> Result<()> {
         .build_v1()
         .unwrap();
 
-    let grpc_axum = Server::builder()
-        .accept_http1(true)
-        .add_service(tonic_web::enable(WarehouseEventsServer::with_interceptor(
+    let grpc_axum = Routes::builder()
+        .routes()
+        .add_service(WarehouseEventsServer::with_interceptor(
             WarehouseEventsService {
                 shared_state: shared_state.clone(),
             },
             check_auth_grpc,
-        )))
-        .add_service(tonic_web::enable(OffChainServer::with_interceptor(
+        ))
+        .add_service(OffChainServer::with_interceptor(
             OffChainService {
                 shared_state: shared_state.clone(),
             },
             check_auth_grpc,
-        )))
-        .add_service(tonic_web::enable(OffChainCanisterServer::with_interceptor(
+        ))
+        .add_service(OffChainCanisterServer::with_interceptor(
             OffChainCanisterService {
                 shared_state: shared_state.clone(),
             },
             check_auth_grpc_offchain_mlfeed,
-        )))
+        ))
         .add_service(reflection_service)
-        .into_service()
-        .into_axum_router();
+        .into_axum_router()
+        .layer(NewSentryLayer::new_from_top());
 
     let http_grpc = Steer::new(
         vec![http, grpc_axum],
@@ -190,6 +184,43 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+fn main() {
+    let _guard = sentry::init((
+        "https://9a2d5e94760b78c84361380a30eae9ef@sentry.yral.com/2",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            // debug: true, // use when debugging sentry issues
+            traces_sample_rate: 0.3,
+            ..Default::default()
+        },
+    ));
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                // axum logs rejections from built-in extractors with the `axum::rejection`
+                // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
+                format!(
+                    "{}=debug,tower_http=debug,axum::rejection=trace",
+                    env!("CARGO_CRATE_NAME")
+                )
+                .into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .with(sentry_tracing::layer())
+        .init();
+
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            main_impl().await.unwrap();
+        });
+}
+
+#[instrument]
 async fn health_handler() -> (StatusCode, &'static str) {
     log::info!("Health check");
     log::warn!("Health check");

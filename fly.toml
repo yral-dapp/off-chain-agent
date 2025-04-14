@@ -4,6 +4,7 @@ primary_region = 'sin'
 
 [env]
 PORT = '8080'
+SENTRY_ENVIRONMENT = "staging"
 
 [[services]]
 internal_port = 50051
