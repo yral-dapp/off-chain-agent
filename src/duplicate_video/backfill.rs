@@ -80,9 +80,8 @@ async fn execute_backfill(
     batch_size: usize,
     parallelism: usize,
 ) -> anyhow::Result<usize> {
-    info!("Initializing BigQuery client...");
-    let bigquery_client = app_state::init_bigquery_client().await;
-    info!("BigQuery client initialized successfully");
+    info!("Using existing BigQuery client from app state");
+    let bigquery_client = &state.bigquery_client;
 
     let query = format!(
         "SELECT
@@ -248,7 +247,7 @@ async fn queue_video_to_qstash(
         .send()
         .await?;
 
-    info!("Queued video {} for processing", video_id);
+    info!("Queued video_id [{}] for processing", video_id);
     Ok(())
 }
 
@@ -282,7 +281,7 @@ pub async fn process_single_video(
     );
 
     info!(
-        "Processing video ID: {} at URL: {}",
+        "Processing video_id [{}] at URL: {}",
         clean_video_id, clean_video_url
     );
 
@@ -296,21 +295,21 @@ pub async fn process_single_video(
             req.publisher_data,
             move |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
                 // Empty closure - we don't want to continue the pipeline for old videos
-                info!("Skipping GCS upload for backfilled video: {}", vid_id);
+                info!("Skipping GCS upload for backfilled video_id [{}]", vid_id);
                 Box::pin(async { Ok(()) })
             },
         )
         .await
     {
         Ok(_) => {
-            info!("Successfully processed video {}", clean_video_id);
+            info!("Successfully processed video_id [{}]", clean_video_id);
             Ok(Json(ProcessVideoResponse {
                 message: format!("Successfully processed video {}", clean_video_id),
                 status: "success".to_string(),
             }))
         }
         Err(e) => {
-            error!("Failed to process video {}: {}", clean_video_id, e);
+            error!("Failed to process video_id [{}]: {}", clean_video_id, e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
