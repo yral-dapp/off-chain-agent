@@ -16,10 +16,10 @@ tls_options = { "alpn" = ["h2"], "versions" = ["TLSv1.2", "TLSv1.3"] }
 port = 443
 
 [services.concurrency]
-hard_limit = 1000
+hard_limit = 10000
 soft_limit = 500
 
 [[vm]]
-memory = '1gb'
+memory = '8gb'
 cpu_kind = 'shared'
-cpus = 1
+cpus = 8

@@ -224,7 +224,6 @@ async fn queue_video_to_qstash(
     });
 
     // Use the dedicated process_single_video endpoint for backfill jobs
-    // This avoids the full pipeline that video_deduplication would trigger
     let off_chain_ep = OFF_CHAIN_AGENT_URL
         .join("qstash/process_single_video")
         .unwrap();
@@ -244,6 +243,7 @@ async fn queue_video_to_qstash(
             "Upstash-Flow-Control-Value",
             format!("Parallelism={}", parallelism),
         )
+        .header("Upstash-Deduplication-Id", video_id)
         .send()
         .await?;
 
