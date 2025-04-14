@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_server(true)
         .file_descriptor_set_path(out_dir.join("warehouse_events_descriptor.bin"))
         .out_dir(out_dir)
-        .compile(&[proto_file], &["proto"])?;
+        .compile_protos(&[proto_file], &["proto"])?;
 
     // off_chain
     let proto_file = "contracts/projects/off_chain/off_chain.proto";
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_server(true)
         .file_descriptor_set_path(out_dir.join("off_chain_descriptor.bin"))
         .out_dir(out_dir)
-        .compile(&[proto_file], &["proto"])?;
+        .compile_protos(&[proto_file], &["proto"])?;
 
     // offchain_canister
     let proto_file = "contracts/projects/off_chain/offchain_canister.proto";
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_server(true)
         .file_descriptor_set_path(out_dir.join("offchain_canister_descriptor.bin"))
         .out_dir(out_dir)
-        .compile(&[proto_file], &["proto"])?;
+        .compile_protos(&[proto_file], &["proto"])?;
 
     // GRPC clients
 
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_client(true)
         .build_server(false)
         .out_dir(out_dir)
-        .compile(&[ml_feed_proto, nsfw_proto], &["proto"])?;
+        .compile_protos(&[ml_feed_proto, nsfw_proto], &["proto"])?;
 
     Ok(())
 }

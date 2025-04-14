@@ -4,7 +4,7 @@ use std::env;
 use axum::extract::FromRequestParts;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::{async_trait, Json};
+use axum::Json;
 use http::request::Parts;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,6 @@ pub enum AuthError {
 
 pub struct AuthBearer(pub String);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthBearer
 where
     S: Send + Sync,

@@ -21,6 +21,7 @@ use google_cloud_bigquery::http::{
 use serde::{Deserialize, Serialize};
 use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::{metadata::MetadataValue, Request};
+use tracing::instrument;
 
 use crate::{app_state::AppState, AppError};
 
@@ -45,6 +46,7 @@ fn create_output_directory(video_id: &str) -> Result<PathBuf, Error> {
     Ok(output_dir)
 }
 
+#[instrument]
 pub async fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec<Vec<u8>>, Error> {
     let output_pattern = output_dir.join("output-%04d.jpg");
     let video_path_clone = video_path.to_string();
@@ -82,6 +84,7 @@ pub async fn extract_frames(video_path: &str, output_dir: PathBuf) -> Result<Vec
     Ok(frames)
 }
 
+#[instrument(skip(gcs_client, frames))]
 pub async fn upload_frames_to_gcs(
     gcs_client: &cloud_storage::Client,
     frames: Vec<Vec<u8>>,
@@ -120,6 +123,7 @@ pub struct VideoRequest {
 }
 
 // extract_frames_and_upload API handler which takes video_id as queryparam in axum
+#[instrument(skip(state))]
 pub async fn extract_frames_and_upload(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
@@ -155,6 +159,7 @@ pub struct NSFWInfo {
     pub csam_detected: bool,
 }
 
+#[instrument]
 pub async fn get_video_nsfw_info(video_id: String) -> Result<NSFWInfo, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
     let tls_config = ClientTlsConfig::new().with_webpki_roots();
@@ -203,6 +208,7 @@ pub async fn nsfw_job(
 }
 
 #[cfg(not(feature = "local-bin"))]
+#[instrument(skip(state))]
 pub async fn nsfw_job(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
@@ -226,6 +232,7 @@ pub async fn nsfw_job(
     Ok(Json(serde_json::json!({ "message": "NSFW job completed" })))
 }
 
+#[instrument(skip(qstash))]
 async fn duplicate_to_storj(
     qstash: &QStashClient,
     video_info: UploadVideoInfo,
@@ -248,6 +255,7 @@ async fn duplicate_to_storj(
     Ok(())
 }
 
+#[instrument(skip(bigquery_client))]
 pub async fn push_nsfw_data_bigquery(
     bigquery_client: google_cloud_bigquery::client::Client,
     nsfw_info: NSFWInfo,
@@ -311,6 +319,7 @@ pub async fn nsfw_job_v2(
 }
 
 #[cfg(not(feature = "local-bin"))]
+#[instrument(skip(state))]
 pub async fn nsfw_job_v2(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VideoRequest>,
@@ -331,6 +340,7 @@ pub async fn nsfw_job_v2(
     ))
 }
 
+#[instrument]
 pub async fn get_video_nsfw_info_v2(video_id: String) -> Result<f32, Error> {
     // create a new connection everytime and depend on fly proxy to load balance
     let tls_config = ClientTlsConfig::new().with_webpki_roots();
@@ -397,6 +407,7 @@ struct VideoEmbeddingAgg {
     video_id: Option<String>,
 }
 
+#[instrument(skip(bigquery_client))]
 pub async fn push_nsfw_data_bigquery_v2(
     bigquery_client: google_cloud_bigquery::client::Client,
     nsfw_prob: f32,
