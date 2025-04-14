@@ -14,12 +14,14 @@ use std::{env, sync::Arc};
 pub struct BackfillQueryParams {
     batch_size: Option<usize>,
     parallelism: Option<usize>,
+    queue_name: Option<String>, // New parameter
 }
 
 #[derive(Debug, Serialize)]
 pub struct BackfillResponse {
     message: String,
     videos_queued: usize,
+    queue_name: String, // Added to response
 }
 
 pub async fn trigger_videohash_backfill(
@@ -52,14 +54,15 @@ pub async fn trigger_videohash_backfill(
     // Get parameters with defaults
     let batch_size = params.batch_size.unwrap_or(100);
     let parallelism = params.parallelism.unwrap_or(10);
+    let queue_name = params.queue_name.unwrap_or_else(|| "videohash-backfill".to_string());
 
     info!(
-        "Starting videohash backfill job with batch_size={}, parallelism={}",
-        batch_size, parallelism
+        "Starting videohash backfill job with batch_size={}, parallelism={}, queue={}",
+        batch_size, parallelism, queue_name
     );
 
     // Execute the backfill
-    let videos_queued = execute_backfill(&state, batch_size, parallelism)
+    let videos_queued = execute_backfill(&state, batch_size, parallelism, &queue_name)
         .await
         .map_err(|e| {
             error!("Backfill execution error: {}", e);
@@ -68,10 +71,11 @@ pub async fn trigger_videohash_backfill(
 
     Ok(Json(BackfillResponse {
         message: format!(
-            "Queued {} videos for processing with parallelism {}",
-            videos_queued, parallelism
+            "Queued {} videos for processing with parallelism {} in queue {}",
+            videos_queued, parallelism, queue_name
         ),
         videos_queued,
+        queue_name,
     }))
 }
 
@@ -79,6 +83,7 @@ async fn execute_backfill(
     state: &Arc<app_state::AppState>,
     batch_size: usize,
     parallelism: usize,
+    queue_name: &str,
 ) -> anyhow::Result<usize> {
     info!("Using existing BigQuery client from app state");
     let bigquery_client = &state.bigquery_client;
@@ -128,10 +133,11 @@ async fn execute_backfill(
         None => return Ok(0),
     };
 
-    info!("Found {} videos to process", rows.len());
+    info!("Found {} videos to process using queue [{}]", rows.len(), queue_name);
 
     // Queue each video to QStash for processing
     let mut queued_count = 0;
+    let mut errors_count = 0;
 
     for row in rows {
         if row.f.len() < 3 {
@@ -175,24 +181,27 @@ async fn execute_backfill(
             }
         };
 
-        // Queue to QStash
+        // Queue to QStash with the queue name
         if let Err(e) = queue_video_to_qstash(
             &state.qstash_client,
             &video_id,
             &canister_id,
             post_id,
             parallelism,
+            queue_name,
         )
         .await
         {
-            error!("Failed to queue video {}: {}", video_id, e);
+            error!("Failed to queue video_id [{}] to queue [{}]: {}", video_id, queue_name, e);
+            errors_count += 1;
             continue;
         }
 
         queued_count += 1;
     }
 
-    info!("Successfully queued {} videos for processing", queued_count);
+    info!("Successfully queued {} videos for processing in queue [{}] (errors: {})", 
+          queued_count, queue_name, errors_count);
     Ok(queued_count)
 }
 
@@ -202,6 +211,7 @@ async fn queue_video_to_qstash(
     canister_id: &str,
     post_id: u64,
     parallelism: usize,
+    queue_name: &str, // New parameter for queue name
 ) -> anyhow::Result<()> {
     use crate::consts::OFF_CHAIN_AGENT_URL;
     use http::header::CONTENT_TYPE;
@@ -227,9 +237,17 @@ async fn queue_video_to_qstash(
     let off_chain_ep = OFF_CHAIN_AGENT_URL
         .join("qstash/process_single_video")
         .unwrap();
-    let url = qstash_client
-        .base_url
-        .join(&format!("publish/{}", off_chain_ep))?;
+    
+    // Updated URL to use QStash queue feature
+    let url = if queue_name.is_empty() {
+        qstash_client
+            .base_url
+            .join(&format!("publish/{}", off_chain_ep))?
+    } else {
+        qstash_client
+            .base_url
+            .join(&format!("publish/queue/{}/{}", queue_name, off_chain_ep))?
+    };
 
     // Send to QStash with flow control
     qstash_client
@@ -247,7 +265,8 @@ async fn queue_video_to_qstash(
         .send()
         .await?;
 
-    info!("Queued video_id [{}] for processing", video_id);
+    info!("Queued video_id [{}] for processing in queue [{}]", video_id, 
+          if queue_name.is_empty() { "default" } else { queue_name });
     Ok(())
 }
 
