@@ -192,7 +192,7 @@ pub async fn repost_post_common_impl(
 ) -> anyhow::Result<()> {
     let video_url = format!(
         "https://yral.com/hot-or-not/{}/{}",
-        payload.canister_id, payload.video_id
+        payload.canister_id, payload.post_id
     );
 
     let text_str = format!(
