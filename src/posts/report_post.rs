@@ -57,6 +57,7 @@ pub struct ReportPostRequest {
         (status = 500, description = "Internal server error"),
     )
 )]
+#[deprecated = "Check /report_v2 instead"]
 pub async fn handle_report_post(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<ReportPostRequest>>,
