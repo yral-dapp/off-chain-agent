@@ -196,7 +196,7 @@ pub async fn repost_post_common_impl(
 
     let text_str = format!(
         "reporter_id: {} \n publisher_id: {} \n publisher_canister_id: {} \n post_id: {} \n video_id: {} \n reason: {} \n video_url: {} \n report_mode: {}",
-        payload.user_principal, "", payload.canister_id, payload.post_id, payload.video_id, payload.reason, video_url, payload.report_mode
+        payload.user_principal, payload.publisher_principal, payload.canister_id, payload.post_id, payload.video_id, payload.reason, video_url, payload.report_mode
     );
 
     let data = json!({
