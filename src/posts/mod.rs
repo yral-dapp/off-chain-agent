@@ -2,8 +2,10 @@ use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, middleware, response::IntoResponse, Json};
 use candid::Principal;
+use report_post::{
+    handle_report_post, handle_report_post_v2, ReportPostRequest, ReportPostRequestV2,
+};
 use serde::{Deserialize, Serialize};
-use tonic::transport::{Channel, ClientTlsConfig};
 use tracing::instrument;
 use types::PostRequest;
 use utils::{get_agent_from_delegated_identity_wire, insert_video_delete_row_to_bigquery};
@@ -15,12 +17,10 @@ use utoipa_axum::{
 use verify::{verify_post_request, VerifiedPostRequest};
 use yral_canisters_client::individual_user_template::{IndividualUserTemplate, Result1};
 
-use crate::{
-    app_state::AppState,
-    consts::ML_FEED_SERVER_GRPC_URL,
-    utils::grpc_clients::ml_feed::{ml_feed_client::MlFeedClient, VideoReportRequest},
-};
+use crate::app_state::AppState;
+use crate::posts::report_post::{__path_handle_report_post, __path_handle_report_post_v2};
 
+pub mod report_post;
 mod types;
 mod utils;
 mod verify;
@@ -41,6 +41,7 @@ pub fn posts_router(state: Arc<AppState>) -> OpenApiRouter {
 
     router = verified_route!(router, handle_delete_post, DeletePostRequest, state);
     router = verified_route!(router, handle_report_post, ReportPostRequest, state);
+    router = verified_route!(router, handle_report_post_v2, ReportPostRequestV2, state);
 
     router.with_state(state)
 }
@@ -66,7 +67,7 @@ pub struct DeletePostRequest {
     )
 )]
 #[instrument(skip(state, verified_request))]
-async fn handle_delete_post(
+pub async fn handle_delete_post(
     State(state): State<Arc<AppState>>,
     Json(verified_request): Json<VerifiedPostRequest<DeletePostRequest>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -117,95 +118,4 @@ async fn handle_delete_post(
         })?;
 
     Ok((StatusCode::OK, "Post deleted".to_string()))
-}
-
-#[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
-pub struct ReportPostRequest {
-    #[schema(value_type = String)]
-    pub canister_id: Principal,
-    pub post_id: u64,
-    pub video_id: String,
-    #[schema(value_type = String)]
-    pub user_canister_id: Principal,
-    #[schema(value_type = String)]
-    pub user_principal: Principal,
-    pub reason: String,
-}
-#[instrument(skip(state, verified_request))]
-#[utoipa::path(
-    post,
-    path = "/report",
-    request_body = PostRequest<ReportPostRequest>,
-    tag = "posts",
-    responses(
-        (status = 200, description = "Report post success"),
-        (status = 500, description = "Internal server error"),
-    )
-)]
-async fn handle_report_post(
-    State(state): State<Arc<AppState>>,
-    Json(verified_request): Json<VerifiedPostRequest<ReportPostRequest>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let request_body = verified_request.request.request_body;
-
-    let qstash_client = state.qstash_client.clone();
-    qstash_client
-        .publish_report_post(request_body)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to publish report post: {}", e);
-
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to publish report post: {}", e),
-            )
-        })?;
-
-    Ok((StatusCode::OK, "Post reported".to_string()))
-}
-
-pub async fn qstash_report_post(
-    State(_state): State<Arc<AppState>>,
-    Json(payload): Json<ReportPostRequest>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let tls_config = ClientTlsConfig::new().with_webpki_roots();
-
-    let channel = Channel::from_static(ML_FEED_SERVER_GRPC_URL)
-        .tls_config(tls_config)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to create channel: {}", e),
-            )
-        })?
-        .connect()
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to connect to ML feed server: {}", e),
-            )
-        })?;
-
-    let mut client = MlFeedClient::new(channel);
-
-    let request = VideoReportRequest {
-        reportee_user_id: payload.user_principal.to_string(),
-        reportee_canister_id: payload.user_canister_id.to_string(),
-        video_canister_id: payload.canister_id.to_string(),
-        video_post_id: payload.post_id as u32,
-        video_id: payload.video_id,
-        reason: payload.reason,
-    };
-
-    client.report_video(request).await.map_err(|e| {
-        log::error!("Failed to report video: {}", e);
-
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to report video: {}", e),
-        )
-    })?;
-
-    Ok((StatusCode::OK, "Report post success".to_string()))
 }

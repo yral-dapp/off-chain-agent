@@ -44,7 +44,7 @@ use crate::{
         event::{storj::storj_ingest, upload_video_gcs},
         nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
     },
-    posts::qstash_report_post,
+    posts::report_post::qstash_report_post,
 };
 use crate::{
     duplicate_video::backfill::process_single_video, qstash::duplicate::VideoPublisherData,
