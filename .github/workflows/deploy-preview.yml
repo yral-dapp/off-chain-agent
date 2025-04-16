@@ -45,7 +45,7 @@ jobs:
       - name: Set secret tokens
         if: ${{ github.event.pull_request.merged == false}}
         run: |
-          APP_NAME="pr-${{github.event.number}}-dolr-ai-off-chain-agent"
+          APP_NAME="pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent"
           flyctl secrets set "CF_R2_ACCESS_KEY_TEMP=$CF_R2_ACCESS_KEY_TEMP" --app "$APP_NAME" --stage
           flyctl secrets set "CF_R2_SECRET_ACCESS_KEY_TEMP=$CF_R2_SECRET_ACCESS_KEY_TEMP" --app "$APP_NAME" --stage
           flyctl secrets set "CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY=$CF_WORKER_ACCESS_OFF_CHAIN_AGENT_KEY" --app "$APP_NAME" --stage
