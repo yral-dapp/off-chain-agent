@@ -7,21 +7,14 @@ use http::{
 };
 use reqwest::{Client, Url};
 use tracing::instrument;
-use yral_canisters_client::individual_user_template::DeployedCdaoCanisters;
 
 use crate::{
-    app_state,
     canister::upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
     consts::OFF_CHAIN_AGENT_URL,
-    duplicate_video::videohash::VideoHash,
     events::event::UploadVideoInfo,
-    posts::ReportPostRequest,
+    posts::report_post::{ReportPostRequest, ReportPostRequestV2},
     qstash::duplicate::{DuplicateVideoEvent, VideoHashDuplication, VideoPublisherData},
 };
-use cloud_storage::Client as GcsClient;
-use futures::future::BoxFuture;
-use google_cloud_bigquery::http::job::query::QueryRequest;
-use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 pub struct QStashClient {
@@ -340,7 +333,7 @@ impl QStashClient {
     #[instrument(skip(self))]
     pub async fn publish_report_post(
         &self,
-        report_request: ReportPostRequest,
+        report_request: ReportPostRequestV2,
     ) -> Result<(), anyhow::Error> {
         let off_chain_ep = OFF_CHAIN_AGENT_URL.join("qstash/report_post").unwrap();
 
