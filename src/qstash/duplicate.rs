@@ -287,7 +287,7 @@ impl<'a> VideoHashDuplication<'a> {
                     match_details.similarity_percentage
                 );
 
-                let exact_duplicate = match_details.similarity_percentage > 99.0;
+                let exact_duplicate = match_details.similarity_percentage > 98.0;
                 let _duplicate_event = DuplicateVideoEvent {
                     original_video_id: video_id.to_string(),
                     parent_video_id: match_details.video_id.clone(),
