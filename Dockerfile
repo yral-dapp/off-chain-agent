@@ -6,7 +6,7 @@ RUN apt-get update \
     && apt-get install -y ca-certificates \
     && apt-get -y install curl \
     && apt-get -y install ffmpeg \
-    && apt-get -y install golang-go
+    && apt-get -y install golang-go libc6
 
 
 EXPOSE 50051
