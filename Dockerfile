@@ -1,29 +1,18 @@
-FROM debian:bookworm-20240211
+FROM ubuntu:latest
 
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y ca-certificates \
-    && apt-get -y install curl \
-    && apt-get -y install ffmpeg \
-    && apt-get -y install golang-go libc6
-
+    && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    ffmpeg \
+    golang-go \
+    libc6 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 50051
-
-# Latest releases available at https://github.com/aptible/supercronic/releases
-# ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.29/supercronic-linux-amd64 \
-#     SUPERCRONIC=supercronic-linux-amd64 \
-#     SUPERCRONIC_SHA1SUM=cd48d45c4b10f3f0bfdd3a57d054cd05ac96812b
-
-# RUN curl -fsSLO "$SUPERCRONIC_URL" \
-#     && echo "${SUPERCRONIC_SHA1SUM}  ${SUPERCRONIC}" | sha1sum -c - \
-#     && chmod +x "$SUPERCRONIC" \
-#     && mv "$SUPERCRONIC" "/usr/local/bin/${SUPERCRONIC}" \
-#     && ln -s "/usr/local/bin/${SUPERCRONIC}" /usr/local/bin/supercronic
-
-# # You might need to change this depending on where your crontab is located
-# COPY crontab crontab
 
 COPY ./target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent .
 CMD ["./icp-off-chain-agent"]
