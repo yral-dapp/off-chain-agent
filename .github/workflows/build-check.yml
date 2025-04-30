@@ -29,7 +29,7 @@ jobs:
       - name: Cache and Install prereqs
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: protobuf-compiler musl-tools
+          packages: protobuf-compiler musl-tools clang
           version: 1.0 # cache version, for manual invalidation
 
       - name: Rust Setup
