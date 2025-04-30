@@ -58,6 +58,7 @@ jobs:
           flyctl secrets set ML_FEED_CACHE_REDIS_URL="$ML_FEED_CACHE_REDIS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "VIDEOHASH_BACKFILL_TOKEN=$VIDEOHASH_BACKFILL_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set STORJ_BACKUP_CANISTER_ACCESS_GRANT="$STORJ_BACKUP_CANISTER_ACCESS_GRANT" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
@@ -78,6 +79,7 @@ jobs:
           ML_FEED_CACHE_REDIS_URL: ${{ secrets.YRAL_ML_FEED_CACHE_REDIS_URL }}
           STORJ_INTERFACE_TOKEN: ${{ secrets.STORJ_INTERFACE_TOKEN }}
           VIDEOHASH_BACKFILL_TOKEN: ${{ secrets.VIDEOHASH_BACKFILL_TOKEN }}
+          STORJ_BACKUP_CANISTER_ACCESS_GRANT: ${{ secrets.STORJ_BACKUP_CANISTER_ACCESS_GRANT }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml
         env:

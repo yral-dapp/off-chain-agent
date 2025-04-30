@@ -2,31 +2,23 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Result;
-use auth::check_auth_grpc_offchain_mlfeed;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
-use canister::mlfeed_cache::off_chain::off_chain_canister_server::OffChainCanisterServer;
-use canister::mlfeed_cache::{
-    update_ml_feed_cache, update_ml_feed_cache_nsfw, OffChainCanisterService,
-};
+use candid::Principal;
+use canister::snapshot_v2::upload_snapshot_to_storj;
 use canister::upgrade_user_token_sns_canister::{
     upgrade_user_token_sns_canister_for_entire_network, upgrade_user_token_sns_canister_handler,
 };
 use canister::upload_user_video::upload_user_video_handler;
 use config::AppConfig;
-use consts::STORJ_INTERFACE_TOKEN;
-use env_logger::{Builder, Target};
 use events::event::storj::enqueue_storj_backfill_item;
-use events::nsfw::extract_frames_and_upload;
 use http::header::CONTENT_TYPE;
-use log::LevelFilter;
 use offchain_service::report_approved_handler;
-use once_cell::sync::Lazy;
 use qstash::qstash_router;
 use sentry_tower::{NewSentryLayer, SentryHttpLayer};
+use serde_json::json;
 use tonic::service::Routes;
-use tonic::transport::Server;
 use tower::make::Shared;
 use tower::steer::Steer;
 use tower::ServiceBuilder;
@@ -39,9 +31,6 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::check_auth_grpc;
-use crate::canister::canisters_list_handler;
-use crate::canister::reclaim_canisters::reclaim_canisters_handler;
-use crate::canister::snapshot::{backup_job_handler, backup_job_handler_without_auth};
 use crate::duplicate_video::backfill::trigger_videohash_backfill;
 use crate::events::warehouse_events::warehouse_events_server::WarehouseEventsServer;
 use crate::events::{warehouse_events, WarehouseEventsService};
@@ -77,9 +66,15 @@ async fn main_impl() -> Result<()> {
 
     let conf = AppConfig::load()?;
 
-    Lazy::force(&STORJ_INTERFACE_TOKEN);
-
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
+
+    // for testing
+    // upload_snapshot_to_storj(
+    //     Principal::anonymous(),
+    //     "2025-04-29".to_string(),
+    //     json!({ "hello": "world" }).to_string().into_bytes(),
+    // )
+    // .await?;
 
     let sentry_tower_layer = ServiceBuilder::new()
         .layer(NewSentryLayer::new_from_top())
@@ -105,8 +100,6 @@ async fn main_impl() -> Result<()> {
 
     let http = Router::new()
         .route("/healthz", get(health_handler))
-        .route("/start_backup", get(backup_job_handler))
-        .route("/canisters_list", get(canisters_list_handler))
         .route("/report-approved", post(report_approved_handler))
         .route("/import-video", post(upload_user_video_handler))
         .route(
@@ -116,10 +109,6 @@ async fn main_impl() -> Result<()> {
         .route(
             "/upgrade_user_token_sns_canister_for_entire_network",
             post(upgrade_user_token_sns_canister_for_entire_network),
-        )
-        .route(
-            "/get-snapshot",
-            get(canister::snapshot::get_snapshot_canister),
         )
         .route(
             "/enqueue_storj_backfill_item",
@@ -151,12 +140,6 @@ async fn main_impl() -> Result<()> {
                 shared_state: shared_state.clone(),
             },
             check_auth_grpc,
-        ))
-        .add_service(OffChainCanisterServer::with_interceptor(
-            OffChainCanisterService {
-                shared_state: shared_state.clone(),
-            },
-            check_auth_grpc_offchain_mlfeed,
         ))
         .add_service(reflection_service)
         .into_axum_router()

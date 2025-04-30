@@ -7,6 +7,7 @@ RUN apt-get update \
     && apt-get -y install curl \
     && apt-get -y install ffmpeg
 
+
 EXPOSE 50051
 
 # Latest releases available at https://github.com/aptible/supercronic/releases

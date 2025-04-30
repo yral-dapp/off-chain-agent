@@ -1,15 +1,20 @@
 use std::sync::Arc;
 
+use candid::Principal;
 use chrono::Timelike;
 use http::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     HeaderMap, HeaderValue,
 };
 use reqwest::{Client, Url};
+use serde_json::json;
 use tracing::instrument;
 
 use crate::{
-    canister::upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
+    canister::{
+        snapshot_v2::BackupUserCanisterPayload,
+        upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
+    },
     consts::OFF_CHAIN_AGENT_URL,
     events::event::UploadVideoInfo,
     posts::report_post::{ReportPostRequest, ReportPostRequestV2},
@@ -347,6 +352,71 @@ impl QStashClient {
             .header("upstash-method", "POST")
             .send()
             .await?;
+
+        Ok(())
+    }
+
+    #[instrument(skip(self, canister_ids))]
+    pub async fn backup_canister_batch(
+        &self,
+        canister_ids: Vec<Principal>,
+        date_str: String,
+    ) -> anyhow::Result<()> {
+        let destination_url = OFF_CHAIN_AGENT_URL
+            .join("qstash/backup_user_canister")?
+            .to_string();
+        let qstash_batch_url = self.base_url.join("batch")?;
+
+        let requests: Vec<serde_json::Value> = canister_ids
+            .iter()
+            .map(|&canister_id| {
+                let payload = BackupUserCanisterPayload {
+                    canister_id,
+                    date_str: date_str.clone(),
+                };
+                let body_str = serde_json::to_string(&payload).unwrap_or_else(|e| {
+                    tracing::error!("Failed to serialize BackupUserCanisterPayload: {}", e);
+                    "{}".to_string() // Use an empty JSON object as fallback
+                });
+
+                json!({
+                    "destination": destination_url,
+                    "headers": {
+                        "Upstash-Forward-Content-Type": "application/json",
+                        "Upstash-Forward-Method": "POST",
+                        "Upstash-Flow-Control-Key": "BACKUP_CANISTER",
+                        "Upstash-Flow-Control-Value": "Rate=20,Parallelism=10", // TODO: adjust this
+                        "Upstash-Content-Based-Deduplication": "true",
+                        "Upstash-Retries": "1",
+                    },
+                    "body": body_str,
+                })
+            })
+            .collect();
+
+        let chunk_size = 10000;
+
+        for request_chunk in requests.chunks(chunk_size) {
+            let response = self
+                .client
+                .post(qstash_batch_url.clone())
+                .json(&request_chunk)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_body = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|e| format!("Failed to read error body: {}", e));
+                tracing::error!(
+                    "QStash batch request failed. Status: {}. Body: {}",
+                    status,
+                    error_body
+                );
+            }
+        }
 
         Ok(())
     }

@@ -56,7 +56,10 @@ cloud-storage = { version = "0.11.1", default-features = false, features = [
 k256 = { version = "0.13.3", features = ["jwk"] }
 time = "0.3.36"
 firestore = "0.43.1"
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "cd745f403996a3b4ac4fcf78979cdaf194c74936", features = [
+# yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "cd745f403996a3b4ac4fcf78979cdaf194c74936", features = [
+#     "full",
+# ] }
+yral-canisters-client = { path = "../yral-common/canisters-client", features = [
     "full",
 ] }
 yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "0247d886ad95747deee4618c3fd42524ba78d5fe" }
@@ -96,6 +99,7 @@ sentry-tracing = "0.37.0"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tracing-futures = "0.2.5"
+uplink = { version = "0.10.2", optional = true }
 
 [build-dependencies]
 tonic-build = "0.13.0"
@@ -107,3 +111,4 @@ path = "src/main.rs"
 [features]
 local-bin = []
 use-local-agent = []
+use-uplink = ["dep:uplink"]

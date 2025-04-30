@@ -51,7 +51,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --release --target x86_64-unknown-linux-musl
+        run: cargo build --release --target x86_64-unknown-linux-musl --features use-uplink
         env:
           TARGET_CC: x86_64-linux-musl-gcc
       # - name: Run tests

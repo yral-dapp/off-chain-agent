@@ -15,7 +15,7 @@ use utoipa_axum::{
     routes,
 };
 use verify::{verify_post_request, VerifiedPostRequest};
-use yral_canisters_client::individual_user_template::{IndividualUserTemplate, Result1};
+use yral_canisters_client::individual_user_template::{IndividualUserTemplate, Result_};
 
 use crate::app_state::AppState;
 use crate::posts::report_post::{__path_handle_report_post, __path_handle_report_post_v2};
@@ -91,8 +91,8 @@ pub async fn handle_delete_post(
     // Call the canister to delete the post
     let delete_res = individual_user_template.delete_post(post_id).await;
     match delete_res {
-        Ok(Result1::Ok) => (),
-        Ok(Result1::Err(_)) => {
+        Ok(Result_::Ok) => (),
+        Ok(Result_::Err(_)) => {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "Delete post failed - either the post doesn't exist or already deleted".to_string(),
