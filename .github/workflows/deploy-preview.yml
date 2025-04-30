@@ -34,8 +34,8 @@ jobs:
       - name: Download build
         uses: actions/download-artifact@v4
         with:
-          name: build-musl
-      - run: chmod +x target/x86_64-unknown-linux-musl/release/icp-off-chain-agent
+          name: build-glibc
+      - run: chmod +x target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent
 
       - name: Deploy
         id: deploy

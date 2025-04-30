@@ -26,7 +26,7 @@ jobs:
       - name: Cache and Install prereqs
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: protobuf-compiler musl-tools clang libclang-dev
+          packages: protobuf-compiler build-essential clang libclang-dev
           version: 1.0 # cache version, for manual invalidation
 
       - name: Setup Go
@@ -38,24 +38,17 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
-          targets: "x86_64-unknown-linux-musl"
+          targets: "x86_64-unknown-linux-gnu"
 
       - name: Build setup
         run: |
-          rustup target add x86_64-unknown-linux-musl
-          rustup component add rustfmt
-          rustup component add clippy
-      # - name: lint check
-      #   run: |
-      #     cargo fmt --check
-      #     cargo clippy --no-deps --all-features --release -- -Dwarnings
+          rustup target add x86_64-unknown-linux-gnu
+
       - name: Use rust cache
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --release --target x86_64-unknown-linux-musl --features use-uplink
-        env:
-          TARGET_CC: x86_64-linux-musl-gcc
+        run: cargo build --release --target x86_64-unknown-linux-gnu --features use-uplink
       # - name: Run tests
       #   run: cargo test --verbose
       - run: touch .empty
@@ -63,7 +56,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ inputs.publish-artifact }}
         with:
-          name: build-musl
+          name: build-glibc
           path: |
-            target/x86_64-unknown-linux-musl/release/icp-off-chain-agent
+            target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent
             .empty

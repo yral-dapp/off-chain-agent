@@ -230,27 +230,38 @@ pub async fn upload_snapshot_to_storj(
     object_id: String,
     snapshot_bytes: Vec<u8>,
 ) -> Result<(), anyhow::Error> {
-    use uplink::{access::Grant, Project};
+    use uplink::{access::Grant, project::options::ListObjects, Project};
 
     let access_grant = Grant::new(&STORJ_BACKUP_CANISTER_ACCESS_GRANT)?;
-    let bucket_name = format!("{CANISTER_BACKUPS_BUCKET}/{canister_id}");
+    let bucket_name = CANISTER_BACKUPS_BUCKET;
     let project = &mut Project::open(&access_grant);
     let (_bucket, _ok) = project.create_bucket(&bucket_name).expect("create bucket");
 
-    let upload = &mut project.upload_object(&bucket_name, &object_id, None)?;
+    let upload = &mut project.upload_object(
+        &bucket_name,
+        &format!("{}/{}", canister_id, object_id),
+        None,
+    )?;
     upload.write_all(&snapshot_bytes)?;
     upload.commit()?;
 
     // list objects and delete any objects older than 30 days
-    let obj_list = &mut project.list_objects(&bucket_name, None)?;
+    let mut list_objects_options = ListObjects::with_prefix(&format!("{}/", canister_id))?;
+    list_objects_options.recursive = true;
+    let obj_list = &mut project.list_objects(&bucket_name, Some(&list_objects_options))?;
     for obj_res in obj_list {
         let obj = obj_res?;
         let obj_key = obj.key;
 
-        let obj_date = DateTime::parse_from_rfc3339(&obj_key)?;
+        let date_str = obj_key.split("/").last().unwrap(); // obj_key is in the format of "canister_id/date"
+        let date_str = format!("{}T00:00:00Z", date_str);
+        let obj_date = DateTime::parse_from_rfc3339(&date_str)
+            .map_err(|e| anyhow::anyhow!("Failed to parse date: {}", e))?;
         let diff = Utc::now().signed_duration_since(obj_date);
         if diff > Duration::days(5) {
-            project.delete_object(&bucket_name, &obj_key)?;
+            project
+                .delete_object(&bucket_name, &obj_key)
+                .map_err(|e| anyhow::anyhow!("Failed to delete object: {}", e))?;
         }
     }
 

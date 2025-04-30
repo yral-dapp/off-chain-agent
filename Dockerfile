@@ -5,7 +5,8 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y ca-certificates \
     && apt-get -y install curl \
-    && apt-get -y install ffmpeg
+    && apt-get -y install ffmpeg \
+    && apt-get -y install golang-go
 
 
 EXPOSE 50051
@@ -24,5 +25,5 @@ EXPOSE 50051
 # # You might need to change this depending on where your crontab is located
 # COPY crontab crontab
 
-COPY ./target/x86_64-unknown-linux-musl/release/icp-off-chain-agent .
+COPY ./target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent .
 CMD ["./icp-off-chain-agent"]
