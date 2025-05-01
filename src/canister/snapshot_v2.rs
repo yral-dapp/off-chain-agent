@@ -143,6 +143,9 @@ pub async fn get_user_canister_snapshot(
         anyhow::anyhow!("Failed to save user canister snapshot: {}", e)
     })?;
 
+    // delay 1 second
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     // Download snapshot
 
     let mut snapshot_bytes = vec![];
