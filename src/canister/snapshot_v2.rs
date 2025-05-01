@@ -144,7 +144,7 @@ pub async fn get_user_canister_snapshot(
     })?;
 
     // delay 1 second
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Download snapshot
 
