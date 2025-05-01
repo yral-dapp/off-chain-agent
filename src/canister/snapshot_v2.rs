@@ -138,7 +138,10 @@ pub async fn get_user_canister_snapshot(
 ) -> Result<Vec<u8>, anyhow::Error> {
     let user_canister = IndividualUserTemplate(canister_id, agent);
 
-    let snapshot_size = user_canister.save_snapshot_json_v_2().await?;
+    let snapshot_size = user_canister.save_snapshot_json_v_2().await.map_err(|e| {
+        log::error!("Failed to save user canister snapshot: {}", e);
+        anyhow::anyhow!("Failed to save user canister snapshot: {}", e)
+    })?;
 
     // Download snapshot
 
@@ -154,13 +157,20 @@ pub async fn get_user_canister_snapshot(
 
         let res = user_canister
             .download_snapshot(start as u64, (end - start) as u64)
-            .await?;
+            .await
+            .map_err(|e| {
+                log::error!("Failed to download user canister snapshot: {}", e);
+                anyhow::anyhow!("Failed to download user canister snapshot: {}", e)
+            })?;
 
         snapshot_bytes.extend(res);
     }
 
     // clear snapshot
-    user_canister.clear_snapshot().await?;
+    user_canister.clear_snapshot().await.map_err(|e| {
+        log::error!("Failed to clear user canister snapshot: {}", e);
+        anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
+    })?;
 
     Ok(snapshot_bytes)
 }
@@ -172,7 +182,10 @@ pub async fn get_subnet_orchestrator_snapshot(
 ) -> Result<Vec<u8>, anyhow::Error> {
     let subnet_orch = UserIndex(canister_id, agent);
 
-    let snapshot_size = subnet_orch.save_snapshot_json().await?;
+    let snapshot_size = subnet_orch.save_snapshot_json().await.map_err(|e| {
+        log::error!("Failed to save subnet orchestrator snapshot: {}", e);
+        anyhow::anyhow!("Failed to save subnet orchestrator snapshot: {}", e)
+    })?;
 
     // Download snapshot
 
@@ -188,13 +201,20 @@ pub async fn get_subnet_orchestrator_snapshot(
 
         let res = subnet_orch
             .download_snapshot(start as u64, (end - start) as u64)
-            .await?;
+            .await
+            .map_err(|e| {
+                log::error!("Failed to download subnet orchestrator snapshot: {}", e);
+                anyhow::anyhow!("Failed to download subnet orchestrator snapshot: {}", e)
+            })?;
 
         snapshot_bytes.extend(res);
     }
 
     // clear snapshot
-    subnet_orch.clear_snapshot().await?;
+    subnet_orch.clear_snapshot().await.map_err(|e| {
+        log::error!("Failed to clear subnet orchestrator snapshot: {}", e);
+        anyhow::anyhow!("Failed to clear subnet orchestrator snapshot: {}", e)
+    })?;
 
     Ok(snapshot_bytes)
 }
@@ -206,7 +226,13 @@ pub async fn get_platform_orchestrator_snapshot(
 ) -> Result<Vec<u8>, anyhow::Error> {
     let platform_orchestrator = PlatformOrchestrator(canister_id, agent);
 
-    let snapshot_size = platform_orchestrator.save_snapshot_json().await?;
+    let snapshot_size = platform_orchestrator
+        .save_snapshot_json()
+        .await
+        .map_err(|e| {
+            log::error!("Failed to save platform orchestrator snapshot: {}", e);
+            anyhow::anyhow!("Failed to save platform orchestrator snapshot: {}", e)
+        })?;
 
     // Download snapshot
 
@@ -222,13 +248,20 @@ pub async fn get_platform_orchestrator_snapshot(
 
         let res = platform_orchestrator
             .download_snapshot(start as u64, (end - start) as u64)
-            .await?;
+            .await
+            .map_err(|e| {
+                log::error!("Failed to download platform orchestrator snapshot: {}", e);
+                anyhow::anyhow!("Failed to download platform orchestrator snapshot: {}", e)
+            })?;
 
         snapshot_bytes.extend(res);
     }
 
     // clear snapshot
-    platform_orchestrator.clear_snapshot().await?;
+    platform_orchestrator.clear_snapshot().await.map_err(|e| {
+        log::error!("Failed to clear platform orchestrator snapshot: {}", e);
+        anyhow::anyhow!("Failed to clear platform orchestrator snapshot: {}", e)
+    })?;
 
     Ok(snapshot_bytes)
 }
@@ -285,5 +318,213 @@ pub async fn upload_snapshot_to_storj(
     snapshot_bytes: Vec<u8>,
 ) -> Result<(), anyhow::Error> {
     log::warn!("Uplink is not enabled, skipping upload to storj");
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TestSnapshotPayload {
+    pub canister_id: Principal,
+    pub mode: String,
+    pub snapshot_size: u32,
+}
+
+#[instrument(skip(state))]
+pub async fn test_user_snapshot(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<TestSnapshotPayload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let agent = state.agent.clone();
+
+    let user_canister = IndividualUserTemplate(payload.canister_id, &agent);
+
+    match payload.mode.as_str() {
+        "save_snapshot_json_v_2" => {
+            let snapshot_size = user_canister.save_snapshot_json_v_2().await.map_err(|e| {
+                log::error!("testing Failed to save user canister snapshot: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?;
+            log::info!("testing Snapshot size: {}", snapshot_size);
+        }
+        "download_snapshot" => {
+            let mut snapshot_bytes = vec![];
+            let chunk_size = 1000 * 1000;
+            let num_iters = (payload.snapshot_size as f32 / chunk_size as f32).ceil() as u32;
+            for i in 0..num_iters {
+                let start = i * chunk_size;
+                let mut end = (i + 1) * chunk_size;
+                if end > payload.snapshot_size {
+                    end = payload.snapshot_size;
+                }
+
+                let res = user_canister
+                    .download_snapshot(start as u64, (end - start) as u64)
+                    .await
+                    .map_err(|e| {
+                        log::error!("testing Failed to download user canister snapshot: {}", e);
+                        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                    })?;
+
+                snapshot_bytes.extend(res);
+            }
+            log::info!("testing Snapshot size downloaded: {}", snapshot_bytes.len());
+        }
+        "clear_snapshot" => {
+            user_canister.clear_snapshot().await.map_err(|e| {
+                log::error!("testing Failed to clear user canister snapshot: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?;
+        }
+        "all" => {
+            let bytes = get_user_canister_snapshot(payload.canister_id, &agent)
+                .await
+                .map_err(|e| {
+                    log::error!("testing Failed to get user canister snapshot: {}", e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                })?;
+            log::info!("testing Snapshot size downloaded: {}", bytes.len());
+        }
+        _ => {
+            return Err((StatusCode::BAD_REQUEST, "Invalid mode".to_string()));
+        }
+    }
+
+    Ok(())
+}
+
+#[instrument(skip(state))]
+pub async fn test_subnet_orchestrator_snapshot(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<TestSnapshotPayload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let agent = state.agent.clone();
+
+    let subnet_orch = UserIndex(payload.canister_id, &agent);
+
+    match payload.mode.as_str() {
+        "save_snapshot_json" => {
+            let snapshot_size = subnet_orch.save_snapshot_json().await.map_err(|e| {
+                log::error!("testing Failed to save subnet orchestrator snapshot: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?;
+            log::info!("testing Snapshot size: {}", snapshot_size);
+        }
+        "download_snapshot" => {
+            let mut snapshot_bytes = vec![];
+            let chunk_size = 1000 * 1000;
+            let num_iters = (payload.snapshot_size as f32 / chunk_size as f32).ceil() as u32;
+            for i in 0..num_iters {
+                let start = i * chunk_size;
+                let mut end = (i + 1) * chunk_size;
+                if end > payload.snapshot_size {
+                    end = payload.snapshot_size;
+                }
+
+                let res = subnet_orch
+                    .download_snapshot(start as u64, (end - start) as u64)
+                    .await
+                    .map_err(|e| {
+                        log::error!("testing Failed to download user canister snapshot: {}", e);
+                        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                    })?;
+
+                snapshot_bytes.extend(res);
+            }
+            log::info!("testing Snapshot size downloaded: {}", snapshot_bytes.len());
+        }
+        "clear_snapshot" => {
+            subnet_orch.clear_snapshot().await.map_err(|e| {
+                log::error!("testing Failed to clear user canister snapshot: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?;
+        }
+        "all" => {
+            let bytes = get_subnet_orchestrator_snapshot(payload.canister_id, &agent)
+                .await
+                .map_err(|e| {
+                    log::error!("testing Failed to get subnet orchestrator snapshot: {}", e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                })?;
+            log::info!("testing Snapshot size downloaded: {}", bytes.len());
+        }
+        _ => {
+            return Err((StatusCode::BAD_REQUEST, "Invalid mode".to_string()));
+        }
+    }
+
+    Ok(())
+}
+
+#[instrument(skip(state))]
+pub async fn test_platform_orchestrator_snapshot(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<TestSnapshotPayload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let agent = state.agent.clone();
+
+    let platform_orch = PlatformOrchestrator(payload.canister_id, &agent);
+
+    match payload.mode.as_str() {
+        "save_snapshot_json" => {
+            let snapshot_size = platform_orch.save_snapshot_json().await.map_err(|e| {
+                log::error!(
+                    "testing Failed to save platform orchestrator snapshot: {}",
+                    e
+                );
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?;
+            log::info!("testing Snapshot size: {}", snapshot_size);
+        }
+        "download_snapshot" => {
+            let mut snapshot_bytes = vec![];
+            let chunk_size = 1000 * 1000;
+            let num_iters = (payload.snapshot_size as f32 / chunk_size as f32).ceil() as u32;
+            for i in 0..num_iters {
+                let start = i * chunk_size;
+                let mut end = (i + 1) * chunk_size;
+                if end > payload.snapshot_size {
+                    end = payload.snapshot_size;
+                }
+
+                let res = platform_orch
+                    .download_snapshot(start as u64, (end - start) as u64)
+                    .await
+                    .map_err(|e| {
+                        log::error!(
+                            "testing Failed to download platform orchestrator snapshot: {}",
+                            e
+                        );
+                        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                    })?;
+
+                snapshot_bytes.extend(res);
+            }
+            log::info!("testing Snapshot size downloaded: {}", snapshot_bytes.len());
+        }
+        "clear_snapshot" => {
+            platform_orch.clear_snapshot().await.map_err(|e| {
+                log::error!(
+                    "testing Failed to clear platform orchestrator snapshot: {}",
+                    e
+                );
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?;
+        }
+        "all" => {
+            let bytes = get_platform_orchestrator_snapshot(payload.canister_id, &agent)
+                .await
+                .map_err(|e| {
+                    log::error!(
+                        "testing Failed to get platform orchestrator snapshot: {}",
+                        e
+                    );
+                    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                })?;
+            log::info!("testing Snapshot size downloaded: {}", bytes.len());
+        }
+        _ => {
+            return Err((StatusCode::BAD_REQUEST, "Invalid mode".to_string()));
+        }
+    }
+
     Ok(())
 }

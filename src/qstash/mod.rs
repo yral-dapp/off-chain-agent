@@ -32,7 +32,10 @@ use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 use crate::{
     app_state::AppState,
     canister::{
-        snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
+        snapshot_v2::{
+            backup_canisters_job_v2, backup_user_canister, test_platform_orchestrator_snapshot,
+            test_subnet_orchestrator_snapshot, test_user_snapshot,
+        },
         upgrade_user_token_sns_canister::{
             check_if_the_proposal_executed_successfully, is_upgrade_required,
             setup_sns_canisters_of_a_user_canister_for_upgrade,
@@ -552,6 +555,15 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(backup_canisters_job_v2),
         )
         .route("/backup_user_canister", post(backup_user_canister))
+        .route("/test_user_snapshot", post(test_user_snapshot))
+        .route(
+            "/test_subnet_orchestrator_snapshot",
+            post(test_subnet_orchestrator_snapshot),
+        )
+        .route(
+            "/test_platform_orchestrator_snapshot",
+            post(test_platform_orchestrator_snapshot),
+        )
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
