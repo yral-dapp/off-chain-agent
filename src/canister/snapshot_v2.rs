@@ -37,11 +37,17 @@ pub async fn backup_canisters_job_v2(
     let agent = state.agent.clone();
 
     // send user canister jobs to qstash
+    log::info!("Sending user canister jobs to qstash");
 
     let user_canister_list = get_user_canisters_list_v2(&agent).await.map_err(|e| {
         log::error!("Failed to get user canisters list: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
     })?;
+
+    log::info!(
+        "Sending user canister jobs to qstash: {:?}",
+        user_canister_list.len()
+    );
 
     let qstash_client = state.qstash_client.clone();
     qstash_client
@@ -52,6 +58,8 @@ pub async fn backup_canisters_job_v2(
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?;
 
+    log::info!("Sent user canister jobs to qstash");
+
     // perform backup of PF orch and subnet orchs
     backup_pf_and_subnet_orchs(&agent, date_str.clone())
         .await
@@ -59,6 +67,8 @@ pub async fn backup_canisters_job_v2(
             log::error!("Failed to backup PF and subnet orchs: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?;
+
+    log::info!("Sent PF and subnet orchs jobs to qstash");
 
     Ok((StatusCode::OK, "Backup successful".to_string()))
 }

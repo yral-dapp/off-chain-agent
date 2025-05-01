@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use candid::Principal;
 use chrono::Timelike;
+use futures::StreamExt;
 use http::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     HeaderMap, HeaderValue,
@@ -367,6 +368,8 @@ impl QStashClient {
             .to_string();
         let qstash_batch_url = self.base_url.join("batch")?;
 
+        log::info!("Backup canister batch URL: {}", qstash_batch_url);
+
         let requests: Vec<serde_json::Value> = canister_ids
             .iter()
             .map(|&canister_id| {
@@ -385,7 +388,7 @@ impl QStashClient {
                         "Upstash-Forward-Content-Type": "application/json",
                         "Upstash-Forward-Method": "POST",
                         "Upstash-Flow-Control-Key": "BACKUP_CANISTER",
-                        "Upstash-Flow-Control-Value": "Parallelism=50", // TODO: adjust this
+                        "Upstash-Flow-Control-Value": "Parallelism=80", // TODO: adjust this
                         "Upstash-Content-Based-Deduplication": "true",
                         "Upstash-Retries": "1",
                     },
@@ -394,29 +397,44 @@ impl QStashClient {
             })
             .collect();
 
-        let chunk_size = 10000;
+        log::info!("Backup canister batch requests: {}", requests.len());
 
+        let chunk_size = 100;
+
+        let mut futures = Vec::new();
         for request_chunk in requests.chunks(chunk_size) {
-            let response = self
-                .client
-                .post(qstash_batch_url.clone())
-                .json(&request_chunk)
-                .send()
-                .await?;
-
-            if !response.status().is_success() {
-                let status = response.status();
-                let error_body = response
-                    .text()
+            let client = self.client.clone();
+            let qstash_batch_url = qstash_batch_url.clone();
+            futures.push(async move {
+                client
+                    .post(qstash_batch_url.clone())
+                    .json(&request_chunk)
+                    .send()
                     .await
-                    .unwrap_or_else(|e| format!("Failed to read error body: {}", e));
-                tracing::error!(
-                    "QStash batch request failed. Status: {}. Body: {}",
-                    status,
-                    error_body
-                );
+            });
+        }
+
+        log::info!("Backup canister batch futures: {}", futures.len());
+
+        let responses = futures::stream::iter(futures)
+            .buffer_unordered(80)
+            .collect::<Vec<_>>()
+            .await;
+
+        log::info!("Backup canister batch responses: {}", responses.len());
+
+        for response in responses {
+            match response {
+                Ok(response) => {
+                    if !response.status().is_success() {
+                        tracing::error!("QStash batch request failed: {}", response.status());
+                    }
+                }
+                Err(e) => tracing::error!("QStash batch request failed: {}", e),
             }
         }
+
+        log::info!("Backup canister batch completed");
 
         Ok(())
     }
