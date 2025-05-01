@@ -385,7 +385,7 @@ impl QStashClient {
                         "Upstash-Forward-Content-Type": "application/json",
                         "Upstash-Forward-Method": "POST",
                         "Upstash-Flow-Control-Key": "BACKUP_CANISTER",
-                        "Upstash-Flow-Control-Value": "Rate=20,Parallelism=10", // TODO: adjust this
+                        "Upstash-Flow-Control-Value": "Parallelism=50", // TODO: adjust this
                         "Upstash-Content-Based-Deduplication": "true",
                         "Upstash-Retries": "1",
                     },

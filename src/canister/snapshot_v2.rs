@@ -258,7 +258,7 @@ pub async fn upload_snapshot_to_storj(
         let obj_date = DateTime::parse_from_rfc3339(&date_str)
             .map_err(|e| anyhow::anyhow!("Failed to parse date: {}", e))?;
         let diff = Utc::now().signed_duration_since(obj_date);
-        if diff > Duration::days(5) {
+        if diff > Duration::days(30) {
             project
                 .delete_object(&bucket_name, &obj_key)
                 .map_err(|e| anyhow::anyhow!("Failed to delete object: {}", e))?;
