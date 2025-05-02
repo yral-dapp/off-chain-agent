@@ -22,9 +22,17 @@ use crate::{
 
 use super::utils::get_subnet_orch_ids;
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackupCanistersJobPayload {
+    pub num_canisters: u32,
+    pub rate_limit: u32,
+    pub parallelism: u32,
+}
+
 #[instrument(skip(state))]
 pub async fn backup_canisters_job_v2(
     State(state): State<Arc<AppState>>,
+    Json(payload): Json<BackupCanistersJobPayload>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let date_str = Utc::now().format("%Y-%m-%d").to_string();
@@ -39,7 +47,7 @@ pub async fn backup_canisters_job_v2(
     // send user canister jobs to qstash
     log::info!("Sending user canister jobs to qstash");
 
-    let user_canister_list = get_user_canisters_list_v2(&agent).await.map_err(|e| {
+    let mut user_canister_list = get_user_canisters_list_v2(&agent).await.map_err(|e| {
         log::error!("Failed to get user canisters list: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
     })?;
@@ -49,9 +57,21 @@ pub async fn backup_canisters_job_v2(
         user_canister_list.len()
     );
 
+    if payload.num_canisters > 0 {
+        user_canister_list = user_canister_list
+            .into_iter()
+            .take(payload.num_canisters as usize)
+            .collect();
+    }
+
     let qstash_client = state.qstash_client.clone();
     qstash_client
-        .backup_canister_batch(user_canister_list, date_str.clone())
+        .backup_canister_batch(
+            user_canister_list,
+            payload.rate_limit,
+            payload.parallelism,
+            date_str.clone(),
+        )
         .await
         .map_err(|e| {
             log::error!("Failed to backup user canisters: {}", e);
@@ -144,7 +164,7 @@ pub async fn get_user_canister_snapshot(
     })?;
 
     // delay 1 second
-    // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     // Download snapshot
 
@@ -189,6 +209,8 @@ pub async fn get_subnet_orchestrator_snapshot(
         log::error!("Failed to save subnet orchestrator snapshot: {}", e);
         anyhow::anyhow!("Failed to save subnet orchestrator snapshot: {}", e)
     })?;
+
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     // Download snapshot
 
@@ -236,6 +258,8 @@ pub async fn get_platform_orchestrator_snapshot(
             log::error!("Failed to save platform orchestrator snapshot: {}", e);
             anyhow::anyhow!("Failed to save platform orchestrator snapshot: {}", e)
         })?;
+
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     // Download snapshot
 

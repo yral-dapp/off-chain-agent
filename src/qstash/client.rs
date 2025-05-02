@@ -361,6 +361,8 @@ impl QStashClient {
     pub async fn backup_canister_batch(
         &self,
         canister_ids: Vec<Principal>,
+        rate_limit: u32,
+        parallelism: u32,
         date_str: String,
     ) -> anyhow::Result<()> {
         let destination_url = OFF_CHAIN_AGENT_URL
@@ -388,7 +390,7 @@ impl QStashClient {
                         "Upstash-Forward-Content-Type": "application/json",
                         "Upstash-Forward-Method": "POST",
                         "Upstash-Flow-Control-Key": "BACKUP_CANISTER",
-                        "Upstash-Flow-Control-Value": "Parallelism=100", // TODO: adjust this
+                        "Upstash-Flow-Control-Value": format!("Rate={},Parallelism={}", rate_limit, parallelism), // TODO: adjust this
                         "Upstash-Content-Based-Deduplication": "true",
                         "Upstash-Retries": "1",
                     },
