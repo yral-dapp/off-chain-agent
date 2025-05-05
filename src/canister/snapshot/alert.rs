@@ -420,10 +420,13 @@ async fn send_google_chat_alert(
             }
             Err(e) => {
                 log::error!(
-                    "Error sending message chunk {}/{} to Google Chat: {}",
+                    "Error sending message chunk {}/{} to Google Chat: {} ; body: {}, msg: {}, google_webhook_url: {}",
                     i + 1,
                     messages_to_send.len(),
-                    e
+                    e,
+                    body,
+                    msg,
+                    google_webhook_url
                 );
                 // Decide if continuing makes sense
             }
