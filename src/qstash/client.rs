@@ -13,12 +13,12 @@ use tracing::instrument;
 
 use crate::{
     canister::{
-        snapshot_v2::BackupUserCanisterPayload,
+        snapshot::snapshot_v2::BackupUserCanisterPayload,
         upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
     },
     consts::OFF_CHAIN_AGENT_URL,
     events::event::UploadVideoInfo,
-    posts::report_post::{ReportPostRequest, ReportPostRequestV2},
+    posts::report_post::ReportPostRequestV2,
     qstash::duplicate::{DuplicateVideoEvent, VideoHashDuplication, VideoPublisherData},
 };
 
@@ -390,9 +390,9 @@ impl QStashClient {
                         "Upstash-Forward-Content-Type": "application/json",
                         "Upstash-Forward-Method": "POST",
                         "Upstash-Flow-Control-Key": "BACKUP_CANISTER",
-                        "Upstash-Flow-Control-Value": format!("Rate={},Parallelism={}", rate_limit, parallelism), // TODO: adjust this
+                        "Upstash-Flow-Control-Value": format!("Rate={},Parallelism={}", rate_limit, parallelism),
                         "Upstash-Content-Based-Deduplication": "true",
-                        "Upstash-Retries": "1",
+                        "Upstash-Retries": "2",
                     },
                     "body": body_str,
                 })

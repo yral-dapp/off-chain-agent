@@ -6,7 +6,7 @@ use chrono::{DateTime, Duration, Utc};
 use http::StatusCode;
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
-use tokio::{io::AsyncWriteExt, process::Command};
+use tokio::io::AsyncWriteExt;
 use tracing::instrument;
 
 use yral_canisters_client::{
@@ -16,11 +16,9 @@ use yral_canisters_client::{
 
 use crate::{
     app_state::AppState,
-    canister::utils::get_user_canisters_list_v2,
+    canister::utils::{get_subnet_orch_ids, get_user_canisters_list_v2},
     consts::{CANISTER_BACKUPS_BUCKET, STORJ_BACKUP_CANISTER_ACCESS_GRANT},
 };
-
-use super::utils::get_subnet_orch_ids;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupCanistersJobPayload {
@@ -78,7 +76,7 @@ pub async fn backup_canisters_job_v2(
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?;
 
-    log::info!("Sent user canister jobs to qstash");
+    log::info!("Successfully sent all jobs to backup user canisters");
 
     // perform backup of PF orch and subnet orchs
     backup_pf_and_subnet_orchs(&agent, date_str.clone())
@@ -88,7 +86,7 @@ pub async fn backup_canisters_job_v2(
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         })?;
 
-    log::info!("Sent PF and subnet orchs jobs to qstash");
+    log::info!("Successfully backed up PF and subnet orchs");
 
     Ok((StatusCode::OK, "Backup successful".to_string()))
 }
@@ -408,6 +406,7 @@ pub async fn test_user_snapshot(
                     log::error!("testing Failed to get user canister snapshot: {}", e);
                     (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
                 })?;
+
             log::info!("testing Snapshot size downloaded: {}", bytes.len());
         }
         _ => {
