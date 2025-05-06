@@ -6,6 +6,7 @@ use chrono::{DateTime, Duration, Utc};
 use futures::StreamExt;
 use http::StatusCode;
 use ic_agent::Agent;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -234,6 +235,11 @@ pub async fn retry_backup_canisters(
 ) -> Result<HashMap<String, Vec<(String, String)>>, anyhow::Error> {
     let mut results = HashMap::new();
 
+    // Regex to match and remove canister IDs from error strings
+    // Example canister ID: kyi4y-eiaaa-aaaal-agvsq-cai
+    let canister_id_regex = Regex::new(r"[a-z0-9\-]+-cai")
+        .map_err(|e| anyhow::anyhow!("Failed to compile regex: {}", e))?;
+
     let futures = canister_list
         .into_iter()
         .map(|(canister_data, old_date_str)| {
@@ -259,8 +265,20 @@ pub async fn retry_backup_canisters(
     for res_item in results_vec {
         match res_item {
             Ok(()) => {}
-            Err((err_str, canister_id, old_date_str)) => {
-                let err_vec = results.entry(err_str).or_insert_with(Vec::new);
+            Err((original_err_str, canister_id, old_date_str)) => {
+                // Strip canister IDs from the error string to group similar errors
+                let cleaned_err_str = canister_id_regex
+                    .replace_all(&original_err_str, "")
+                    .trim()
+                    .to_string();
+
+                let final_err_key = if cleaned_err_str.is_empty() && !original_err_str.is_empty() {
+                    original_err_str.clone()
+                } else {
+                    cleaned_err_str.clone()
+                };
+
+                let err_vec = results.entry(final_err_key).or_insert_with(Vec::new);
                 err_vec.push((canister_id, old_date_str));
             }
         }
