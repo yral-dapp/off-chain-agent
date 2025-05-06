@@ -20,6 +20,8 @@ use crate::{
     consts::{CANISTER_BACKUPS_BUCKET, STORJ_BACKUP_CANISTER_ACCESS_GRANT},
 };
 
+use super::{CanisterData, CanisterType};
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupCanistersJobPayload {
     pub num_canisters: u32,
@@ -91,7 +93,7 @@ pub async fn backup_canisters_job_v2(
     Ok((StatusCode::OK, "Backup successful".to_string()))
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BackupUserCanisterPayload {
     pub canister_id: Principal,
     pub date_str: String,
@@ -104,7 +106,12 @@ pub async fn backup_user_canister(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let agent = state.agent.clone();
 
-    backup_user_canister_impl(&agent, payload.canister_id, payload.date_str)
+    let canister_data = CanisterData {
+        canister_id: payload.canister_id,
+        canister_type: CanisterType::User,
+    };
+
+    backup_canister_impl(&agent, canister_data, payload.date_str)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -112,54 +119,84 @@ pub async fn backup_user_canister(
 }
 
 #[instrument(skip(agent))]
-pub async fn backup_user_canister_impl(
+pub async fn backup_pf_and_subnet_orchs(
     agent: &Agent,
-    canister_id: Principal,
     date_str: String,
 ) -> Result<(), anyhow::Error> {
-    let snapshot_bytes = get_user_canister_snapshot(canister_id, agent)
+    let pf_orch_canister_data = CanisterData {
+        canister_id: PLATFORM_ORCHESTRATOR_ID,
+        canister_type: CanisterType::PlatformOrch,
+    };
+
+    if let Err(e) = backup_canister_impl(agent, pf_orch_canister_data, date_str.clone()).await {
+        log::error!("Failed to backup platform orchestrator: {}", e);
+    }
+
+    let subnet_orch_ids = get_subnet_orch_ids(agent).await?;
+
+    for subnet_orch_id in subnet_orch_ids {
+        let subnet_orch_canister_data = CanisterData {
+            canister_id: subnet_orch_id,
+            canister_type: CanisterType::SubnetOrch,
+        };
+
+        if let Err(e) =
+            backup_canister_impl(agent, subnet_orch_canister_data, date_str.clone()).await
+        {
+            log::error!("Failed to backup subnet orchestrator: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+#[instrument(skip(agent))]
+pub async fn backup_canister_impl(
+    agent: &Agent,
+    canister_data: CanisterData,
+    date_str: String,
+) -> Result<(), anyhow::Error> {
+    let canister_id = canister_data.canister_id.to_string();
+
+    let snapshot_bytes = get_canister_snapshot(canister_data.clone(), agent)
         .await
         .map_err(|e| {
-            log::error!("Failed to get user canister snapshot: {}", e);
-            anyhow::anyhow!("Failed to get user canister snapshot: {}", e)
+            log::error!(
+                "Failed to get user canister snapshot for canister: {} error: {}",
+                canister_id,
+                e
+            );
+            anyhow::anyhow!("get_canister_snapshot error: {}", e)
         })?;
 
-    upload_snapshot_to_storj(canister_id, date_str, snapshot_bytes)
+    upload_snapshot_to_storj(canister_data.canister_id, date_str, snapshot_bytes)
         .await
         .map_err(|e| {
-            log::error!("Failed to upload user canister snapshot to storj: {}", e);
-            anyhow::anyhow!("Failed to upload user canister snapshot to storj: {}", e)
+            log::error!(
+                "Failed to upload user canister snapshot to storj for canister: {} error: {}",
+                canister_id,
+                e
+            );
+            anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
         })?;
 
     Ok(())
 }
 
 #[instrument(skip(agent))]
-pub async fn backup_pf_and_subnet_orchs(
+pub async fn get_canister_snapshot(
+    canister_data: CanisterData,
     agent: &Agent,
-    date_str: String,
-) -> Result<(), anyhow::Error> {
-    let pf_orch_snapshot_bytes =
-        get_platform_orchestrator_snapshot(PLATFORM_ORCHESTRATOR_ID, agent).await?;
-
-    upload_snapshot_to_storj(
-        PLATFORM_ORCHESTRATOR_ID,
-        date_str.clone(),
-        pf_orch_snapshot_bytes,
-    )
-    .await?;
-
-    let subnet_orch_ids = get_subnet_orch_ids(agent).await?;
-
-    for subnet_orch_id in subnet_orch_ids {
-        let subnet_orch_snapshot_bytes =
-            get_subnet_orchestrator_snapshot(subnet_orch_id, agent).await?;
-
-        upload_snapshot_to_storj(subnet_orch_id, date_str.clone(), subnet_orch_snapshot_bytes)
-            .await?;
+) -> Result<Vec<u8>, anyhow::Error> {
+    match canister_data.canister_type {
+        CanisterType::User => get_user_canister_snapshot(canister_data.canister_id, agent).await,
+        CanisterType::SubnetOrch => {
+            get_subnet_orchestrator_snapshot(canister_data.canister_id, agent).await
+        }
+        CanisterType::PlatformOrch => {
+            get_platform_orchestrator_snapshot(canister_data.canister_id, agent).await
+        }
     }
-
-    Ok(())
 }
 
 #[instrument(skip(agent))]
@@ -358,6 +395,8 @@ pub async fn upload_snapshot_to_storj(
     log::warn!("Uplink is not enabled, skipping upload to storj");
     Ok(())
 }
+
+// TODO: Test functions. To be removed
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TestSnapshotPayload {

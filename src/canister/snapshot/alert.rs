@@ -3,6 +3,7 @@ use std::{env, io::Write, process::Stdio, sync::Arc};
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
 use chrono::{DateTime, Duration, Utc};
+use futures::StreamExt;
 use http::StatusCode;
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
@@ -18,7 +19,7 @@ use crate::{
     consts::{CANISTER_BACKUPS_BUCKET, STORJ_BACKUP_CANISTER_ACCESS_GRANT},
 };
 
-use super::snapshot_v2::backup_user_canister_impl;
+use super::{snapshot_v2::backup_canister_impl, CanisterData, CanisterType};
 
 // API for the snapshot alert job which calls the impl function
 
@@ -123,6 +124,7 @@ pub async fn snapshot_alert_job_impl(agent: &Agent) -> Result<(), anyhow::Error>
     // Get all expected canisters
     log::info!("Fetching canister lists...");
     let mut all_canisters: HashSet<Principal> = HashSet::new();
+    let mut all_subnet_orch_ids: HashSet<Principal> = HashSet::new();
 
     // Add user canisters
     match get_user_canisters_list_v2(agent).await {
@@ -140,7 +142,8 @@ pub async fn snapshot_alert_job_impl(agent: &Agent) -> Result<(), anyhow::Error>
     match get_subnet_orch_ids(agent).await {
         Ok(subnet_orch_ids) => {
             log::info!("Found {} subnet orchestrators.", subnet_orch_ids.len());
-            all_canisters.extend(subnet_orch_ids);
+            all_canisters.extend(subnet_orch_ids.clone());
+            all_subnet_orch_ids.extend(subnet_orch_ids);
         }
         Err(e) => {
             log::error!("Failed to get subnet orchestrator IDs: {}", e);
@@ -159,28 +162,42 @@ pub async fn snapshot_alert_job_impl(agent: &Agent) -> Result<(), anyhow::Error>
     );
 
     // Identify canisters needing alerts
-    let mut canisters_backups: Vec<(Principal, String)> = Vec::new();
+    let mut canisters_backups: Vec<(CanisterData, String)> = Vec::new();
     let now = Utc::now();
     let alert_threshold = Duration::days(4);
 
     log::info!("Checking backup status for each canister...");
     for canister_id in all_canisters {
+        // if canister_id is in all_subnet_orch_ids, then it's a subnet orchestrator
+        let canister_type = if all_subnet_orch_ids.contains(&canister_id) {
+            CanisterType::SubnetOrch
+        } else if canister_id == PLATFORM_ORCHESTRATOR_ID {
+            CanisterType::PlatformOrch
+        } else {
+            CanisterType::User
+        };
+
+        let canister_data = CanisterData {
+            canister_id,
+            canister_type,
+        };
+
         match backup_dates_map.get(&canister_id) {
             Some(dates) => {
                 if let Some(latest_backup_date) = dates.last() {
                     let time_since_last_backup = now.signed_duration_since(*latest_backup_date);
                     if time_since_last_backup > alert_threshold {
                         canisters_backups.push((
-                            canister_id,
+                            canister_data,
                             latest_backup_date.format("%Y-%m-%d").to_string(),
                         ));
                     }
                 } else {
-                    canisters_backups.push((canister_id, "missing".to_string()));
+                    canisters_backups.push((canister_data, "missing".to_string()));
                 }
             }
             None => {
-                canisters_backups.push((canister_id, "missing".to_string()));
+                canisters_backups.push((canister_data, "missing".to_string()));
             }
         }
     }
@@ -212,28 +229,43 @@ pub async fn snapshot_alert_job_impl(_agent: &Agent) -> Result<(), anyhow::Error
 
 pub async fn retry_backup_canisters(
     agent: &Agent,
-    canister_list: Vec<(Principal, String)>,
+    canister_list: Vec<(CanisterData, String)>,
     date_str: String,
 ) -> Result<HashMap<String, Vec<(String, String)>>, anyhow::Error> {
     let mut results = HashMap::new();
 
-    // let mut cnt = 0;
-    // let mut glbal_cnt = 0;
-    for (canister_id, old_date_str) in canister_list {
-        if let Err(e) = backup_user_canister_impl(agent, canister_id, date_str.clone()).await {
-            let err_str = e.to_string();
-            let err_vec = results.entry(err_str).or_insert_with(Vec::new);
-            err_vec.push((canister_id.to_string(), old_date_str));
+    let futures = canister_list
+        .into_iter()
+        .map(|(canister_data, old_date_str)| {
+            let agent = agent.clone();
+            let date_str = date_str.clone();
+            async move {
+                let canister_id = canister_data.canister_id.to_string();
+                if let Err(e) = backup_canister_impl(&agent, canister_data, date_str.clone()).await
+                {
+                    let err_str = e.to_string();
+                    Err((err_str, canister_id, old_date_str))
+                } else {
+                    Ok(())
+                }
+            }
+        });
+
+    let results_vec = futures::stream::iter(futures)
+        .buffer_unordered(30)
+        .collect::<Vec<_>>()
+        .await;
+
+    for res_item in results_vec {
+        match res_item {
+            Ok(()) => {}
+            Err((err_str, canister_id, old_date_str)) => {
+                let err_vec = results.entry(err_str).or_insert_with(Vec::new);
+                err_vec.push((canister_id, old_date_str));
+            }
         }
-        // dummy error
-        // let err_str = format!("dummy error {}", glbal_cnt);
-        // let mut err_vec = results.entry(err_str).or_insert_with(Vec::new);
-        // err_vec.push((canister_id.to_string(), old_date_str));
-        // cnt += 1;
-        // if cnt % 100 == 0 {
-        //     glbal_cnt += 1;
-        // }
     }
+
     Ok(results)
 }
 
