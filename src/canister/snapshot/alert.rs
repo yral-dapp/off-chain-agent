@@ -18,6 +18,8 @@ use crate::{
     consts::{CANISTER_BACKUPS_BUCKET, STORJ_BACKUP_CANISTER_ACCESS_GRANT},
 };
 
+use super::snapshot_v2::backup_user_canister_impl;
+
 // API for the snapshot alert job which calls the impl function
 
 #[axum::debug_handler]
@@ -157,8 +159,7 @@ pub async fn snapshot_alert_job_impl(agent: &Agent) -> Result<(), anyhow::Error>
     );
 
     // Identify canisters needing alerts
-    let mut canisters_missing_backups: Vec<String> = Vec::new();
-    let mut canisters_outdated_backups: Vec<String> = Vec::new();
+    let mut canisters_backups: Vec<(Principal, String)> = Vec::new();
     let now = Utc::now();
     let alert_threshold = Duration::days(4);
 
@@ -169,48 +170,35 @@ pub async fn snapshot_alert_job_impl(agent: &Agent) -> Result<(), anyhow::Error>
                 if let Some(latest_backup_date) = dates.last() {
                     let time_since_last_backup = now.signed_duration_since(*latest_backup_date);
                     if time_since_last_backup > alert_threshold {
-                        // Consider adding humantime crate for better duration logging:
-                        // humantime::format_duration(time_since_last_backup.to_std().unwrap_or_default())
-                        log::warn!(
-                            "Canister {} needs alert: Last backup was on {} ({} days ago > {} day threshold)",
-                            canister_id.to_string(),
-                            latest_backup_date.format("%Y-%m-%d"),
-                            time_since_last_backup.num_days(), // Simple day count
-                            alert_threshold.num_days()
-                        );
-                        canisters_outdated_backups.push(canister_id.to_string());
+                        canisters_backups.push((
+                            canister_id,
+                            latest_backup_date.format("%Y-%m-%d").to_string(),
+                        ));
                     }
                 } else {
-                    // This case should ideally not happen if canister_id is in the map,
-                    // but handles empty Vec just in case.
-                    log::warn!(
-                        "Canister {} needs alert: Backup entry exists but date list is empty.",
-                        canister_id.to_string()
-                    );
-                    canisters_missing_backups.push(canister_id.to_string());
+                    canisters_backups.push((canister_id, "missing".to_string()));
                 }
             }
             None => {
-                log::warn!(
-                    "Canister {} needs alert: No backup found in Storj.",
-                    canister_id.to_string()
-                );
-                canisters_missing_backups.push(canister_id.to_string());
+                canisters_backups.push((canister_id, "missing".to_string()));
             }
         }
     }
 
-    if canisters_missing_backups.is_empty() && canisters_outdated_backups.is_empty() {
+    if canisters_backups.len() == 0 {
         log::info!("Snapshot alert job finished: All canisters have recent backups.");
     } else {
         log::warn!(
-            "Snapshot alert job finished: {} canisters require attention (missing: {:?} \n outdated: {:?})",
-            canisters_missing_backups.len() + canisters_outdated_backups.len(),
-            canisters_missing_backups, canisters_outdated_backups
+            "Snapshot alert job finished: {} canisters require attention",
+            canisters_backups.len()
         );
     }
 
-    send_google_chat_alert(canisters_missing_backups, canisters_outdated_backups).await?;
+    let date_str = Utc::now().format("%Y-%m-%d").to_string();
+    let canisters_retry_backup_results =
+        retry_backup_canisters(agent, canisters_backups, date_str).await?;
+
+    send_google_chat_alert(canisters_retry_backup_results).await?;
 
     Ok(())
 }
@@ -222,104 +210,86 @@ pub async fn snapshot_alert_job_impl(_agent: &Agent) -> Result<(), anyhow::Error
     Ok(())
 }
 
-// splits messages to chunks of 10K characters and sends them to Google Chat
+pub async fn retry_backup_canisters(
+    agent: &Agent,
+    canister_list: Vec<(Principal, String)>,
+    date_str: String,
+) -> Result<HashMap<String, Vec<(String, String)>>, anyhow::Error> {
+    let mut results = HashMap::new();
+
+    // let mut cnt = 0;
+    // let mut glbal_cnt = 0;
+    for (canister_id, old_date_str) in canister_list {
+        if let Err(e) = backup_user_canister_impl(agent, canister_id, date_str.clone()).await {
+            let err_str = e.to_string();
+            let err_vec = results.entry(err_str).or_insert_with(Vec::new);
+            err_vec.push((canister_id.to_string(), old_date_str));
+        }
+        // dummy error
+        // let err_str = format!("dummy error {}", glbal_cnt);
+        // let mut err_vec = results.entry(err_str).or_insert_with(Vec::new);
+        // err_vec.push((canister_id.to_string(), old_date_str));
+        // cnt += 1;
+        // if cnt % 100 == 0 {
+        //     glbal_cnt += 1;
+        // }
+    }
+    Ok(results)
+}
+
 async fn send_google_chat_alert(
-    canisters_missing_backups: Vec<String>,
-    canisters_outdated_backups: Vec<String>,
+    canisters_retry_backup_results: HashMap<String, Vec<(String, String)>>,
 ) -> Result<(), anyhow::Error> {
     let google_webhook_url = env::var("CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL")
         .map_err(|_| anyhow::anyhow!("CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL not set"))?;
     let client = reqwest::Client::new();
-    let total_attention_count = canisters_missing_backups.len() + canisters_outdated_backups.len();
+    // Calculate total count from the new structure
+    let total_attention_count: usize = canisters_retry_backup_results
+        .values()
+        .map(|v| v.len())
+        .sum();
 
     if total_attention_count == 0 {
         let body = json!({
-            "text": "Snapshot alert job finished: All canisters have recent backups. ✅"
+            "text": "✅ Snapshot Retry Job Finished: All previously failing canisters backed up successfully or no canisters needed retries."
         });
         let res = client.post(&google_webhook_url).json(&body).send().await?;
         if res.status().is_success() {
-            log::info!("Snapshot alert job finished: 'All clear' status sent to Google Chat");
+            log::info!("Snapshot Retry Job Finished: 'All clear' status sent to Google Chat");
         } else {
             log::error!(
-                "Snapshot alert job finished: Failed to send 'All clear' status to Google Chat: {}",
+                "Snapshot Retry Job Finished: Failed to send 'All clear' status to Google Chat: {}",
                 res.status()
             );
         }
         return Ok(());
     }
 
-    let max_chars_per_message = 10000; // Reduced Google Chat message character limit is 12K.
+    let max_chars_per_message = 10000; // Google Chat message character limit
     let mut messages_to_send = Vec::new();
     let mut current_message = format!(
-        "🚨 Snapshot alert job finished: *{}* canisters require attention!\n\n",
+        "🚨 Snapshot Retry Job Finished: *{}* canisters still require attention after retry!\n\n",
         total_attention_count
     );
     let mut current_char_count = current_message.len();
-    let mut first_item_in_section = true; // Track if we need a comma before the next item
 
-    let missing_header = "*Missing backups:* ❓\n";
-    let missing_continuation_header = "(Cont...) *Missing backups cont.:* ❓\n";
-    let outdated_header = "\n*Outdated backups (older than 4 days):* ⏳\n";
-    let outdated_continuation_header = "(Cont...) *Outdated backups cont.:* ⏳\n";
+    // Sort errors for consistent output
+    let mut sorted_errors: Vec<_> = canisters_retry_backup_results.into_iter().collect();
+    sorted_errors.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let mut added_missing_header = false;
-
-    // --- Process missing backups ---
-    if !canisters_missing_backups.is_empty() {
-        // Add header or continuation header
-        let header_to_add = missing_header;
-        if current_char_count + header_to_add.len() > max_chars_per_message {
-            messages_to_send.push(current_message);
-            current_message = String::new(); // Start fresh for the new message
-            current_char_count = 0;
+    for (error_str, mut canister_list) in sorted_errors {
+        if canister_list.is_empty() {
+            continue;
         }
-        // If starting a new message, use the full header, otherwise just append
-        if current_message.is_empty() {
-            current_message.push_str(header_to_add); // Start new message with header
-            current_char_count = current_message.len();
-        } else {
-            current_message.push_str(header_to_add); // Append header to existing message
-            current_char_count += header_to_add.len();
-        }
-        added_missing_header = true;
-        first_item_in_section = true;
 
-        for canister_id in canisters_missing_backups.iter() {
-            let delimiter = if first_item_in_section { "" } else { ", " };
-            let chars_to_add = delimiter.len() + canister_id.len();
+        // Sort canisters within the error group by date string ("missing" will typically be sorted after dates)
+        canister_list.sort_by(|a, b| a.1.cmp(&b.1));
 
-            if current_char_count + chars_to_add > max_chars_per_message {
-                messages_to_send.push(current_message.clone()); // Finalize previous chunk
-                current_message = missing_continuation_header.to_string(); // Start new chunk
-                current_char_count = current_message.len();
-                first_item_in_section = true; // Reset for new chunk
-                let delimiter = if first_item_in_section { "" } else { ", " }; // Re-evaluate delimiter for the new line
-                current_message.push_str(delimiter);
-                current_message.push_str(canister_id);
-                current_char_count += delimiter.len() + canister_id.len();
-                first_item_in_section = false;
-            } else {
-                current_message.push_str(delimiter);
-                current_message.push_str(canister_id);
-                current_char_count += chars_to_add;
-                first_item_in_section = false;
-            }
-        }
-        current_message.push('\n'); // Add newline after the list section
-        current_char_count += 1;
-    }
-
-    // --- Process outdated backups ---
-    if !canisters_outdated_backups.is_empty() {
-        let header_to_add = if added_missing_header {
-            outdated_header
-        } else {
-            outdated_header.trim_start_matches('\n')
-        }; // Handle spacing
-        let continuation_header_to_use = outdated_continuation_header;
+        let section_header = format!("*Error: {}*\n", error_str);
+        let continuation_header = format!("*(Cont...) Error: {}*\n", error_str);
 
         // Check if header fits in the current message
-        if current_char_count + header_to_add.len() > max_chars_per_message {
+        if current_char_count + section_header.len() > max_chars_per_message {
             messages_to_send.push(current_message.clone());
             current_message = String::new(); // Start fresh
             current_char_count = 0;
@@ -327,56 +297,46 @@ async fn send_google_chat_alert(
 
         // Add header (either to new or existing message)
         if current_message.is_empty() {
-            current_message.push_str(header_to_add);
+            current_message.push_str(&section_header);
             current_char_count = current_message.len();
         } else {
-            // Ensure newline separation if needed and not already present
-            if !current_message.ends_with("\n\n")
-                && !current_message.ends_with(missing_header)
-                && added_missing_header
-            {
+            // Ensure newline separation if not starting fresh
+            if !current_message.ends_with('\n') {
                 current_message.push('\n');
                 current_char_count += 1;
             }
-            current_message.push_str(header_to_add);
-            current_char_count += header_to_add.len();
+            if !current_message.ends_with("\n\n") {
+                current_message.push('\n');
+                current_char_count += 1;
+            }
+            current_message.push_str(&section_header);
+            current_char_count += section_header.len();
         }
-        first_item_in_section = true;
 
-        for canister_id in canisters_outdated_backups.iter() {
-            let delimiter = if first_item_in_section { "" } else { ", " };
-            let chars_to_add = delimiter.len() + canister_id.len();
+        for (canister_id, date_str) in canister_list {
+            let item_line = format!("- {}    {}\n", canister_id, date_str);
+            let chars_to_add = item_line.len();
 
             if current_char_count + chars_to_add > max_chars_per_message {
                 messages_to_send.push(current_message.clone()); // Finalize previous chunk
-                current_message = continuation_header_to_use.to_string(); // Start new chunk
+                current_message = continuation_header.clone(); // Start new chunk with continuation header
                 current_char_count = current_message.len();
-                first_item_in_section = true; // Reset for new chunk
-                let delimiter = if first_item_in_section { "" } else { ", " }; // Re-evaluate delimiter
-                current_message.push_str(delimiter);
-                current_message.push_str(canister_id);
-                current_char_count += delimiter.len() + canister_id.len();
-                first_item_in_section = false;
-            } else {
-                current_message.push_str(delimiter);
-                current_message.push_str(canister_id);
-                current_char_count += chars_to_add;
-                first_item_in_section = false;
             }
+
+            // Add the item line
+            current_message.push_str(&item_line);
+            current_char_count += chars_to_add;
         }
-        current_message.push('\n'); // Add newline after the list section
-        current_char_count += 1;
+        // Add a newline after the list section for better separation between error groups
+        if !current_message.ends_with("\n\n") {
+            current_message.push('\n');
+            current_char_count += 1;
+        }
     }
 
     // Add the final message chunk if it contains content
-    if !current_message.is_empty() && !messages_to_send.contains(&current_message) {
-        // Avoid adding if it's identical to the last message already pushed (can happen if a header exactly fills a message)
-        if messages_to_send
-            .last()
-            .map_or(true, |last| last != &current_message)
-        {
-            messages_to_send.push(current_message);
-        }
+    if !current_message.trim().is_empty() {
+        messages_to_send.push(current_message);
     }
 
     // Send all the messages
@@ -385,9 +345,8 @@ async fn send_google_chat_alert(
         messages_to_send.len()
     );
     for (i, msg) in messages_to_send.iter().enumerate() {
-        if msg.trim().is_empty()
-            || msg == missing_continuation_header
-            || msg == outdated_continuation_header
+        // Basic check to avoid sending empty messages or just headers
+        if msg.trim().is_empty() || msg.starts_with("*(Cont...) Error:") && msg.lines().count() <= 1
         {
             log::warn!(
                 "Skipping empty or header-only message chunk {}/{}",
@@ -396,6 +355,7 @@ async fn send_google_chat_alert(
             );
             continue;
         }
+
         let body = json!({ "text": msg });
         match client.post(&google_webhook_url).json(&body).send().await {
             Ok(res) => {
@@ -415,7 +375,7 @@ async fn send_google_chat_alert(
                             .await
                             .unwrap_or_else(|_| "<Failed to read body>".to_string())
                     );
-                    // Decide if continuing makes sense
+                    // Consider adding error handling strategy here (e.g., stop sending?)
                 }
             }
             Err(e) => {
@@ -428,11 +388,11 @@ async fn send_google_chat_alert(
                     msg,
                     google_webhook_url
                 );
-                // Decide if continuing makes sense
+                // Consider adding error handling strategy here
             }
         }
 
-        // Add a small delay between messages if needed
+        // Add a small delay between messages if needed to avoid rate limiting
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 

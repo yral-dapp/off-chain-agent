@@ -104,21 +104,34 @@ pub async fn backup_user_canister(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let agent = state.agent.clone();
 
-    let snapshot_bytes = get_user_canister_snapshot(payload.canister_id, &agent)
+    backup_user_canister_impl(&agent, payload.canister_id, payload.date_str)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok((StatusCode::OK, "Backup successful".to_string()))
+}
+
+#[instrument(skip(agent))]
+pub async fn backup_user_canister_impl(
+    agent: &Agent,
+    canister_id: Principal,
+    date_str: String,
+) -> Result<(), anyhow::Error> {
+    let snapshot_bytes = get_user_canister_snapshot(canister_id, agent)
         .await
         .map_err(|e| {
             log::error!("Failed to get user canister snapshot: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            anyhow::anyhow!("Failed to get user canister snapshot: {}", e)
         })?;
 
-    upload_snapshot_to_storj(payload.canister_id, payload.date_str, snapshot_bytes)
+    upload_snapshot_to_storj(canister_id, date_str, snapshot_bytes)
         .await
         .map_err(|e| {
             log::error!("Failed to upload user canister snapshot to storj: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            anyhow::anyhow!("Failed to upload user canister snapshot to storj: {}", e)
         })?;
 
-    Ok((StatusCode::OK, "Backup successful".to_string()))
+    Ok(())
 }
 
 #[instrument(skip(agent))]
