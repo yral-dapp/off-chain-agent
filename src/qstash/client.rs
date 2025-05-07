@@ -419,7 +419,7 @@ impl QStashClient {
         log::info!("Backup canister batch futures: {}", futures.len());
 
         let responses = futures::stream::iter(futures)
-            .buffer_unordered(80)
+            .buffer_unordered(80) // less than qstash limit per sec = 100
             .collect::<Vec<_>>()
             .await;
 

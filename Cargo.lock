@@ -4456,7 +4456,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?rev=fff8f83ed5967213453498d8e222ce93957c5e7a#fff8f83ed5967213453498d8e222ce93957c5e7a"
+source = "git+https://github.com/yral-dapp/yral-common.git?branch=master#1ec376c64548606a7078fda2afd0f4985e3f1f6f"
 dependencies = [
  "anyhow",
  "bb8",
@@ -8323,7 +8323,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common.git?rev=01c5e070f02a95d79a605d81108522fc23342519#01c5e070f02a95d79a605d81108522fc23342519"
+source = "git+https://github.com/yral-dapp/yral-common.git?branch=master#1ec376c64548606a7078fda2afd0f4985e3f1f6f"
 dependencies = [
  "anyhow",
  "candid",
@@ -8373,7 +8373,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?rev=fff8f83ed5967213453498d8e222ce93957c5e7a#fff8f83ed5967213453498d8e222ce93957c5e7a"
+source = "git+https://github.com/yral-dapp/yral-common.git?branch=master#1ec376c64548606a7078fda2afd0f4985e3f1f6f"
 dependencies = [
  "candid",
  "log",
@@ -8388,7 +8388,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common.git?rev=0247d886ad95747deee4618c3fd42524ba78d5fe#0247d886ad95747deee4618c3fd42524ba78d5fe"
+source = "git+https://github.com/yral-dapp/yral-common.git?branch=master#1ec376c64548606a7078fda2afd0f4985e3f1f6f"
 dependencies = [
  "candid",
  "serde",
@@ -8398,7 +8398,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common.git?rev=0247d886ad95747deee4618c3fd42524ba78d5fe#0247d886ad95747deee4618c3fd42524ba78d5fe"
+source = "git+https://github.com/yral-dapp/yral-common.git?branch=master#1ec376c64548606a7078fda2afd0f4985e3f1f6f"
 dependencies = [
  "ic-agent",
  "k256",

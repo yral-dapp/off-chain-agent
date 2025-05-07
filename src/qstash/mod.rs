@@ -34,10 +34,7 @@ use crate::{
     canister::{
         snapshot::{
             alert::snapshot_alert_job,
-            snapshot_v2::{
-                backup_canisters_job_v2, backup_user_canister, test_platform_orchestrator_snapshot,
-                test_subnet_orchestrator_snapshot, test_user_snapshot,
-            },
+            snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
         },
         upgrade_user_token_sns_canister::{
             check_if_the_proposal_executed_successfully, is_upgrade_required,
@@ -558,15 +555,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(backup_canisters_job_v2),
         )
         .route("/backup_user_canister", post(backup_user_canister))
-        .route("/test_user_snapshot", post(test_user_snapshot))
-        .route(
-            "/test_subnet_orchestrator_snapshot",
-            post(test_subnet_orchestrator_snapshot),
-        )
-        .route(
-            "/test_platform_orchestrator_snapshot",
-            post(test_platform_orchestrator_snapshot),
-        )
         .route("/snapshot_alert_job", post(snapshot_alert_job))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
