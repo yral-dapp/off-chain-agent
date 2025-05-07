@@ -239,69 +239,61 @@ impl<'a> VideoHashDuplication<'a> {
         self.store_videohash_original(video_id, &video_hash.hash)
             .await?;
 
-        // Call the video hash indexer API to check for duplicates
-        let client = reqwest::Client::new();
-        let response = client
-            .post("https://videohash-indexer.fly.dev/search")
-            .json(&serde_json::json!({
-                "video_id": video_id,
-                "hash": video_hash.hash,
-            }))
-            .send()
-            .await?;
+        // Connect to Redis
+        let redis_url = std::env::var("VIDEO_HASH_REDIS_URL")
+            .map_err(|_| anyhow::anyhow!("VIDEO_HASH_REDIS_URL environment variable not set"))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!(
-                "VideoHash Indexer API failed: {} - {}",
-                status,
-                error_text
-            ));
-        }
+        let client = redis::Client::open(redis_url)
+            .map_err(|e| anyhow::anyhow!("Failed to create Redis client: {}", e))?;
 
-        let indexer_response: VideoHashIndexerResponse = response.json().await?;
-        log::info!(
-            "VideoHash Indexer response for video_id [{}]: {:?}",
-            video_id,
-            indexer_response
-        );
+        let mut con = client
+            .get_async_connection()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to connect to Redis: {}", e))?;
 
-        let is_duplicate = indexer_response.match_found;
+        // Check if hash exists in Redis
+        let is_duplicate: bool = redis::cmd("EXISTS")
+            .arg(&video_hash.hash)
+            .query_async(&mut con)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to query Redis: {}", e))?;
 
         if is_duplicate {
-            // A similar video was found - record as duplicate
-            if let Some(match_details) = indexer_response.match_details {
-                self.store_duplicate_video(
-                    video_id,
-                    &video_hash.hash,
-                    &match_details,
-                    &publisher_data,
-                )
-                .await?;
+            // Get the original video ID associated with this hash
+            let parent_video_id: String = redis::cmd("GET")
+                .arg(&video_hash.hash)
+                .query_async(&mut con)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to get parent video ID from Redis: {}", e))?;
 
-                log::info!(
-                    "Duplicate video detected: video_id [{}] is similar to parent_video_id [{}] (score: {})",
-                    video_id,
-                    match_details.video_id,
-                    match_details.similarity_percentage
-                );
+            log::info!(
+                "Duplicate video detected: video_id [{}] is identical to parent_video_id [{}]",
+                video_id,
+                parent_video_id
+            );
 
-                let exact_duplicate = match_details.similarity_percentage > 98.0;
-                let _duplicate_event = DuplicateVideoEvent {
-                    original_video_id: video_id.to_string(),
-                    parent_video_id: match_details.video_id.clone(),
-                    similarity_percentage: match_details.similarity_percentage,
-                    exact_duplicate,
-                    publisher_canister_id: publisher_data.canister_id.clone(),
-                    publisher_principal: publisher_data.publisher_principal.clone(),
-                    post_id: publisher_data.post_id,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                };
-            }
+            // Store duplicate in BigQuery with 100% match (exact duplicate)
+            self.store_duplicate_video_exact(
+                video_id,
+                &video_hash.hash,
+                &parent_video_id,
+                &publisher_data,
+            )
+            .await?;
         } else {
-            self.store_unique_video(video_id, &video_hash.hash).await?;
+            // This is a unique video
             log::info!("Unique video recorded: video_id [{}]", video_id);
+
+            // Store as unique in BigQuery
+            self.store_unique_video(video_id, &video_hash.hash).await?;
+
+            // Store the hash in Redis with video ID as value
+            redis::cmd("SET")
+                .arg(&video_hash.hash)
+                .arg(video_id)
+                .query_async::<_, ()>(&mut con)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to store hash in Redis: {}", e))?;
         }
 
         // Always proceed with normal video processing, regardless of duplicate status
@@ -418,6 +410,54 @@ impl<'a> VideoHashDuplication<'a> {
             video_id,
             match_details.video_id,
             match_details.similarity_percentage
+        );
+
+        bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &request)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn store_duplicate_video_exact(
+        &self,
+        video_id: &str,
+        hash: &str,
+        parent_video_id: &str,
+        publisher_data: &VideoPublisherData,
+    ) -> Result<(), anyhow::Error> {
+        let bigquery_client = app_state::init_bigquery_client().await;
+
+        // For Redis-based matching, we always consider it an exact duplicate (100% match)
+        let query = format!(
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.duplicate_videos` (
+                publisher_canister_id, publisher_principal, post_id,
+                original_video_id, parent_video_id, parent_canister_id,
+                parent_principal, parent_post_id, exact_duplicate,
+                duplication_score
+            ) VALUES (
+                '{}', '{}', {},
+                '{}', '{}', NULL,
+                NULL, NULL, true,
+                100.0
+            )",
+            publisher_data.canister_id,
+            publisher_data.publisher_principal,
+            publisher_data.post_id,
+            video_id,
+            parent_video_id
+        );
+
+        let request = QueryRequest {
+            query,
+            ..Default::default()
+        };
+
+        log::info!(
+            "Storing exact duplicate video in duplicate_videos: video_id [{}], parent_video_id [{}], score=100.0",
+            video_id,
+            parent_video_id
         );
 
         bigquery_client
