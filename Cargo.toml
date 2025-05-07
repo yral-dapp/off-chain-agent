@@ -100,6 +100,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tracing-futures = "0.2.5"
 uplink = { version = "0.10.2", optional = true }
 regex = "1.11.1"
+redis = { version = "0.23.0", features = ["tokio-comp"] }
 
 [build-dependencies]
 tonic-build = "0.13.0"
