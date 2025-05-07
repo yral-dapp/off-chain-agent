@@ -11,6 +11,7 @@ use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
+use redis::Client as RedisClient;
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
@@ -39,6 +40,7 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub ml_feed_cache: MLFeedCacheState,
     pub metrics: CfMetricTx,
+    pub redis_client: RedisClient,
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
 }
@@ -63,6 +65,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             ml_feed_cache: MLFeedCacheState::new().await,
             metrics: init_metrics(),
+            redis_client: init_redis_client(),
             #[cfg(not(feature = "local-bin"))]
             alloydb_client: init_alloydb_client().await,
         }
@@ -201,6 +204,13 @@ pub async fn init_nsfw_detect_channel() -> Channel {
 pub async fn init_qstash_client() -> QStashClient {
     let auth_token = env::var("QSTASH_AUTH_TOKEN").expect("QSTASH_AUTH_TOKEN is required");
     QStashClient::new(auth_token.as_str())
+}
+
+pub fn init_redis_client() -> RedisClient {
+    let redis_url = std::env::var("VIDEO_HASH_REDIS_URL")
+        .expect("VIDEO_HASH_REDIS_URL environment variable not set");
+
+    RedisClient::open(redis_url).expect("Failed to create Redis client")
 }
 
 async fn init_alloydb_client() -> AlloyDbInstance {
