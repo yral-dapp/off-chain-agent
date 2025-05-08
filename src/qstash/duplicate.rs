@@ -4,6 +4,7 @@ use google_cloud_bigquery::client::Client;
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use http::header::CONTENT_TYPE;
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -23,21 +24,6 @@ pub struct DuplicateVideoEvent {
     pub publisher_principal: String,
     pub post_id: u64,
     pub timestamp: String,
-}
-
-// Add these structures to support the indexer API response
-#[derive(Debug, Deserialize)]
-struct VideoHashIndexerResponse {
-    match_found: bool,
-    match_details: Option<MatchDetails>,
-    hash_added: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct MatchDetails {
-    video_id: String,
-    similarity_percentage: f64,
-    is_duplicate: bool,
 }
 
 // For videohash_original table
@@ -145,20 +131,16 @@ impl<'a> VideoHashDuplication<'a> {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect to Redis: {}", e))?;
 
-        // Check if hash exists in Redis hash
-        let is_duplicate: bool = redis::cmd("HEXISTS")
-            .arg("videohashes")
-            .arg(&video_hash.hash)
-            .query_async(&mut redis_conn)
+        // Use typed API for HEXISTS
+        let is_duplicate: bool = redis_conn
+            .hexists("videohashes", &video_hash.hash)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to query Redis: {}", e))?;
 
         if is_duplicate {
-            // Get the original video ID from the hash
-            let parent_video_id: String = redis::cmd("HGET")
-                .arg("videohashes")
-                .arg(&video_hash.hash)
-                .query_async(&mut redis_conn)
+            // Use typed API for HGET
+            let parent_video_id: String = redis_conn
+                .hget("videohashes", &video_hash.hash)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to get parent video ID from Redis: {}", e))?;
 
@@ -168,7 +150,7 @@ impl<'a> VideoHashDuplication<'a> {
                 parent_video_id
             );
 
-            // Store duplicate in BigQuery with 100% match (exact duplicate)
+            // Store duplicate using the same BigQuery client
             self.store_duplicate_video_exact(
                 video_id,
                 &video_hash.hash,
@@ -181,16 +163,13 @@ impl<'a> VideoHashDuplication<'a> {
             // This is a unique video
             log::info!("Unique video recorded: video_id [{}]", video_id);
 
-            // Store as unique in BigQuery
+            // Store as unique using the same BigQuery client
             self.store_unique_video(video_id, &video_hash.hash, &bigquery_client)
                 .await?;
 
-            // Store the hash in Redis hash with HSET
-            redis::cmd("HSET")
-                .arg("videohashes")
-                .arg(&video_hash.hash)
-                .arg(video_id)
-                .query_async::<_, ()>(&mut redis_conn)
+            // Use typed API for HSET
+            redis_conn
+                .hset("videohashes", &video_hash.hash, video_id)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to store hash in Redis: {}", e))?;
         }
