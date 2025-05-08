@@ -105,6 +105,10 @@ async fn main_impl() -> Result<()> {
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
+        .route(
+            "/api/redis_backfill",
+            post(duplicate_video::redis_backfill::trigger_redis_backfill),
+        )
         .nest("/admin", admin_routes)
         .nest("/qstash", qstash_routes)
         .fallback_service(router)
