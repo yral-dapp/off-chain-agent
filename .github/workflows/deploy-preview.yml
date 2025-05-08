@@ -34,8 +34,8 @@ jobs:
       - name: Download build
         uses: actions/download-artifact@v4
         with:
-          name: build-musl
-      - run: chmod +x target/x86_64-unknown-linux-musl/release/icp-off-chain-agent
+          name: build-glibc
+      - run: chmod +x target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent
 
       - name: Deploy
         id: deploy
@@ -67,6 +67,8 @@ jobs:
           flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set OFF_CHAIN_AGENT_URL="$OFF_CHAIN_AGENT_URL" --app "$APP_NAME" --stage
           flyctl secrets set "VIDEOHASH_BACKFILL_TOKEN=$VIDEOHASH_BACKFILL_TOKEN" --app "$APP_NAME" --stage
+          flyctl secrets set STORJ_BACKUP_CANISTER_ACCESS_GRANT="$STORJ_BACKUP_CANISTER_ACCESS_GRANT" --app "$APP_NAME" --stage
+          flyctl secrets set CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL="$CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -89,3 +91,5 @@ jobs:
           ML_FEED_CACHE_REDIS_URL: ${{ secrets.YRAL_ML_FEED_CACHE_REDIS_URL }}
           STORJ_INTERFACE_TOKEN: ${{ secrets.STORJ_INTERFACE_TOKEN }}
           VIDEOHASH_BACKFILL_TOKEN: ${{ secrets.VIDEOHASH_BACKFILL_TOKEN }}
+          STORJ_BACKUP_CANISTER_ACCESS_GRANT: ${{ secrets.STORJ_BACKUP_CANISTER_ACCESS_GRANT }}
+          CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL }}

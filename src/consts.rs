@@ -42,3 +42,10 @@ pub static STORJ_INTERFACE_URL: Lazy<Url> = Lazy::new(|| {
 
 pub static STORJ_INTERFACE_TOKEN: Lazy<String> =
     Lazy::new(|| std::env::var("STORJ_INTERFACE_TOKEN").expect("STORJ_INTERFACE_TOKEN to be set"));
+
+pub static STORJ_BACKUP_CANISTER_ACCESS_GRANT: Lazy<String> = Lazy::new(|| {
+    std::env::var("STORJ_BACKUP_CANISTER_ACCESS_GRANT")
+        .expect("STORJ_BACKUP_CANISTER_ACCESS_GRANT to be set")
+});
+
+pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";

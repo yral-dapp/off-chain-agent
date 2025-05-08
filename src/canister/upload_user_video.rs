@@ -15,7 +15,7 @@ use crate::{
 };
 
 use yral_canisters_client::individual_user_template::{
-    IndividualUserTemplate, PostDetailsFromFrontend, Result2,
+    IndividualUserTemplate, PostDetailsFromFrontend, Result1,
 };
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -94,7 +94,7 @@ pub async fn upload_user_video_impl(
         .await?;
 
     match upload_video_res {
-        Result2::Ok(post_id) => {
+        Result1::Ok(post_id) => {
             let upload_video_event = VideoUploadSuccessful {
                 shared_state: app_state.clone(),
             };
@@ -120,6 +120,6 @@ pub async fn upload_user_video_impl(
 
             Ok(post_id)
         }
-        Result2::Err(e) => Err(e.into()),
+        Result1::Err(e) => Err(e.into()),
     }
 }

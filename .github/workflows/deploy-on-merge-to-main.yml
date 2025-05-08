@@ -21,7 +21,7 @@ jobs:
       - name: Download build
         uses: actions/download-artifact@v4
         with:
-          name: build-musl
+          name: build-glibc
       - name: Setup dfx
         uses: dfinity/setup-dfx@main
       - name: Test pem file
@@ -34,7 +34,7 @@ jobs:
         env:
           RECLAIM_CANISTER_PEM: |
             ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CANISTER_PRIVILEGED_IDENTITY_SECRET_KEY }}
-      - run: chmod +x target/x86_64-unknown-linux-musl/release/icp-off-chain-agent
+      - run: chmod +x target/x86_64-unknown-linux-gnu/release/icp-off-chain-agent
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Set cloudflare token
         run: |
@@ -58,6 +58,8 @@ jobs:
           flyctl secrets set ML_FEED_CACHE_REDIS_URL="$ML_FEED_CACHE_REDIS_URL" --app "icp-off-chain-agent" --stage
           flyctl secrets set STORJ_INTERFACE_TOKEN="$STORJ_INTERFACE_TOKEN" --app "icp-off-chain-agent" --stage
           flyctl secrets set "VIDEOHASH_BACKFILL_TOKEN=$VIDEOHASH_BACKFILL_TOKEN" --app "icp-off-chain-agent" --stage
+          flyctl secrets set STORJ_BACKUP_CANISTER_ACCESS_GRANT="$STORJ_BACKUP_CANISTER_ACCESS_GRANT" --app "icp-off-chain-agent" --stage
+          flyctl secrets set CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL="$CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL" --app "icp-off-chain-agent" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_FLY_IO_GITHUB_ACTION }}
           CF_R2_ACCESS_KEY_TEMP: ${{ secrets.HOT_OR_NOT_OFF_CHAIN_AGENT_CLOUDFLARE_R2_ACCESS_KEY_ID }}
@@ -78,6 +80,8 @@ jobs:
           ML_FEED_CACHE_REDIS_URL: ${{ secrets.YRAL_ML_FEED_CACHE_REDIS_URL }}
           STORJ_INTERFACE_TOKEN: ${{ secrets.STORJ_INTERFACE_TOKEN }}
           VIDEOHASH_BACKFILL_TOKEN: ${{ secrets.VIDEOHASH_BACKFILL_TOKEN }}
+          STORJ_BACKUP_CANISTER_ACCESS_GRANT: ${{ secrets.STORJ_BACKUP_CANISTER_ACCESS_GRANT }}
+          CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml
         env:

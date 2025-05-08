@@ -31,12 +31,18 @@ use yral_qstash_types::{ClaimTokensRequest, ParticipateInSwapRequest};
 
 use crate::{
     app_state::AppState,
-    canister::upgrade_user_token_sns_canister::{
-        check_if_the_proposal_executed_successfully, is_upgrade_required,
-        setup_sns_canisters_of_a_user_canister_for_upgrade,
-        upgrade_user_token_sns_canister_for_entire_network_impl,
-        upgrade_user_token_sns_canister_impl, verify_if_proposal_executed_successfully_impl,
-        SnsCanisters, VerifyUpgradeProposalRequest,
+    canister::{
+        snapshot::{
+            alert::snapshot_alert_job,
+            snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
+        },
+        upgrade_user_token_sns_canister::{
+            check_if_the_proposal_executed_successfully, is_upgrade_required,
+            setup_sns_canisters_of_a_user_canister_for_upgrade,
+            upgrade_user_token_sns_canister_for_entire_network_impl,
+            upgrade_user_token_sns_canister_impl, verify_if_proposal_executed_successfully_impl,
+            SnsCanisters, VerifyUpgradeProposalRequest,
+        },
     },
     consts::ICP_LEDGER_CANISTER_ID,
     duplicate_video::videohash::VideoHash,
@@ -544,6 +550,12 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         .route("/report_post", post(qstash_report_post))
         .route("/storj_ingest", post(storj_ingest))
         .route("/process_single_video", post(process_single_video))
+        .route(
+            "/start_backup_canisters_job_v2",
+            post(backup_canisters_job_v2),
+        )
+        .route("/backup_user_canister", post(backup_user_canister))
+        .route("/snapshot_alert_job", post(snapshot_alert_job))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
