@@ -1,6 +1,8 @@
 use crate::{app_state, consts::OFF_CHAIN_AGENT_URL, duplicate_video::videohash::VideoHash};
+use chrono::{DateTime, Utc};
 use google_cloud_bigquery::client::Client;
 use google_cloud_bigquery::http::job::query::QueryRequest;
+use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use http::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +38,38 @@ struct MatchDetails {
     video_id: String,
     similarity_percentage: f64,
     is_duplicate: bool,
+}
+
+// For videohash_original table
+#[derive(Serialize)]
+struct VideohashOriginalRow {
+    video_id: String,
+    videohash: String,
+    created_at: DateTime<Utc>,
+}
+
+// For video_unique table
+#[derive(Serialize)]
+struct VideoUniqueRow {
+    video_id: String,
+    videohash: String,
+    created_at: DateTime<Utc>,
+}
+
+// For duplicate_videos table
+#[derive(Serialize)]
+struct DuplicateVideosRow {
+    publisher_canister_id: String,
+    publisher_principal: String,
+    post_id: u64,
+    original_video_id: String,
+    parent_video_id: String,
+    parent_canister_id: Option<String>,
+    parent_principal: Option<String>,
+    parent_post_id: Option<u64>,
+    exact_duplicate: bool,
+    duplication_score: f64,
+    created_at: DateTime<Utc>,
 }
 
 // The VideoHashDuplication struct will contain the deduplication logic
@@ -175,21 +209,28 @@ impl<'a> VideoHashDuplication<'a> {
         Ok(())
     }
 
+    // Updated method for storing videohash original
     async fn store_videohash_original(
         &self,
         video_id: &str,
         hash: &str,
         bigquery_client: &Client,
     ) -> Result<(), anyhow::Error> {
-        let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
-             (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
-        );
+        let now = Utc::now();
 
-        let request = QueryRequest {
-            query,
+        let row_data = VideohashOriginalRow {
+            video_id: video_id.to_string(),
+            videohash: hash.to_string(),
+            created_at: now,
+        };
+
+        let row = Row {
+            insert_id: None,
+            json: row_data,
+        };
+
+        let request = InsertAllRequest {
+            rows: vec![row],
             ..Default::default()
         };
 
@@ -198,29 +239,50 @@ impl<'a> VideoHashDuplication<'a> {
             video_id
         );
 
-        bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
+        let res = bigquery_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "videohash_original",
+                &request,
+            )
             .await?;
+
+        if let Some(errors) = res.insert_errors {
+            if !errors.is_empty() {
+                log::error!("videohash_original insert errors: {:?}", errors);
+                return Err(anyhow::anyhow!(
+                    "Failed to insert videohash_original row to BigQuery"
+                ));
+            }
+        }
 
         Ok(())
     }
 
+    // Updated method for storing unique videos
     async fn store_unique_video(
         &self,
         video_id: &str,
         hash: &str,
         bigquery_client: &Client,
     ) -> Result<(), anyhow::Error> {
-        let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.video_unique` 
-             (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
-        );
+        let now = Utc::now();
 
-        let request = QueryRequest {
-            query,
+        let row_data = VideoUniqueRow {
+            video_id: video_id.to_string(),
+            videohash: hash.to_string(),
+            created_at: now,
+        };
+
+        let row = Row {
+            insert_id: None,
+            json: row_data,
+        };
+
+        let request = InsertAllRequest {
+            rows: vec![row],
             ..Default::default()
         };
 
@@ -229,14 +291,29 @@ impl<'a> VideoHashDuplication<'a> {
             video_id
         );
 
-        bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
+        let res = bigquery_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "video_unique",
+                &request,
+            )
             .await?;
+
+        if let Some(errors) = res.insert_errors {
+            if !errors.is_empty() {
+                log::error!("video_unique insert errors: {:?}", errors);
+                return Err(anyhow::anyhow!(
+                    "Failed to insert video_unique row to BigQuery"
+                ));
+            }
+        }
 
         Ok(())
     }
 
+    // Updated method for storing exact duplicates
     async fn store_duplicate_video_exact(
         &self,
         video_id: &str,
@@ -245,28 +322,29 @@ impl<'a> VideoHashDuplication<'a> {
         publisher_data: &VideoPublisherData,
         bigquery_client: &Client,
     ) -> Result<(), anyhow::Error> {
-        // For Redis-based matching, we always consider it an exact duplicate (100% match)
-        let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.duplicate_videos` (
-                publisher_canister_id, publisher_principal, post_id,
-                original_video_id, parent_video_id, parent_canister_id,
-                parent_principal, parent_post_id, exact_duplicate,
-                duplication_score
-            ) VALUES (
-                '{}', '{}', {},
-                '{}', '{}', NULL,
-                NULL, NULL, true,
-                100.0
-            )",
-            publisher_data.canister_id,
-            publisher_data.publisher_principal,
-            publisher_data.post_id,
-            video_id,
-            parent_video_id
-        );
+        let now = Utc::now();
 
-        let request = QueryRequest {
-            query,
+        let row_data = DuplicateVideosRow {
+            publisher_canister_id: publisher_data.canister_id.clone(),
+            publisher_principal: publisher_data.publisher_principal.clone(),
+            post_id: publisher_data.post_id,
+            original_video_id: video_id.to_string(),
+            parent_video_id: parent_video_id.to_string(),
+            parent_canister_id: None,
+            parent_principal: None,
+            parent_post_id: None,
+            exact_duplicate: true,
+            duplication_score: 100.0,
+            created_at: now,
+        };
+
+        let row = Row {
+            insert_id: None,
+            json: row_data,
+        };
+
+        let request = InsertAllRequest {
+            rows: vec![row],
             ..Default::default()
         };
 
@@ -276,10 +354,24 @@ impl<'a> VideoHashDuplication<'a> {
             parent_video_id
         );
 
-        bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
+        let res = bigquery_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "duplicate_videos",
+                &request,
+            )
             .await?;
+
+        if let Some(errors) = res.insert_errors {
+            if !errors.is_empty() {
+                log::error!("duplicate_videos insert errors: {:?}", errors);
+                return Err(anyhow::anyhow!(
+                    "Failed to insert duplicate_videos row to BigQuery"
+                ));
+            }
+        }
 
         Ok(())
     }
