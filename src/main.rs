@@ -5,7 +5,6 @@ use anyhow::Result;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
-use candid::Principal;
 use canister::upgrade_user_token_sns_canister::{
     upgrade_user_token_sns_canister_for_entire_network, upgrade_user_token_sns_canister_handler,
 };
@@ -16,7 +15,6 @@ use http::header::CONTENT_TYPE;
 use offchain_service::report_approved_handler;
 use qstash::qstash_router;
 use sentry_tower::{NewSentryLayer, SentryHttpLayer};
-use serde_json::json;
 use tonic::service::Routes;
 use tower::make::Shared;
 use tower::steer::Steer;
