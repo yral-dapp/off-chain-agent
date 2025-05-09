@@ -5,3 +5,5 @@ gha-creds-*.json
 **/.DS_Store
 google_service_account.json
 /.cargo
+.zed/*
+.vscode/

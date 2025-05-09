@@ -24,7 +24,6 @@ use super::{snapshot_v2::backup_canister_impl, CanisterData, CanisterType};
 
 // API for the snapshot alert job which calls the impl function
 
-#[axum::debug_handler]
 #[instrument(skip(state))]
 pub async fn snapshot_alert_job(
     State(state): State<Arc<AppState>>,
