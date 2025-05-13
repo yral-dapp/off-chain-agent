@@ -38,7 +38,6 @@ use crate::{
             snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
         },
         upgrade_user_token_sns_canister::{
-            check_if_the_proposal_executed_successfully, is_upgrade_required,
             setup_sns_canisters_of_a_user_canister_for_upgrade,
             upgrade_user_token_sns_canister_for_entire_network_impl,
             upgrade_user_token_sns_canister_impl, verify_if_proposal_executed_successfully_impl,
@@ -46,18 +45,16 @@ use crate::{
         },
     },
     consts::ICP_LEDGER_CANISTER_ID,
-    duplicate_video::videohash::VideoHash,
     events::{
         event::{storj::storj_ingest, upload_video_gcs},
         nsfw::{extract_frames_and_upload, nsfw_job, nsfw_job_v2},
     },
-    posts::{delete_post::test_duplicate_post_on_delete, report_post::qstash_report_post},
+    posts::report_post::qstash_report_post,
 };
 use crate::{
     duplicate_video::backfill::process_single_video, qstash::duplicate::VideoPublisherData,
 };
 
-use crate::duplicate_video::backfill::trigger_videohash_backfill;
 pub mod client;
 pub mod duplicate;
 pub mod hotornot_job;
@@ -558,10 +555,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
-        .route(
-            "/test_duplicate_post_on_delete",
-            post(test_duplicate_post_on_delete),
-        )
         .route("/start_hotornot_job", post(start_hotornot_job))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),

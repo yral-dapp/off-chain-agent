@@ -99,21 +99,6 @@ pub async fn handle_delete_post(
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TestDuplicatePostOnDeleteRequest {
-    pub video_id: String,
-}
-
-#[instrument(skip(state))]
-pub async fn test_duplicate_post_on_delete(
-    State(state): State<Arc<AppState>>,
-    Json(request): Json<TestDuplicatePostOnDeleteRequest>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    handle_duplicate_post_on_delete(state.bigquery_client.clone(), request.video_id)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct VideoUniqueRow {
     pub video_id: String,
     pub videohash: String,
@@ -128,14 +113,15 @@ pub async fn handle_duplicate_post_on_delete(
     // check if its unique
     let request = QueryRequest {
         query: format!(
-            "SELECT * FROM hot-or-not-feed-intelligence.yral_ds.video_unique WHERE video_id = '{}'",
+            "SELECT * FROM `hot-or-not-feed-intelligence.yral_ds.video_unique` WHERE video_id = '{}'",
             video_id.clone()
         ),
         ..Default::default()
     };
     let mut response = bq_client
         .query::<QueryRow>("hot-or-not-feed-intelligence", request)
-        .await?;
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to query video_unique: {}", e))?;
     let mut res_list = Vec::new();
     while let Some(row) = response.next().await? {
         res_list.push(row);
@@ -163,7 +149,8 @@ pub async fn handle_duplicate_post_on_delete(
     };
     let mut response = bq_client
         .query::<QueryRow>("hot-or-not-feed-intelligence", request)
-        .await?;
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to query videohash_original: {}", e))?;
     let mut res_list = Vec::new();
     while let Some(row) = response.next().await? {
         res_list.push(row);
@@ -177,45 +164,48 @@ pub async fn handle_duplicate_post_on_delete(
         );
     }
 
-    // add one of the children to video_unique table
-    let new_parent_video_id = duplicate_videos[0].clone();
-    let video_unique_row = VideoUniqueRow {
-        video_id: new_parent_video_id,
-        videohash,
-        created_at: Utc::now().to_rfc3339(),
-    };
+    if !duplicate_videos.is_empty() {
+        // add one of the children to video_unique table
+        let new_parent_video_id = duplicate_videos[0].clone();
+        let video_unique_row = VideoUniqueRow {
+            video_id: new_parent_video_id,
+            videohash,
+            created_at: Utc::now().to_rfc3339(),
+        };
 
-    let request = InsertAllRequest {
-        rows: vec![Row {
-            insert_id: None,
-            json: video_unique_row,
-        }],
-        ..Default::default()
-    };
+        let request = InsertAllRequest {
+            rows: vec![Row {
+                insert_id: None,
+                json: video_unique_row,
+            }],
+            ..Default::default()
+        };
 
-    let res = bq_client
-        .tabledata()
-        .insert(
-            "hot-or-not-feed-intelligence",
-            "yral_ds",
-            "video_unique",
-            &request,
-        )
-        .await?;
+        let res = bq_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "video_unique",
+                &request,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to insert video unique row to bigquery: {}", e))?;
 
-    if let Some(errors) = res.insert_errors {
-        if errors.len() > 0 {
-            log::error!("video_unique insert response : {:?}", errors);
-            return Err(anyhow::anyhow!(
-                "Failed to insert video unique row to bigquery"
-            ));
+        if let Some(errors) = res.insert_errors {
+            if errors.len() > 0 {
+                log::error!("video_unique insert response : {:?}", errors);
+                return Err(anyhow::anyhow!(
+                    "Failed to insert video unique row to bigquery"
+                ));
+            }
         }
     }
 
     // delete old parent from video_unique table
     let request = QueryRequest {
         query: format!(
-            "DELETE FROM hot-or-not-feed-intelligence.yral_ds.video_unique WHERE video_id = '{}'",
+            "DELETE FROM `hot-or-not-feed-intelligence.yral_ds.video_unique` WHERE video_id = '{}'",
             video_id
         ),
         ..Default::default()
@@ -224,7 +214,8 @@ pub async fn handle_duplicate_post_on_delete(
     let res = bq_client
         .job()
         .query("hot-or-not-feed-intelligence", &request)
-        .await?;
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to delete video unique row to bigquery: {}", e))?;
 
     if let Some(errors) = res.errors {
         if errors.len() > 0 {
