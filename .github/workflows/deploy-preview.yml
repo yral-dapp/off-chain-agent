@@ -69,6 +69,9 @@ jobs:
           flyctl secrets set "VIDEOHASH_BACKFILL_TOKEN=$VIDEOHASH_BACKFILL_TOKEN" --app "$APP_NAME" --stage
           flyctl secrets set STORJ_BACKUP_CANISTER_ACCESS_GRANT="$STORJ_BACKUP_CANISTER_ACCESS_GRANT" --app "$APP_NAME" --stage
           flyctl secrets set CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL="$CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL" --app "$APP_NAME" --stage
+          flyctl secrets set "ALLOYDB_SERVICE_ACCOUNT_JSON=$ALLOYDB_SERVICE_ACCOUNT_JSON" --app "$APP_NAME" --stage
+          flyctl secrets set "ALLOYDB_INSTANCE=$ALLOYDB_INSTANCE" --app "$APP_NAME" --stage
+          flyctl secrets set "ALLOYDB_DB_PASSWORD=$ALLOYDB_DB_PASSWORD" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -93,3 +96,6 @@ jobs:
           VIDEOHASH_BACKFILL_TOKEN: ${{ secrets.VIDEOHASH_BACKFILL_TOKEN }}
           STORJ_BACKUP_CANISTER_ACCESS_GRANT: ${{ secrets.STORJ_BACKUP_CANISTER_ACCESS_GRANT }}
           CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.CANISTER_BACKUP_ALERT_GOOGLE_CHAT_WEBHOOK_URL }}
+          ALLOYDB_SERVICE_ACCOUNT_JSON: ${{ secrets.ALLOYDB_SERVICE_ACCOUNT_JSON_STAGING }}
+          ALLOYDB_INSTANCE: ${{ secrets.ALLOYDB_INSTANCE_STAGING }}
+          ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_STAGING }}

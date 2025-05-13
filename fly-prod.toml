@@ -13,6 +13,8 @@ kill_timeout = '5s'
 [env]
 PORT = '8080'
 SENTRY_ENVIRONMENT = "production"
+ALLOYDB_DB_NAME = "postgres"
+ALLOYDB_DB_USER = "postgres"
 
 [[services]]
 internal_port = 50051

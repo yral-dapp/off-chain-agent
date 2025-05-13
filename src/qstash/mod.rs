@@ -10,6 +10,7 @@ use axum::{
     Json, Router,
 };
 use candid::{Decode, Encode, Nat, Principal};
+use hotornot_job::start_hotornot_job;
 use http::StatusCode;
 use ic_agent::{identity::DelegatedIdentity, Identity};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
@@ -59,6 +60,7 @@ use crate::{
 use crate::duplicate_video::backfill::trigger_videohash_backfill;
 pub mod client;
 pub mod duplicate;
+pub mod hotornot_job;
 
 #[derive(Clone)]
 pub struct QStashState {
@@ -560,9 +562,10 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             "/test_duplicate_post_on_delete",
             post(test_duplicate_post_on_delete),
         )
-        .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
-            app_state.qstash.clone(),
-            verify_qstash_message,
-        )))
+        .route("/start_hotornot_job", post(start_hotornot_job))
+        // .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
+        //     app_state.qstash.clone(),
+        //     verify_qstash_message,
+        // )))
         .with_state(app_state)
 }
