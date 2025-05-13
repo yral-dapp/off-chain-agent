@@ -563,9 +563,9 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(test_duplicate_post_on_delete),
         )
         .route("/start_hotornot_job", post(start_hotornot_job))
-        // .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
-        //     app_state.qstash.clone(),
-        //     verify_qstash_message,
-        // )))
+        .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
+            app_state.qstash.clone(),
+            verify_qstash_message,
+        )))
         .with_state(app_state)
 }
