@@ -164,39 +164,41 @@ pub async fn handle_duplicate_post_on_delete(
         );
     }
 
-    // add one of the children to video_unique table
-    let new_parent_video_id = duplicate_videos[0].clone();
-    let video_unique_row = VideoUniqueRow {
-        video_id: new_parent_video_id,
-        videohash,
-        created_at: Utc::now().to_rfc3339(),
-    };
+    if !duplicate_videos.is_empty() {
+        // add one of the children to video_unique table
+        let new_parent_video_id = duplicate_videos[0].clone();
+        let video_unique_row = VideoUniqueRow {
+            video_id: new_parent_video_id,
+            videohash,
+            created_at: Utc::now().to_rfc3339(),
+        };
 
-    let request = InsertAllRequest {
-        rows: vec![Row {
-            insert_id: None,
-            json: video_unique_row,
-        }],
-        ..Default::default()
-    };
+        let request = InsertAllRequest {
+            rows: vec![Row {
+                insert_id: None,
+                json: video_unique_row,
+            }],
+            ..Default::default()
+        };
 
-    let res = bq_client
-        .tabledata()
-        .insert(
-            "hot-or-not-feed-intelligence",
-            "yral_ds",
-            "video_unique",
-            &request,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to insert video unique row to bigquery: {}", e))?;
+        let res = bq_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "video_unique",
+                &request,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to insert video unique row to bigquery: {}", e))?;
 
-    if let Some(errors) = res.insert_errors {
-        if errors.len() > 0 {
-            log::error!("video_unique insert response : {:?}", errors);
-            return Err(anyhow::anyhow!(
-                "Failed to insert video unique row to bigquery"
-            ));
+        if let Some(errors) = res.insert_errors {
+            if errors.len() > 0 {
+                log::error!("video_unique insert response : {:?}", errors);
+                return Err(anyhow::anyhow!(
+                    "Failed to insert video unique row to bigquery"
+                ));
+            }
         }
     }
 
