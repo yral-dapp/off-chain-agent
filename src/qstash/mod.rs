@@ -33,7 +33,7 @@ use crate::{
     app_state::AppState,
     canister::{
         snapshot::{
-            alert::snapshot_alert_job,
+            alert::{snapshot_alert_debug_job, snapshot_alert_job},
             snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
         },
         upgrade_user_token_sns_canister::{
@@ -553,6 +553,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
+        .route("/snapshot_alert_debug_job", post(snapshot_alert_debug_job))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,

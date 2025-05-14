@@ -34,6 +34,215 @@ pub async fn snapshot_alert_job(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
+#[instrument(skip(state))]
+pub async fn snapshot_alert_debug_job(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let agent = state.agent.clone();
+    snapshot_alert_job_debug_impl(&agent)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+#[instrument(skip(agent))]
+#[cfg(feature = "use-uplink")]
+pub async fn snapshot_alert_job_debug_impl(agent: &Agent) -> Result<(), anyhow::Error> {
+    use std::str::FromStr;
+    use uplink::{access::Grant, project::options::ListObjects, Project};
+
+    log::info!("Starting snapshot alert job");
+
+    // Calculate backup_dates_map within a separate block to drop non-Send types
+    let backup_dates_map: HashMap<Principal, Vec<DateTime<Utc>>> = {
+        let access_grant = Grant::new(&STORJ_BACKUP_CANISTER_ACCESS_GRANT)?;
+        let bucket_name = CANISTER_BACKUPS_BUCKET;
+        let project = &mut Project::open(&access_grant);
+        let (_bucket, _ok) = project
+            .create_bucket(&bucket_name)
+            .map_err(|e| anyhow::anyhow!("Failed to create/open bucket: {}", e))?;
+
+        let mut list_objects_options = <ListObjects as std::default::Default>::default();
+        list_objects_options.recursive = true; // Ensure we get all objects, not just top-level prefixes
+        let object_list = &mut project.list_objects(&bucket_name, Some(&list_objects_options))?;
+
+        let mut map_in_scope: HashMap<Principal, Vec<DateTime<Utc>>> = HashMap::new();
+
+        log::info!("Processing backup objects from Storj...");
+        for obj_res in object_list {
+            match obj_res {
+                Ok(obj) => {
+                    if obj.is_prefix {
+                        // Skip prefixes/directories
+                        continue;
+                    }
+                    let parts: Vec<&str> = obj.key.split('/').collect();
+                    if parts.len() == 2 {
+                        let canister_id_str = parts[0];
+                        let date_str = parts[1];
+
+                        match Principal::from_text(canister_id_str) {
+                            Ok(canister_id) => {
+                                // Append time and timezone for parsing
+                                let datetime_str = format!("{}T00:00:00Z", date_str);
+                                match DateTime::parse_from_rfc3339(&datetime_str) {
+                                    Ok(obj_date) => {
+                                        map_in_scope // Use the map inside the scope
+                                            .entry(canister_id)
+                                            .or_default()
+                                            .push(obj_date.with_timezone(&Utc));
+                                    }
+                                    Err(e) => {
+                                        log::warn!(
+                                            "Failed to parse date from key '{}': {}",
+                                            obj.key,
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "Failed to parse Principal from key '{}': {}",
+                                    obj.key,
+                                    e
+                                );
+                            }
+                        }
+                    } else {
+                        log::warn!("Unexpected object key format: {}", obj.key);
+                    }
+                }
+                Err(e) => {
+                    log::error!("Error listing object: {}", e);
+                }
+            }
+        }
+        log::info!(
+            "Finished processing Storj objects. Found backups for {} canisters.",
+            map_in_scope.len() // Use the map inside the scope
+        );
+
+        // Sort dates for each canister
+        for dates in map_in_scope.values_mut() {
+            // Use the map inside the scope
+            dates.sort_unstable(); // Use unstable sort as order of equal dates doesn't matter
+        }
+
+        map_in_scope
+    };
+
+    // Get all expected canisters
+    log::info!("Fetching canister lists...");
+    let mut all_canisters: HashSet<Principal> = HashSet::new();
+    let mut all_subnet_orch_ids: HashSet<Principal> = HashSet::new();
+
+    // Add user canisters
+    match get_user_canisters_list_v2(agent).await {
+        Ok(user_canisters) => {
+            log::info!("Found {} user canisters.", user_canisters.len());
+            all_canisters.extend(user_canisters);
+        }
+        Err(e) => {
+            log::error!("Failed to get user canisters list: {}", e);
+            return Err(anyhow::anyhow!("Failed to get user canisters list: {}", e));
+        }
+    }
+
+    // Add subnet orchestrators
+    match get_subnet_orch_ids(agent).await {
+        Ok(subnet_orch_ids) => {
+            log::info!("Found {} subnet orchestrators.", subnet_orch_ids.len());
+            all_canisters.extend(subnet_orch_ids.clone());
+            all_subnet_orch_ids.extend(subnet_orch_ids);
+        }
+        Err(e) => {
+            log::error!("Failed to get subnet orchestrator IDs: {}", e);
+            return Err(anyhow::anyhow!(
+                "Failed to get subnet orchestrator IDs: {}",
+                e
+            ));
+        }
+    }
+
+    // Add platform orchestrator
+    all_canisters.insert(PLATFORM_ORCHESTRATOR_ID);
+    log::info!(
+        "Total expected canisters (including Platform Orchestrator): {}",
+        all_canisters.len()
+    );
+
+    // Identify canisters needing alerts
+    let mut canisters_backups: Vec<(CanisterData, String)> = Vec::new();
+    let now = Utc::now();
+    let alert_threshold = Duration::days(4);
+
+    log::info!("Checking backup status for each canister...");
+    for canister_id in all_canisters {
+        // if canister_id is in all_subnet_orch_ids, then it's a subnet orchestrator
+        let canister_type = if all_subnet_orch_ids.contains(&canister_id) {
+            CanisterType::SubnetOrch
+        } else if canister_id == PLATFORM_ORCHESTRATOR_ID {
+            CanisterType::PlatformOrch
+        } else {
+            CanisterType::User
+        };
+
+        let canister_data = CanisterData {
+            canister_id,
+            canister_type,
+        };
+
+        match backup_dates_map.get(&canister_id) {
+            Some(dates) => {
+                let dates_str = dates
+                    .iter()
+                    .map(|d| d.format("%Y-%m-%d").to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+
+                if let Some(latest_backup_date) = dates.last() {
+                    let time_since_last_backup = now.signed_duration_since(*latest_backup_date);
+                    if time_since_last_backup > alert_threshold {
+                        // convert all dates to string
+
+                        canisters_backups.push((canister_data, dates_str));
+                    }
+                } else {
+                    canisters_backups.push((canister_data, dates_str));
+                }
+            }
+            None => {
+                canisters_backups.push((canister_data, "missing".to_string()));
+            }
+        }
+    }
+
+    if canisters_backups.len() == 0 {
+        log::info!("Snapshot alert job finished: All canisters have recent backups.");
+    } else {
+        log::warn!(
+            "Snapshot alert job finished: {} canisters require attention",
+            canisters_backups.len()
+        );
+    }
+
+    // print canisters_backups with last backup date
+    for (canister_data, dates_str) in canisters_backups {
+        log::info!(
+            "Canister {} dates: {}",
+            canister_data.canister_id,
+            dates_str
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "use-uplink"))]
+pub async fn snapshot_alert_job_debug_impl(_agent: &Agent) -> Result<(), anyhow::Error> {
+    log::warn!("Uplink is not enabled, skipping snapshot alert job");
+    Ok(())
+}
+
 #[instrument(skip(agent))]
 #[cfg(feature = "use-uplink")]
 pub async fn snapshot_alert_job_impl(agent: &Agent) -> Result<(), anyhow::Error> {
