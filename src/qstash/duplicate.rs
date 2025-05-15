@@ -44,22 +44,6 @@ struct VideoUniqueRow {
     created_at: DateTime<Utc>,
 }
 
-// For duplicate_videos table
-#[derive(Serialize)]
-struct DuplicateVideosRow {
-    publisher_canister_id: String,
-    publisher_principal: String,
-    post_id: u64,
-    original_video_id: String,
-    parent_video_id: String,
-    parent_canister_id: Option<String>,
-    parent_principal: Option<String>,
-    parent_post_id: Option<u64>,
-    exact_duplicate: bool,
-    duplication_score: f64,
-    created_at: DateTime<Utc>,
-}
-
 // The VideoHashDuplication struct will contain the deduplication logic
 pub struct VideoHashDuplication<'a> {
     client: &'a reqwest::Client,
@@ -112,49 +96,48 @@ impl<'a> VideoHashDuplication<'a> {
             u64,
             String,
             &str,
-        ) -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
+        )
+            -> futures::future::BoxFuture<'a, Result<(), anyhow::Error>>,
     ) -> Result<(), anyhow::Error> {
         log::info!("Calculating videohash for video URL: {}", video_url);
         let video_hash = VideoHash::from_url(video_url)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
 
-        // Use BigQuery client from app state
         let bigquery_client = &app_state.bigquery_client;
-
-        // Store the original hash (always store this regardless of uniqueness)
         self.store_videohash_original(video_id, &video_hash.hash, bigquery_client)
             .await?;
+        log::info!(
+            "Storing videohash in videohash_original: {}",
+            video_hash.hash
+        );
 
-        // Use Redis client from app state
         let redis_client = &app_state.redis_client;
         let mut redis_conn = redis_client
             .get_async_connection()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect to Redis: {}", e))?;
 
-        // Check if hash exists in Redis
         let is_duplicate: bool = redis_conn
             .hexists("videohashes", &video_hash.hash)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to query Redis: {}", e))?;
 
         if !is_duplicate {
-            // Only store in video_unique if it's actually unique
             log::info!("Unique video recorded: video_id [{}]", video_id);
-
-            // Store as unique using the same BigQuery client
             self.store_unique_video(video_id, &video_hash.hash, bigquery_client)
                 .await?;
 
-            // Store hash in Redis for future lookups
             redis_conn
                 .hset("videohashes", &video_hash.hash, video_id)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to store hash in Redis: {}", e))?;
             log::info!("Stored videohash in Redis: {}", video_hash.hash);
         } else {
-            log::info!("Duplicate video detected: video_id [{}], not storing in video_unique", video_id);
+            log::info!(
+                "Duplicate video detected: video_id [{}], not storing in video_unique",
+                video_id
+            );
         }
 
         // Always continue with the callback regardless of duplication status
