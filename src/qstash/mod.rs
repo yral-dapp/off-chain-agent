@@ -440,7 +440,7 @@ async fn video_hash_indexing_handler(
 
     state
         .qstash_client
-        .publish_video_hash_indexing(&req.video_id, &req.video_url, publisher_data)
+        .publish_video_hash_indexing(&req.video_id, &req.video_url, publisher_data, &state)
         .await
         .map_err(|e| {
             log::error!("Failed to index video hash: {}", e);
@@ -483,7 +483,12 @@ async fn video_deduplication_handler(
             &req.video_id,
             &req.video_url,
             publisher_data,
-            move |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
+            &state, // Add reference to app_state
+            move |vid_id: &str,
+                  canister_id: &str,
+                  post_id: u64,
+                  timestamp: String,
+                  publisher_user_id: &str| {
                 // Clone the values to ensure they have 'static lifetime
                 let vid_id = vid_id.to_string();
                 let canister_id = canister_id.to_string();
