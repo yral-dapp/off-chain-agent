@@ -293,8 +293,9 @@ pub async fn process_single_video(
             &clean_video_id,
             &clean_video_url,
             req.publisher_data,
+            &state, // Add the app_state parameter here
             move |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
-                // Empty closure - we don't want to continue the pipeline for old videos
+                // Dummy closure - we don't want to continue the pipeline for old videos
                 info!("Skipping GCS upload for backfilled video_id [{}]", vid_id);
                 Box::pin(async { Ok(()) })
             },

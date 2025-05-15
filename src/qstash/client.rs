@@ -12,6 +12,7 @@ use serde_json::json;
 use tracing::instrument;
 
 use crate::{
+    app_state::AppState,
     canister::{
         snapshot::snapshot_v2::BackupUserCanisterPayload,
         upgrade_user_token_sns_canister::{SnsCanisters, VerifyUpgradeProposalRequest},
@@ -49,21 +50,27 @@ impl QStashClient {
         }
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, app_state))]
     pub async fn publish_video_hash_indexing(
         &self,
         video_id: &str,
         video_url: &str,
         publisher_data: VideoPublisherData,
+        app_state: &Arc<AppState>,
     ) -> Result<(), anyhow::Error> {
-        let duplication_handler = VideoHashDuplication::new(&self.client, &self.base_url);
+        let hash_dedup = VideoHashDuplication::new(&self.client, &self.base_url);
 
-        duplication_handler
+        hash_dedup
             .process_video_deduplication(
                 video_id,
                 video_url,
                 publisher_data,
-                |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
+                app_state, // Pass the received app_state
+                |vid_id: &str,
+                 canister_id: &str,
+                 post_id: u64,
+                 timestamp: String,
+                 publisher_user_id: &str| {
                     // Clone the string references to own the data
                     let vid_id = vid_id.to_string();
                     let canister_id = canister_id.to_string();
