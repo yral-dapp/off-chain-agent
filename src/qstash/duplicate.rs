@@ -140,44 +140,20 @@ impl<'a> VideoHashDuplication<'a> {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to query Redis: {}", e))?;
 
-        if is_duplicate {
-            // Use typed API for HGET
-            let parent_video_id: String = redis_conn
-                .hget("videohashes", &video_hash.hash)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to get parent video ID from Redis: {}", e))?;
+        // This is a unique video
+        log::info!("Unique video recorded: video_id [{}]", video_id);
 
-            log::info!(
-                "Duplicate video detected: video_id [{}] is identical to parent_video_id [{}]",
-                video_id,
-                parent_video_id
-            );
-
-            // Store duplicate using the same BigQuery client
-            self.store_duplicate_video_exact(
-                video_id,
-                &video_hash.hash,
-                &parent_video_id,
-                &publisher_data,
-                bigquery_client,
-            )
+        // Store as unique using the same BigQuery client
+        self.store_unique_video(video_id, &video_hash.hash, bigquery_client)
             .await?;
-        } else {
-            // This is a unique video
-            log::info!("Unique video recorded: video_id [{}]", video_id);
 
-            // Store as unique using the same BigQuery client
-            self.store_unique_video(video_id, &video_hash.hash, bigquery_client)
-                .await?;
+        // Use typed API for HSET
+        redis_conn
+            .hset("videohashes", &video_hash.hash, video_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to store hash in Redis: {}", e))?;
+        log::info!("Stored videohash in Redis: {}", video_hash.hash);
 
-            // Use typed API for HSET
-            redis_conn
-                .hset("videohashes", &video_hash.hash, video_id)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to store hash in Redis: {}", e))?;
-        }
-
-        // Remaining code...
         let timestamp = chrono::Utc::now().to_rfc3339();
         publish_video_callback(
             video_id,
@@ -191,7 +167,6 @@ impl<'a> VideoHashDuplication<'a> {
         Ok(())
     }
 
-    // Updated method for storing videohash original
     async fn store_videohash_original(
         &self,
         video_id: &str,
@@ -243,7 +218,6 @@ impl<'a> VideoHashDuplication<'a> {
         Ok(())
     }
 
-    // Updated method for storing unique videos
     async fn store_unique_video(
         &self,
         video_id: &str,
@@ -288,69 +262,6 @@ impl<'a> VideoHashDuplication<'a> {
                 log::error!("video_unique insert errors: {:?}", errors);
                 return Err(anyhow::anyhow!(
                     "Failed to insert video_unique row to BigQuery"
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    // Updated method for storing exact duplicates
-    async fn store_duplicate_video_exact(
-        &self,
-        video_id: &str,
-        hash: &str,
-        parent_video_id: &str,
-        publisher_data: &VideoPublisherData,
-        bigquery_client: &Client,
-    ) -> Result<(), anyhow::Error> {
-        let now = Utc::now();
-
-        let row_data = DuplicateVideosRow {
-            publisher_canister_id: publisher_data.canister_id.clone(),
-            publisher_principal: publisher_data.publisher_principal.clone(),
-            post_id: publisher_data.post_id,
-            original_video_id: video_id.to_string(),
-            parent_video_id: parent_video_id.to_string(),
-            parent_canister_id: None,
-            parent_principal: None,
-            parent_post_id: None,
-            exact_duplicate: true,
-            duplication_score: 100.0,
-            created_at: now,
-        };
-
-        let row = Row {
-            insert_id: None,
-            json: row_data,
-        };
-
-        let request = InsertAllRequest {
-            rows: vec![row],
-            ..Default::default()
-        };
-
-        log::info!(
-            "Storing exact duplicate video in duplicate_videos: video_id [{}], parent_video_id [{}], score=100.0",
-            video_id,
-            parent_video_id
-        );
-
-        let res = bigquery_client
-            .tabledata()
-            .insert(
-                "hot-or-not-feed-intelligence",
-                "yral_ds",
-                "duplicate_videos",
-                &request,
-            )
-            .await?;
-
-        if let Some(errors) = res.insert_errors {
-            if !errors.is_empty() {
-                log::error!("duplicate_videos insert errors: {:?}", errors);
-                return Err(anyhow::anyhow!(
-                    "Failed to insert duplicate_videos row to BigQuery"
                 ));
             }
         }
