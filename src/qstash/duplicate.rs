@@ -1,3 +1,4 @@
+use crate::app_state::AppState;
 use crate::{app_state, consts::OFF_CHAIN_AGENT_URL, duplicate_video::videohash::VideoHash};
 use chrono::{DateTime, Utc};
 use google_cloud_bigquery::client::Client;
@@ -6,6 +7,7 @@ use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use http::header::CONTENT_TYPE;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VideoPublisherData {
@@ -103,6 +105,7 @@ impl<'a> VideoHashDuplication<'a> {
         video_id: &str,
         video_url: &str,
         publisher_data: VideoPublisherData,
+        app_state: &Arc<AppState>,
         publish_video_callback: impl FnOnce(
             &str,
             &str,
@@ -117,15 +120,15 @@ impl<'a> VideoHashDuplication<'a> {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
 
-        // Get BigQuery client once
-        let bigquery_client = app_state::init_bigquery_client().await;
+        // Use BigQuery client from app state instead of creating new one
+        let bigquery_client = &app_state.bigquery_client;
 
         // Store the original hash
-        self.store_videohash_original(video_id, &video_hash.hash, &bigquery_client)
+        self.store_videohash_original(video_id, &video_hash.hash, bigquery_client)
             .await?;
 
-        // Get Redis client and connection
-        let redis_client = app_state::init_redis_client();
+        // Use Redis client from app state instead of creating new one
+        let redis_client = &app_state.redis_client;
         let mut redis_conn = redis_client
             .get_async_connection()
             .await
@@ -156,7 +159,7 @@ impl<'a> VideoHashDuplication<'a> {
                 &video_hash.hash,
                 &parent_video_id,
                 &publisher_data,
-                &bigquery_client,
+                bigquery_client,
             )
             .await?;
         } else {
@@ -164,7 +167,7 @@ impl<'a> VideoHashDuplication<'a> {
             log::info!("Unique video recorded: video_id [{}]", video_id);
 
             // Store as unique using the same BigQuery client
-            self.store_unique_video(video_id, &video_hash.hash, &bigquery_client)
+            self.store_unique_video(video_id, &video_hash.hash, bigquery_client)
                 .await?;
 
             // Use typed API for HSET
