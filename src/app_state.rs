@@ -6,12 +6,15 @@ use crate::qstash::QStashState;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
+use google_cloud_alloydb_v1::client::AlloyDBAdmin;
+use google_cloud_auth::credentials::service_account::Builder as CredBuilder;
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use hyper_util::client::legacy::connect::HttpConnector;
 use ic_agent::Agent;
 use std::env;
 use std::sync::Arc;
 use tonic::transport::{Channel, ClientTlsConfig};
+use yral_alloydb_client::AlloyDbInstance;
 use yral_canisters_client::individual_user_template::IndividualUserTemplate;
 use yral_metadata_client::MetadataClient;
 use yral_ml_feed_cache::MLFeedCacheState;
@@ -36,6 +39,8 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub ml_feed_cache: MLFeedCacheState,
     pub metrics: CfMetricTx,
+    #[cfg(not(feature = "local-bin"))]
+    pub alloydb_client: AlloyDbInstance,
 }
 
 impl AppState {
@@ -58,6 +63,8 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             ml_feed_cache: MLFeedCacheState::new().await,
             metrics: init_metrics(),
+            #[cfg(not(feature = "local-bin"))]
+            alloydb_client: init_alloydb_client().await,
         }
     }
 
@@ -194,4 +201,27 @@ pub async fn init_nsfw_detect_channel() -> Channel {
 pub async fn init_qstash_client() -> QStashClient {
     let auth_token = env::var("QSTASH_AUTH_TOKEN").expect("QSTASH_AUTH_TOKEN is required");
     QStashClient::new(auth_token.as_str())
+}
+
+async fn init_alloydb_client() -> AlloyDbInstance {
+    let sa_json_raw = env::var("ALLOYDB_SERVICE_ACCOUNT_JSON")
+        .expect("`ALLOYDB_SERVICE_ACCOUNT_JSON` is required!");
+    let sa_json: serde_json::Value =
+        serde_json::from_str(&sa_json_raw).expect("Invalid `ALLOYDB_SERVICE_ACCOUNT_JSON`");
+    let credentials = CredBuilder::new(sa_json)
+        .build()
+        .expect("Invalid `ALLOYDB_SERVICE_ACCOUNT_JSON`");
+
+    let client = AlloyDBAdmin::builder()
+        .with_credentials(credentials)
+        .build()
+        .await
+        .expect("Failed to create AlloyDB client");
+
+    let instance = env::var("ALLOYDB_INSTANCE").expect("`ALLOYDB_INSTANCE` is required!");
+    let db_name = env::var("ALLOYDB_DB_NAME").expect("`ALLOYDB_DB_NAME` is required!");
+    let db_user = env::var("ALLOYDB_DB_USER").expect("`ALLOYDB_DB_USER` is required!");
+    let db_password = env::var("ALLOYDB_DB_PASSWORD").expect("`ALLOYDB_DB_PASSWORD` is required!");
+
+    AlloyDbInstance::new(client, instance, db_name, db_user, db_password)
 }

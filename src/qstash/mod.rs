@@ -10,6 +10,7 @@ use axum::{
     Json, Router,
 };
 use candid::{Decode, Encode, Nat, Principal};
+use hotornot_job::start_hotornot_job;
 use http::StatusCode;
 use ic_agent::{identity::DelegatedIdentity, Identity};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
@@ -56,6 +57,7 @@ use crate::{
 
 pub mod client;
 pub mod duplicate;
+pub mod hotornot_job;
 
 #[derive(Clone)]
 pub struct QStashState {
@@ -553,6 +555,7 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
         )
         .route("/backup_user_canister", post(backup_user_canister))
         .route("/snapshot_alert_job", post(snapshot_alert_job))
+        .route("/start_hotornot_job", post(start_hotornot_job))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),
             verify_qstash_message,
