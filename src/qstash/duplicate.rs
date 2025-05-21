@@ -108,7 +108,7 @@ impl<'a> VideoHashDuplication<'a> {
         self.store_videohash_original(video_id, &video_hash.hash, bigquery_client)
             .await?;
         log::info!(
-            "Storing videohash in videohash_original: {}",
+            "Storing videohash in videohash_original_testing_duplicate: {}",
             video_hash.hash
         );
 
@@ -179,7 +179,7 @@ impl<'a> VideoHashDuplication<'a> {
         };
 
         log::info!(
-            "Storing hash in videohash_original for video_id [{}]",
+            "Storing hash in videohash_original_testing_duplicate for video_id [{}]",
             video_id
         );
 
@@ -188,16 +188,16 @@ impl<'a> VideoHashDuplication<'a> {
             .insert(
                 "hot-or-not-feed-intelligence",
                 "yral_ds",
-                "videohash_original",
+                "videohash_original_testing_duplicate",
                 &request,
             )
             .await?;
 
         if let Some(errors) = res.insert_errors {
             if !errors.is_empty() {
-                log::error!("videohash_original insert errors: {:?}", errors);
+                log::error!("videohash_original_testing_duplicate insert errors: {:?}", errors);
                 return Err(anyhow::anyhow!(
-                    "Failed to insert videohash_original row to BigQuery"
+                    "Failed to insert videohash_original_testing_duplicate row to BigQuery"
                 ));
             }
         }
@@ -230,7 +230,7 @@ impl<'a> VideoHashDuplication<'a> {
         };
 
         log::info!(
-            "Storing unique video in video_unique for video_id [{}]",
+            "Storing unique video in video_unique_testing_duplicate for video_id [{}]",
             video_id
         );
 
@@ -239,16 +239,16 @@ impl<'a> VideoHashDuplication<'a> {
             .insert(
                 "hot-or-not-feed-intelligence",
                 "yral_ds",
-                "video_unique",
+                "video_unique_testing_duplicate",
                 &request,
             )
             .await?;
 
         if let Some(errors) = res.insert_errors {
             if !errors.is_empty() {
-                log::error!("video_unique insert errors: {:?}", errors);
+                log::error!("video_unique_testing_duplicate insert errors: {:?}", errors);
                 return Err(anyhow::anyhow!(
-                    "Failed to insert video_unique row to BigQuery"
+                    "Failed to insert video_unique_testing_duplicate row to BigQuery"
                 ));
             }
         }
