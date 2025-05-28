@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use axum::{extract::State, response::IntoResponse};
 use google_cloud_bigquery::{
     client::Client,
     http::{
@@ -6,11 +9,15 @@ use google_cloud_bigquery::{
     },
     query::row::Row as QueryRow,
 };
+use http::StatusCode;
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::canister::utils::get_user_canister_principal_list_v2;
+use crate::{
+    app_state::{self, AppState},
+    canister::utils::get_user_principal_canister_list_v2,
+};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct UserCanisterPrincipal {
@@ -88,11 +95,16 @@ pub async fn handle_login_successful(
     Ok(())
 }
 
+#[instrument(skip(app_state))]
 pub async fn bulk_insert_canister_user_principal(
-    bq_client: Client,
-    agent: &Agent,
-) -> Result<(), anyhow::Error> {
-    let user_principal_canisters_list = get_user_canister_principal_list_v2(&agent).await?;
+    State(app_state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let bq_client = app_state.bigquery_client.clone();
+    let agent = app_state.agent.clone();
+
+    let user_principal_canisters_list = get_user_principal_canister_list_v2(&agent)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let user_canister_principal_list = user_principal_canisters_list
         .iter()
@@ -122,17 +134,21 @@ pub async fn bulk_insert_canister_user_principal(
             )
             .await
             .map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to insert canister_user_principal row to bigquery: {}",
-                    e
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!(
+                        "Failed to insert canister_user_principal row to bigquery: {}",
+                        e
+                    ),
                 )
             })?;
 
         if let Some(errors) = res.insert_errors {
             if errors.len() > 0 {
                 log::error!("canister_user_principal insert response : {:?}", errors);
-                return Err(anyhow::anyhow!(
-                    "Failed to insert canister_user_principal row to bigquery"
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to insert canister_user_principal row to bigquery".to_string(),
                 ));
             }
         }

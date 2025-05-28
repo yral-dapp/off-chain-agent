@@ -30,7 +30,7 @@ pub async fn get_user_canisters_list_v2(agent: &Agent) -> Result<Vec<Principal>,
 }
 
 #[instrument(skip(agent))]
-pub async fn get_user_canister_principal_list_v2(
+pub async fn get_user_principal_canister_list_v2(
     agent: &Agent,
 ) -> Result<Vec<(Principal, Principal)>, anyhow::Error> {
     let subnet_orch_ids = get_subnet_orch_ids(agent).await?;
