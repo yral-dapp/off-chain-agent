@@ -189,8 +189,6 @@ async fn process_event_impl(
 
     event.check_video_deduplication(&shared_state.clone());
 
-    // event.upload_to_gcs(&shared_state.clone());
-
     event.update_watch_history(&shared_state.clone());
     event.update_success_history(&shared_state.clone());
 
@@ -199,6 +197,10 @@ async fn process_event_impl(
 
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery_token_metadata(&shared_state.clone());
+
+    if let Err(e) = event.handle_login_successful(&shared_state.clone()) {
+        log::error!("Error handling login successful: {:?}", e);
+    }
 
     let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
 
