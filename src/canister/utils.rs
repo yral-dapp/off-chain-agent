@@ -28,3 +28,20 @@ pub async fn get_user_canisters_list_v2(agent: &Agent) -> Result<Vec<Principal>,
 
     Ok(canister_ids_list)
 }
+
+#[instrument(skip(agent))]
+pub async fn get_user_principal_canister_list_v2(
+    agent: &Agent,
+) -> Result<Vec<(Principal, Principal)>, anyhow::Error> {
+    let subnet_orch_ids = get_subnet_orch_ids(agent).await?;
+
+    let mut user_principal_canister_list = vec![];
+
+    for subnet_orch_id in subnet_orch_ids {
+        let subnet_orch = UserIndex(subnet_orch_id, agent);
+        let user_principal_canister_ids = subnet_orch.get_user_id_and_canister_list().await?;
+        user_principal_canister_list.extend(user_principal_canister_ids);
+    }
+
+    Ok(user_principal_canister_list)
+}

@@ -8,6 +8,7 @@ use crate::{
     AppError,
 };
 use axum::{extract::State, Json};
+use candid::Principal;
 use chrono::{DateTime, Utc};
 use firestore::errors::FirestoreError;
 use google_cloud_bigquery::http::job::query::QueryRequest;
@@ -32,6 +33,7 @@ use yral_ml_feed_cache::{
 
 use super::queries::get_icpump_insert_query;
 
+pub mod login_successful;
 pub mod storj;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -78,6 +80,12 @@ pub struct DuplicateVideoEvent {
     pub publisher_principal: String,
     pub post_id: u64,
     pub timestamp: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LoginSuccessfulParams {
+    pub canister_id: Principal,
+    pub user_id: Principal,
 }
 
 #[derive(Debug)]
@@ -517,6 +525,27 @@ impl Event {
                 }
             });
         }
+    }
+
+    pub fn handle_login_successful(&self, app_state: &AppState) -> Result<(), anyhow::Error> {
+        if self.event.event == "login_successful" {
+            let params: LoginSuccessfulParams = serde_json::from_str(&self.event.params)?;
+            let bigquery_client = app_state.bigquery_client.clone();
+
+            tokio::spawn(async move {
+                let canister_id = params.canister_id;
+                let user_id = params.user_id;
+
+                if let Err(e) =
+                    login_successful::handle_login_successful(bigquery_client, canister_id, user_id)
+                        .await
+                {
+                    log::error!("Error handling login successful: {:?}", e);
+                }
+            });
+        }
+
+        Ok(())
     }
 }
 
