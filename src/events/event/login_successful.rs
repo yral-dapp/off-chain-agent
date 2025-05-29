@@ -1,3 +1,4 @@
+use candid::Principal;
 use google_cloud_bigquery::{
     client::Client,
     http::{
@@ -21,8 +22,8 @@ pub struct UserCanisterPrincipal {
 #[instrument(skip(bq_client))]
 pub async fn handle_login_successful(
     bq_client: Client,
-    canister_id: &str,
-    user_id: &str,
+    canister_id: Principal,
+    user_id: Principal,
 ) -> Result<(), anyhow::Error> {
     // check if its unique
     let request = QueryRequest {
