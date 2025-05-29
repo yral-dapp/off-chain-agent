@@ -4966,6 +4966,7 @@ dependencies = [
  "once_cell",
  "prost",
  "rayon",
+ "redis 0.29.1",
  "regex",
  "reqwest 0.12.15",
  "rust-s3",
