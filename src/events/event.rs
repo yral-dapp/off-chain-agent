@@ -158,32 +158,6 @@ impl Event {
         }
     }
 
-    pub fn upload_to_gcs(&self, app_state: &AppState) {
-        if self.event.event == "video_upload_successful" {
-            let params: Value = serde_json::from_str(&self.event.params).expect("Invalid JSON");
-            let qstash_client = app_state.qstash_client.clone();
-
-            tokio::spawn(async move {
-                let timestamp = chrono::Utc::now().to_rfc3339();
-
-                let uid = params["video_id"].as_str().unwrap();
-                let canister_id = params["canister_id"].as_str().unwrap();
-                let post_id = params["post_id"].as_u64().unwrap();
-                let publisher_user_id = params["publisher_user_id"].as_str().unwrap();
-
-                let res = qstash_client
-                    .publish_video(uid, canister_id, post_id, timestamp, publisher_user_id)
-                    .await;
-                if res.is_err() {
-                    error!(
-                        "upload_to_gcs: Error sending data to qstash: {:?}",
-                        res.err()
-                    );
-                }
-            });
-        }
-    }
-
     pub fn check_video_deduplication(&self, app_state: &AppState) {
         if self.event.event == "video_upload_successful" {
             let params: Value = match serde_json::from_str(&self.event.params) {
@@ -656,6 +630,7 @@ pub async fn upload_video_gcs(
     upload_gcs_impl(
         &payload.video_id,
         &payload.canister_id,
+        &payload.publisher_user_id,
         payload.post_id,
         &payload.timestamp,
     )
@@ -674,6 +649,7 @@ pub async fn upload_video_gcs(
 pub async fn upload_gcs_impl(
     uid: &str,
     canister_id: &str,
+    publisher_user_id: &str,
     post_id: u64,
     timestamp_str: &str,
 ) -> Result<(), anyhow::Error> {
@@ -698,6 +674,10 @@ pub async fn upload_gcs_impl(
 
     let mut hashmap = HashMap::new();
     hashmap.insert("canister_id".to_string(), canister_id.to_string());
+    hashmap.insert(
+        "publisher_user_id".to_string(),
+        publisher_user_id.to_string(),
+    );
     hashmap.insert("post_id".to_string(), post_id.to_string());
     hashmap.insert("timestamp".to_string(), timestamp_str.to_string());
     res_obj.metadata = Some(hashmap);
