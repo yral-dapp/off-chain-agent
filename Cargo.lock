@@ -7945,18 +7945,18 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "uplink"
-version = "0.10.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "806ec8a7263e7786f6f52e0d1ac1c32379ef7a164f26f6fe99e8a34d03fe8d97"
+checksum = "42bc7ae042544a4fb866248a7132d31c3cb32343324eb94980a515a4a6df013d"
 dependencies = [
  "uplink-sys",
 ]
 
 [[package]]
 name = "uplink-sys"
-version = "0.7.2"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e09d64bb0f74acdefc8a9ad00d5a2f6235f15e8726ee7a5af4868261e0ec97b7"
+checksum = "143845f099e906a7f61f31564c88a04b5310eca224127763671edbad7f13f81d"
 dependencies = [
  "bindgen",
 ]
