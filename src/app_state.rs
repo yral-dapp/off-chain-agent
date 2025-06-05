@@ -41,6 +41,7 @@ pub struct AppState {
     pub metrics: CfMetricTx,
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
+    pub dedup_index_ctx: Arc<dedup_index::client::DbConnection>,
 }
 
 impl AppState {
@@ -65,6 +66,7 @@ impl AppState {
             metrics: init_metrics(),
             #[cfg(not(feature = "local-bin"))]
             alloydb_client: init_alloydb_client().await,
+            dedup_index_ctx: Arc::new(init_dedup_index_ctx().await),
         }
     }
 
@@ -201,6 +203,15 @@ pub async fn init_nsfw_detect_channel() -> Channel {
 pub async fn init_qstash_client() -> QStashClient {
     let auth_token = env::var("QSTASH_AUTH_TOKEN").expect("QSTASH_AUTH_TOKEN is required");
     QStashClient::new(auth_token.as_str())
+}
+
+pub async fn init_dedup_index_ctx() -> dedup_index::client::DbConnection {
+    dedup_index::client::DbConnection::builder()
+        .with_uri("http://localhost:3000")
+        .with_module_name("dedup-index")
+        .build()
+        .context("Couldn't connect to the db")
+        .unwrap()
 }
 
 async fn init_alloydb_client() -> AlloyDbInstance {

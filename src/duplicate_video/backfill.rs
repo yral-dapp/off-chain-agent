@@ -268,49 +268,5 @@ pub async fn process_single_video(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ProcessVideoRequest>,
 ) -> Result<Json<ProcessVideoResponse>, StatusCode> {
-    // Clean up video_id if it still contains String wrapper
-    let clean_video_id = if req.video_id.starts_with("String(\"") && req.video_id.ends_with("\")") {
-        req.video_id[8..req.video_id.len() - 2].to_string()
-    } else {
-        req.video_id
-    };
-
-    let clean_video_url = format!(
-        "https://customer-2p3jflss4r4hmpnz.cloudflarestream.com/{}/downloads/default.mp4",
-        clean_video_id
-    );
-
-    info!(
-        "Processing video_id [{}] at URL: {}",
-        clean_video_id, clean_video_url
-    );
-
-    let duplication_handler =
-        VideoHashDuplication::new(&state.qstash_client.client, &state.qstash_client.base_url);
-
-    match duplication_handler
-        .process_video_deduplication(
-            &clean_video_id,
-            &clean_video_url,
-            req.publisher_data,
-            move |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
-                // Empty closure - we don't want to continue the pipeline for old videos
-                info!("Skipping GCS upload for backfilled video_id [{}]", vid_id);
-                Box::pin(async { Ok(()) })
-            },
-        )
-        .await
-    {
-        Ok(_) => {
-            info!("Successfully processed video_id [{}]", clean_video_id);
-            Ok(Json(ProcessVideoResponse {
-                message: format!("Successfully processed video {}", clean_video_id),
-                status: "success".to_string(),
-            }))
-        }
-        Err(e) => {
-            error!("Failed to process video_id [{}]: {}", clean_video_id, e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    unimplemented!("i believe this is not needed, but gotta confirm")
 }

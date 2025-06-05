@@ -426,36 +426,6 @@ struct VideoHashIndexingRequest {
 }
 
 #[instrument(skip(state))]
-async fn video_hash_indexing_handler(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<VideoHashIndexingRequest>,
-) -> Result<Response, StatusCode> {
-    log::info!("Processing video hash indexing for URL: {}", req.video_url);
-
-    let publisher_data = VideoPublisherData {
-        canister_id: req.publisher_data.canister_id.clone(),
-        publisher_principal: req.publisher_data.publisher_principal.clone(),
-        post_id: req.publisher_data.post_id,
-    };
-
-    state
-        .qstash_client
-        .publish_video_hash_indexing(&req.video_id, &req.video_url, publisher_data)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to index video hash: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .body("Video hash indexed successfully".into())
-        .unwrap();
-
-    Ok(response)
-}
-
-#[instrument(skip(state))]
 async fn video_deduplication_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VideoHashIndexingRequest>,
@@ -480,6 +450,7 @@ async fn video_deduplication_handler(
 
     if let Err(e) = duplication_handler
         .process_video_deduplication(
+            &state.dedup_index_ctx,
             &req.video_id,
             &req.video_url,
             publisher_data,
