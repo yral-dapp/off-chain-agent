@@ -348,7 +348,7 @@ pub async fn upload_snapshot_to_storj(
     object_id: String,
     snapshot_bytes: Vec<u8>,
 ) -> Result<(), anyhow::Error> {
-    use uplink::{access::Grant, project::options::ListObjects, Project};
+    use uplink::{access::Grant, Project};
 
     let access_grant = Grant::new(&STORJ_BACKUP_CANISTER_ACCESS_GRANT)?;
     let bucket_name = CANISTER_BACKUPS_BUCKET;
@@ -363,24 +363,15 @@ pub async fn upload_snapshot_to_storj(
     upload.write_all(&snapshot_bytes)?;
     upload.commit()?;
 
-    // list objects and delete any objects older than 30 days
-    let mut list_objects_options = ListObjects::with_prefix(&format!("{}/", canister_id))?;
-    list_objects_options.recursive = true;
-    let obj_list = &mut project.list_objects(&bucket_name, Some(&list_objects_options))?;
-    for obj_res in obj_list {
-        let obj = obj_res?;
-        let obj_key = obj.key;
+    // delete object older than 15 days
+    // TODO: change from 15 to 90
+    let fifteen_days_ago = Utc::now() - Duration::days(15);
+    let date_str_fifteen_days_ago = fifteen_days_ago.format("%Y-%m-%d").to_string();
 
-        let date_str = obj_key.split("/").last().unwrap(); // obj_key is in the format of "canister_id/date"
-        let date_str = format!("{}T00:00:00Z", date_str);
-        let obj_date = DateTime::parse_from_rfc3339(&date_str)
-            .map_err(|e| anyhow::anyhow!("Failed to parse date: {}", e))?;
-        let diff = Utc::now().signed_duration_since(obj_date);
-        if diff > Duration::days(30) {
-            project
-                .delete_object(&bucket_name, &obj_key)
-                .map_err(|e| anyhow::anyhow!("Failed to delete object: {}", e))?;
-        }
+    let object_key = format!("{}/{}", canister_id, date_str_fifteen_days_ago);
+
+    if let Err(e) = project.delete_object(&bucket_name, &object_key) {
+        log::warn!("Failed to delete object: {}", e);
     }
 
     Ok(())
