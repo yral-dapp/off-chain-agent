@@ -1,4 +1,12 @@
-use std::{env, io::Write, process::Stdio, sync::Arc};
+use std::{
+    env,
+    io::Write,
+    process::Stdio,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
@@ -80,23 +88,45 @@ pub async fn backup_canisters_job_v2(
     //     })?;
 
     tokio::spawn(async move {
+        let total_canisters = user_canister_list.len();
+        let completed_counter = Arc::new(AtomicUsize::new(0));
+        let failed_counter = Arc::new(AtomicUsize::new(0));
+
+        log::info!("Starting backup for {} canisters", total_canisters);
+
         let futures = user_canister_list.into_iter().map(|canister_id| {
             let agent = agent.clone();
             let date_str = date_str.clone();
+            let completed_counter = completed_counter.clone();
+            let failed_counter = failed_counter.clone();
             let canister_data = CanisterData {
                 canister_id,
                 canister_type: CanisterType::User,
             };
 
             async move {
-                backup_canister_impl(&agent, canister_data, date_str)
-                    .await
-                    .map_err(|e| {
-                        log::error!("Failed to backup user canister: {}", e);
-                        anyhow::anyhow!("Failed to backup user canister: {}", e)
-                    })?;
+                let result = backup_canister_impl(&agent, canister_data, date_str).await;
 
-                Ok(())
+                let current_completed = if result.is_ok() {
+                    completed_counter.fetch_add(1, Ordering::Relaxed) + 1
+                } else {
+                    failed_counter.fetch_add(1, Ordering::Relaxed);
+                    completed_counter.fetch_add(1, Ordering::Relaxed) + 1
+                };
+
+                if current_completed % 500 == 0 {
+                    let failed_count = failed_counter.load(Ordering::Relaxed);
+                    let success_count = current_completed - failed_count;
+                    log::info!(
+                        "Backup progress: {}/{} completed - {} successful, {} failed",
+                        current_completed,
+                        total_canisters,
+                        success_count,
+                        failed_count
+                    );
+                }
+
+                result.map_err(|e| anyhow::anyhow!("Failed to backup user canister: {}", e))
             }
         });
         let results: Vec<Result<(), anyhow::Error>> = futures::stream::iter(futures)
