@@ -3,6 +3,7 @@ use std::{env, io::Write, process::Stdio, sync::Arc};
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
 use chrono::{DateTime, Duration, Utc};
+use futures::StreamExt;
 use http::StatusCode;
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
@@ -64,33 +65,63 @@ pub async fn backup_canisters_job_v2(
             .collect();
     }
 
-    let qstash_client = state.qstash_client.clone();
-    qstash_client
-        .backup_canister_batch(
-            user_canister_list,
-            payload.rate_limit,
-            payload.parallelism,
-            date_str.clone(),
-        )
-        .await
-        .map_err(|e| {
-            log::error!("Failed to backup user canisters: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        })?;
+    // let qstash_client = state.qstash_client.clone();
+    // qstash_client
+    //     .backup_canister_batch(
+    //         user_canister_list,
+    //         payload.rate_limit,
+    //         payload.parallelism,
+    //         date_str.clone(),
+    //     )
+    //     .await
+    //     .map_err(|e| {
+    //         log::error!("Failed to backup user canisters: {}", e);
+    //         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    //     })?;
 
-    log::info!("Successfully sent all jobs to backup user canisters");
+    tokio::spawn(async move {
+        let futures = user_canister_list.into_iter().map(|canister_id| {
+            let agent = agent.clone();
+            let date_str = date_str.clone();
+            let canister_data = CanisterData {
+                canister_id,
+                canister_type: CanisterType::User,
+            };
 
-    // perform backup of PF orch and subnet orchs
-    backup_pf_and_subnet_orchs(&agent, date_str.clone())
-        .await
-        .map_err(|e| {
+            async move {
+                backup_canister_impl(&agent, canister_data, date_str)
+                    .await
+                    .map_err(|e| {
+                        log::error!("Failed to backup user canister: {}", e);
+                        anyhow::anyhow!("Failed to backup user canister: {}", e)
+                    })?;
+
+                Ok(())
+            }
+        });
+        let results: Vec<Result<(), anyhow::Error>> = futures::stream::iter(futures)
+            .buffer_unordered(payload.parallelism as usize)
+            .collect::<Vec<_>>()
+            .await;
+
+        let failed_results = results
+            .iter()
+            .filter(|result| result.is_err())
+            .collect::<Vec<_>>();
+        log::error!(
+            "Failed to backup user canisters: {:?}/{:?}",
+            failed_results.len(),
+            results.len()
+        );
+
+        if let Err(e) = backup_pf_and_subnet_orchs(&agent, date_str.clone()).await {
             log::error!("Failed to backup PF and subnet orchs: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        })?;
+        }
 
-    log::info!("Successfully backed up PF and subnet orchs");
+        log::info!("Successfully backed up PF and subnet orchs");
+    });
 
-    Ok((StatusCode::OK, "Backup successful".to_string()))
+    Ok((StatusCode::OK, "Backup started".to_string()))
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
