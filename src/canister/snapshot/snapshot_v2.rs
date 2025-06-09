@@ -107,24 +107,24 @@ pub async fn backup_canisters_job_v2(
             async move {
                 let result = backup_canister_impl(&agent, canister_data, date_str).await;
 
-                let current_completed = if result.is_ok() {
-                    completed_counter.fetch_add(1, Ordering::Relaxed) + 1
-                } else {
-                    failed_counter.fetch_add(1, Ordering::Relaxed);
-                    completed_counter.fetch_add(1, Ordering::Relaxed) + 1
-                };
+                // let current_completed = if result.is_ok() {
+                //     completed_counter.fetch_add(1, Ordering::Relaxed) + 1
+                // } else {
+                //     failed_counter.fetch_add(1, Ordering::Relaxed);
+                //     completed_counter.fetch_add(1, Ordering::Relaxed) + 1
+                // };
 
-                if current_completed % 500 == 0 {
-                    let failed_count = failed_counter.load(Ordering::Relaxed);
-                    let success_count = current_completed - failed_count;
-                    log::info!(
-                        "Backup progress: {}/{} completed - {} successful, {} failed",
-                        current_completed,
-                        total_canisters,
-                        success_count,
-                        failed_count
-                    );
-                }
+                // if current_completed % 500 == 0 {
+                //     let failed_count = failed_counter.load(Ordering::Relaxed);
+                //     let success_count = current_completed - failed_count;
+                //     log::info!(
+                //         "Backup progress: {}/{} completed - {} successful, {} failed",
+                //         current_completed,
+                //         total_canisters,
+                //         success_count,
+                //         failed_count
+                //     );
+                // }
 
                 result.map_err(|e| anyhow::anyhow!("Failed to backup user canister: {}", e))
             }
@@ -357,12 +357,12 @@ pub async fn get_user_canister_snapshot(
     // );
 
     // clear snapshot
-    let clear_start = std::time::Instant::now();
-    user_canister.clear_snapshot().await.map_err(|e| {
-        log::error!("Failed to clear user canister snapshot: {}", e);
-        anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
-    })?;
-    let clear_duration = clear_start.elapsed();
+    // let clear_start = std::time::Instant::now();
+    // user_canister.clear_snapshot().await.map_err(|e| {
+    //     log::error!("Failed to clear user canister snapshot: {}", e);
+    //     anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
+    // })?;
+    // let clear_duration = clear_start.elapsed();
     // log::info!(
     //     "Clear snapshot for canister {} took: {:?}",
     //     canister_id,
@@ -370,8 +370,13 @@ pub async fn get_user_canister_snapshot(
     // );
 
     let total_duration = start_time.elapsed();
-    log::info!("Total snapshot process for canister {} took: {:?} (save: {:?}, download: {:?}, clear: {:?})", 
-              canister_id, total_duration, save_duration, download_duration, clear_duration);
+    log::info!(
+        "Total snapshot process for canister {} took: {:?} (save: {:?}, download: {:?})",
+        canister_id,
+        total_duration,
+        save_duration,
+        download_duration
+    );
 
     Ok(snapshot_bytes)
 }
