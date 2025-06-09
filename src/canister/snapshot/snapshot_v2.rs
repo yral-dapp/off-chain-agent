@@ -289,22 +289,40 @@ pub async fn get_user_canister_snapshot(
     canister_id: Principal,
     agent: &Agent,
 ) -> Result<Vec<u8>, anyhow::Error> {
+    let start_time = std::time::Instant::now();
+    // log::info!("Starting snapshot process for canister {}", canister_id);
+
     let user_canister = IndividualUserTemplate(canister_id, agent);
 
+    let save_start = std::time::Instant::now();
     let snapshot_size = user_canister.save_snapshot_json_v_2().await.map_err(|e| {
         log::error!("Failed to save user canister snapshot: {}", e);
         anyhow::anyhow!("Failed to save user canister snapshot: {}", e)
     })?;
+    let save_duration = save_start.elapsed();
+    // log::info!(
+    //     "Save snapshot for canister {} took: {:?}, size: {} bytes",
+    //     canister_id,
+    //     save_duration,
+    //     snapshot_size
+    // );
 
     // delay 1 second
     // tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     // Download snapshot
-
+    let download_start = std::time::Instant::now();
     let mut snapshot_bytes = vec![];
     let chunk_size = 1000 * 1000;
     let num_iters = (snapshot_size as f32 / chunk_size as f32).ceil() as u32;
+    // log::info!(
+    //     "Starting download of {} chunks for canister {}",
+    //     num_iters,
+    //     canister_id
+    // );
+
     for i in 0..num_iters {
+        // let chunk_start = std::time::Instant::now();
         let start = i * chunk_size;
         let mut end = (i + 1) * chunk_size;
         if end > snapshot_size {
@@ -320,13 +338,40 @@ pub async fn get_user_canister_snapshot(
             })?;
 
         snapshot_bytes.extend(res);
+        // let chunk_duration = chunk_start.elapsed();
+        // if i % 10 == 0 || i == num_iters - 1 {
+        //     log::info!(
+        //         "Downloaded chunk {}/{} for canister {} in {:?}",
+        //         i + 1,
+        //         num_iters,
+        //         canister_id,
+        //         chunk_duration
+        //     );
+        // }
     }
+    let download_duration = download_start.elapsed();
+    // log::info!(
+    //     "Download complete for canister {} took: {:?}",
+    //     canister_id,
+    //     download_duration
+    // );
 
     // clear snapshot
+    let clear_start = std::time::Instant::now();
     user_canister.clear_snapshot().await.map_err(|e| {
         log::error!("Failed to clear user canister snapshot: {}", e);
         anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
     })?;
+    let clear_duration = clear_start.elapsed();
+    // log::info!(
+    //     "Clear snapshot for canister {} took: {:?}",
+    //     canister_id,
+    //     clear_duration
+    // );
+
+    let total_duration = start_time.elapsed();
+    log::info!("Total snapshot process for canister {} took: {:?} (save: {:?}, download: {:?}, clear: {:?})", 
+              canister_id, total_duration, save_duration, download_duration, clear_duration);
 
     Ok(snapshot_bytes)
 }
