@@ -107,24 +107,24 @@ pub async fn backup_canisters_job_v2(
             async move {
                 let result = backup_canister_impl(&agent, canister_data, date_str).await;
 
-                // let current_completed = if result.is_ok() {
-                //     completed_counter.fetch_add(1, Ordering::Relaxed) + 1
-                // } else {
-                //     failed_counter.fetch_add(1, Ordering::Relaxed);
-                //     completed_counter.fetch_add(1, Ordering::Relaxed) + 1
-                // };
+                let current_completed = if result.is_ok() {
+                    completed_counter.fetch_add(1, Ordering::Relaxed) + 1
+                } else {
+                    failed_counter.fetch_add(1, Ordering::Relaxed);
+                    completed_counter.fetch_add(1, Ordering::Relaxed) + 1
+                };
 
-                // if current_completed % 500 == 0 {
-                //     let failed_count = failed_counter.load(Ordering::Relaxed);
-                //     let success_count = current_completed - failed_count;
-                //     log::info!(
-                //         "Backup progress: {}/{} completed - {} successful, {} failed",
-                //         current_completed,
-                //         total_canisters,
-                //         success_count,
-                //         failed_count
-                //     );
-                // }
+                if current_completed % 500 == 0 {
+                    let failed_count = failed_counter.load(Ordering::Relaxed);
+                    let success_count = current_completed - failed_count;
+                    log::info!(
+                        "Backup progress: {}/{} completed - {} successful, {} failed",
+                        current_completed,
+                        total_canisters,
+                        success_count,
+                        failed_count
+                    );
+                }
 
                 result.map_err(|e| anyhow::anyhow!("Failed to backup user canister: {}", e))
             }
@@ -238,31 +238,31 @@ pub async fn backup_canister_impl(
         snapshot_duration
     );
 
-    let upload_start = std::time::Instant::now();
-    upload_snapshot_to_storj(canister_data.canister_id, date_str, snapshot_bytes)
-        .await
-        .map_err(|e| {
-            log::error!(
-                "Failed to upload user canister snapshot to storj for canister: {} error: {}",
-                canister_id,
-                e
-            );
-            anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
-        })?;
-    let upload_duration = upload_start.elapsed();
-    log::info!(
-        "Upload to Storj for canister {} took: {:?}",
-        canister_id,
-        upload_duration
-    );
+    // let upload_start = std::time::Instant::now();
+    // upload_snapshot_to_storj(canister_data.canister_id, date_str, snapshot_bytes)
+    //     .await
+    //     .map_err(|e| {
+    //         log::error!(
+    //             "Failed to upload user canister snapshot to storj for canister: {} error: {}",
+    //             canister_id,
+    //             e
+    //         );
+    //         anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
+    //     })?;
+    // let upload_duration = upload_start.elapsed();
+    // log::info!(
+    //     "Upload to Storj for canister {} took: {:?}",
+    //     canister_id,
+    //     upload_duration
+    // );
 
     let total_duration = start_time.elapsed();
     log::info!(
-        "Total backup time for canister {} took: {:?} = {:?} + {:?}",
+        "Total backup time for canister {} took: {:?} = {:?}",
         canister_id,
         total_duration,
         snapshot_duration,
-        upload_duration
+        // upload_duration
     );
 
     Ok(())
