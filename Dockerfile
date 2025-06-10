@@ -9,6 +9,7 @@ RUN apt-get update \
     ffmpeg \
     golang-go \
     libc6 \
+    unzip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
