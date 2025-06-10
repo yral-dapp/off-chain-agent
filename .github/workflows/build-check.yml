@@ -26,7 +26,7 @@ jobs:
       - name: Cache and Install prereqs
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: protobuf-compiler build-essential
+          packages: protobuf-compiler
           version: 1.0 # cache version, for manual invalidation
 
       # - name: Setup Go

@@ -290,8 +290,11 @@ pub async fn get_user_canister_snapshot(
     })?;
     let save_duration = save_start.elapsed();
 
-    // delay 1 second
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    // delay 2-4 seconds with jitter
+    let base_delay = 2000; // 2 second base in milliseconds
+    let jitter = rand::random::<u64>() % 2000; // 0-2000ms jitter
+    let total_delay = base_delay + jitter; // 2-4 seconds total
+    tokio::time::sleep(std::time::Duration::from_millis(total_delay)).await;
 
     // Download snapshot
     let download_start = std::time::Instant::now();
