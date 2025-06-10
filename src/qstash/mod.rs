@@ -554,7 +554,6 @@ pub fn qstash_router<S>(app_state: Arc<AppState>) -> Router<S> {
             post(backup_canisters_job_v2),
         )
         .route("/backup_user_canister", post(backup_user_canister))
-        // .route("/snapshot_alert_job", post(snapshot_alert_job))
         .route("/start_hotornot_job", post(start_hotornot_job))
         .layer(ServiceBuilder::new().layer(middleware::from_fn_with_state(
             app_state.qstash.clone(),

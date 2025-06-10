@@ -1,40 +1,35 @@
-use std::{
-    env,
-    io::Write,
-    process::Stdio,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 use axum::{extract::State, response::IntoResponse, Json};
 use candid::Principal;
-use chrono::{DateTime, Duration, Utc};
+use chrono::Utc;
 use futures::StreamExt;
 use http::StatusCode;
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
-use tokio::{io::AsyncWriteExt, process::Command};
 use tracing::instrument;
 
-use yral_canisters_client::{
-    ic::PLATFORM_ORCHESTRATOR_ID, individual_user_template::IndividualUserTemplate,
-    platform_orchestrator::PlatformOrchestrator, user_index::UserIndex,
-};
+use yral_canisters_client::ic::PLATFORM_ORCHESTRATOR_ID;
 
 use crate::{
     app_state::AppState,
-    canister::utils::{get_subnet_orch_ids, get_user_canisters_list_v2},
-    consts::{CANISTER_BACKUPS_BUCKET, STORJ_BACKUP_CANISTER_ACCESS_GRANT},
+    canister::snapshot::{
+        alert::snapshot_alert_job_impl,
+        download::get_canister_snapshot,
+        upload::upload_snapshot_to_storj_v2,
+        utils::{get_user_canister_list_for_backup, insert_canister_backup_date_into_redis},
+    },
+    types::RedisPool,
 };
 
-use super::{CanisterData, CanisterType};
+use super::{utils::get_subnet_orch_ids_list_for_backup, CanisterData, CanisterType};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupCanistersJobPayload {
     pub num_canisters: u32,
-    pub rate_limit: u32,
     pub parallelism: u32,
 }
 
@@ -52,19 +47,12 @@ pub async fn backup_canisters_job_v2(
     );
 
     let agent = state.agent.clone();
+    let canister_backup_redis_pool = state.canister_backup_redis_pool.clone();
 
-    // send user canister jobs to qstash
-    log::info!("Sending user canister jobs to qstash");
-
-    let mut user_canister_list = get_user_canisters_list_v2(&agent).await.map_err(|e| {
-        log::error!("Failed to get user canisters list: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-    })?;
-
-    log::info!(
-        "Sending user canister jobs to qstash: {:?}",
-        user_canister_list.len()
-    );
+    let mut user_canister_list =
+        get_user_canister_list_for_backup(&agent, &canister_backup_redis_pool, date_str.clone())
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if payload.num_canisters > 0 {
         user_canister_list = user_canister_list
@@ -73,85 +61,111 @@ pub async fn backup_canisters_job_v2(
             .collect();
     }
 
-    // let qstash_client = state.qstash_client.clone();
-    // qstash_client
-    //     .backup_canister_batch(
-    //         user_canister_list,
-    //         payload.rate_limit,
-    //         payload.parallelism,
-    //         date_str.clone(),
-    //     )
-    //     .await
-    //     .map_err(|e| {
-    //         log::error!("Failed to backup user canisters: {}", e);
-    //         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-    //     })?;
-
     tokio::spawn(async move {
-        let total_canisters = user_canister_list.len();
-        let completed_counter = Arc::new(AtomicUsize::new(0));
-        let failed_counter = Arc::new(AtomicUsize::new(0));
+        let _failed_canisters_ids = backup_user_canisters_bulk(
+            &agent,
+            user_canister_list,
+            &canister_backup_redis_pool,
+            date_str.clone(),
+            payload.parallelism,
+        )
+        .await;
 
-        log::info!("Starting backup for {} canisters", total_canisters);
-
-        let futures = user_canister_list.into_iter().map(|canister_id| {
-            let agent = agent.clone();
-            let date_str = date_str.clone();
-            let completed_counter = completed_counter.clone();
-            let failed_counter = failed_counter.clone();
-            let canister_data = CanisterData {
-                canister_id,
-                canister_type: CanisterType::User,
-            };
-
-            async move {
-                let result = backup_canister_impl(&agent, canister_data, date_str).await;
-
-                let current_completed = if result.is_ok() {
-                    completed_counter.fetch_add(1, Ordering::Relaxed) + 1
-                } else {
-                    failed_counter.fetch_add(1, Ordering::Relaxed);
-                    completed_counter.fetch_add(1, Ordering::Relaxed) + 1
-                };
-
-                if current_completed % 500 == 0 {
-                    let failed_count = failed_counter.load(Ordering::Relaxed);
-                    let success_count = current_completed - failed_count;
-                    log::info!(
-                        "Backup progress: {}/{} completed - {} successful, {} failed",
-                        current_completed,
-                        total_canisters,
-                        success_count,
-                        failed_count
-                    );
-                }
-
-                result.map_err(|e| anyhow::anyhow!("Failed to backup user canister: {}", e))
-            }
-        });
-        let results: Vec<Result<(), anyhow::Error>> = futures::stream::iter(futures)
-            .buffer_unordered(payload.parallelism as usize)
-            .collect::<Vec<_>>()
-            .await;
-
-        let failed_results = results
-            .iter()
-            .filter(|result| result.is_err())
-            .collect::<Vec<_>>();
-        log::error!(
-            "Failed to backup user canisters: {:?}/{:?}",
-            failed_results.len(),
-            results.len()
-        );
-
-        if let Err(e) = backup_pf_and_subnet_orchs(&agent, date_str.clone()).await {
+        if let Err(e) =
+            backup_pf_and_subnet_orchs(&agent, &canister_backup_redis_pool, date_str.clone()).await
+        {
             log::error!("Failed to backup PF and subnet orchs: {}", e);
         }
 
-        log::info!("Successfully backed up PF and subnet orchs");
+        log::info!("Successfully backed up PF and subnet orchs. Starting snapshot alert job");
+
+        if let Err(e) =
+            snapshot_alert_job_impl(&agent, &canister_backup_redis_pool, date_str.clone()).await
+        {
+            log::error!("Failed to run snapshot alert job: {}", e);
+        }
     });
 
     Ok((StatusCode::OK, "Backup started".to_string()))
+}
+
+#[instrument(skip(agent, user_canister_list, canister_backup_redis_pool))]
+pub async fn backup_user_canisters_bulk(
+    agent: &Agent,
+    user_canister_list: Vec<Principal>,
+    canister_backup_redis_pool: &RedisPool,
+    date_str: String,
+    parallelism: u32,
+) -> Result<Vec<Principal>, anyhow::Error> {
+    let total_canisters = user_canister_list.len();
+    let completed_counter = Arc::new(AtomicUsize::new(0));
+    let failed_counter = Arc::new(AtomicUsize::new(0));
+
+    log::info!("Starting backup for {} canisters", total_canisters);
+
+    let futures = user_canister_list.into_iter().map(|canister_id| {
+        let agent = agent.clone();
+        let date_str = date_str.clone();
+        let completed_counter = completed_counter.clone();
+        let failed_counter = failed_counter.clone();
+        let canister_data = CanisterData {
+            canister_id,
+            canister_type: CanisterType::User,
+        };
+        let canister_backup_redis_pool = canister_backup_redis_pool.clone();
+
+        async move {
+            let result = backup_canister_impl(
+                &agent,
+                &canister_backup_redis_pool,
+                canister_data.clone(),
+                date_str,
+            )
+            .await;
+
+            let current_completed = if result.is_ok() {
+                completed_counter.fetch_add(1, Ordering::Relaxed) + 1
+            } else {
+                failed_counter.fetch_add(1, Ordering::Relaxed);
+                completed_counter.fetch_add(1, Ordering::Relaxed) + 1
+            };
+
+            if current_completed % 500 == 0 {
+                let failed_count = failed_counter.load(Ordering::Relaxed);
+                let success_count = current_completed - failed_count;
+                log::info!(
+                    "Backup progress: {}/{} completed - {} successful, {} failed",
+                    current_completed,
+                    total_canisters,
+                    success_count,
+                    failed_count
+                );
+            }
+
+            Some((
+                canister_data.canister_id,
+                result.map_err(|e| anyhow::anyhow!("Failed to backup user canister: {}", e)),
+            ))
+        }
+    });
+    let results: Vec<Option<(Principal, Result<(), anyhow::Error>)>> =
+        futures::stream::iter(futures)
+            .buffer_unordered(parallelism as usize)
+            .collect::<Vec<_>>()
+            .await;
+
+    let failed_canisters_ids = results
+        .iter()
+        .filter(|result| result.is_some())
+        .map(|result| result.as_ref().unwrap().0)
+        .collect::<Vec<_>>();
+    log::error!(
+        "Failed to backup user canisters: {:?}/{:?}",
+        failed_canisters_ids.len(),
+        results.len()
+    );
+
+    Ok(failed_canisters_ids)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -166,15 +180,21 @@ pub async fn backup_user_canister(
     Json(payload): Json<BackupUserCanisterPayload>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let agent = state.agent.clone();
+    let canister_backup_redis_pool = state.canister_backup_redis_pool.clone();
 
     let canister_data = CanisterData {
         canister_id: payload.canister_id,
         canister_type: CanisterType::User,
     };
 
-    backup_canister_impl(&agent, canister_data, payload.date_str)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    backup_canister_impl(
+        &agent,
+        &canister_backup_redis_pool,
+        canister_data,
+        payload.date_str,
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok((StatusCode::OK, "Backup successful".to_string()))
 }
@@ -182,6 +202,7 @@ pub async fn backup_user_canister(
 #[instrument(skip(agent))]
 pub async fn backup_pf_and_subnet_orchs(
     agent: &Agent,
+    canister_backup_redis_pool: &RedisPool,
     date_str: String,
 ) -> Result<(), anyhow::Error> {
     let pf_orch_canister_data = CanisterData {
@@ -189,11 +210,20 @@ pub async fn backup_pf_and_subnet_orchs(
         canister_type: CanisterType::PlatformOrch,
     };
 
-    if let Err(e) = backup_canister_impl(agent, pf_orch_canister_data, date_str.clone()).await {
+    if let Err(e) = backup_canister_impl(
+        agent,
+        canister_backup_redis_pool,
+        pf_orch_canister_data,
+        date_str.clone(),
+    )
+    .await
+    {
         log::error!("Failed to backup platform orchestrator: {}", e);
     }
 
-    let subnet_orch_ids = get_subnet_orch_ids(agent).await?;
+    let subnet_orch_ids =
+        get_subnet_orch_ids_list_for_backup(agent, canister_backup_redis_pool, date_str.clone())
+            .await?;
 
     for subnet_orch_id in subnet_orch_ids {
         let subnet_orch_canister_data = CanisterData {
@@ -201,8 +231,13 @@ pub async fn backup_pf_and_subnet_orchs(
             canister_type: CanisterType::SubnetOrch,
         };
 
-        if let Err(e) =
-            backup_canister_impl(agent, subnet_orch_canister_data, date_str.clone()).await
+        if let Err(e) = backup_canister_impl(
+            agent,
+            canister_backup_redis_pool,
+            subnet_orch_canister_data,
+            date_str.clone(),
+        )
+        .await
         {
             log::error!("Failed to backup subnet orchestrator: {}", e);
         }
@@ -214,13 +249,14 @@ pub async fn backup_pf_and_subnet_orchs(
 #[instrument(skip(agent))]
 pub async fn backup_canister_impl(
     agent: &Agent,
+    canister_backup_redis_pool: &RedisPool,
     canister_data: CanisterData,
     date_str: String,
 ) -> Result<(), anyhow::Error> {
-    let start_time = std::time::Instant::now();
+    // let start_time = std::time::Instant::now();
     let canister_id = canister_data.canister_id.to_string();
 
-    let snapshot_start = std::time::Instant::now();
+    // let snapshot_start = std::time::Instant::now();
     let snapshot_bytes = get_canister_snapshot(canister_data.clone(), agent)
         .await
         .map_err(|e| {
@@ -231,10 +267,10 @@ pub async fn backup_canister_impl(
             );
             anyhow::anyhow!("get_canister_snapshot error: {}", e)
         })?;
-    let snapshot_duration = snapshot_start.elapsed();
+    // let snapshot_duration = snapshot_start.elapsed();
 
-    let upload_start = std::time::Instant::now();
-    upload_snapshot_to_storj_v2(canister_data.canister_id, date_str, snapshot_bytes)
+    // let upload_start = std::time::Instant::now();
+    upload_snapshot_to_storj_v2(canister_data.canister_id, date_str.clone(), snapshot_bytes)
         .await
         .map_err(|e| {
             log::error!(
@@ -244,287 +280,27 @@ pub async fn backup_canister_impl(
             );
             anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
         })?;
-    let upload_duration = upload_start.elapsed();
+    // let upload_duration = upload_start.elapsed();
 
-    let total_duration = start_time.elapsed();
-    log::info!(
-        "Total backup time for canister {} took: {:?} = {:?} + {:?}",
-        canister_id,
-        total_duration,
-        snapshot_duration,
-        upload_duration
-    );
+    // let total_duration = start_time.elapsed();
+    // log::info!(
+    //     "Total backup time for canister {} took: {:?} = {:?} + {:?}",
+    //     canister_id,
+    //     total_duration,
+    //     snapshot_duration,
+    //     upload_duration
+    // );
 
-    Ok(())
-}
-
-#[instrument(skip(agent))]
-pub async fn get_canister_snapshot(
-    canister_data: CanisterData,
-    agent: &Agent,
-) -> Result<Vec<u8>, anyhow::Error> {
-    match canister_data.canister_type {
-        CanisterType::User => get_user_canister_snapshot(canister_data.canister_id, agent).await,
-        CanisterType::SubnetOrch => {
-            get_subnet_orchestrator_snapshot(canister_data.canister_id, agent).await
-        }
-        CanisterType::PlatformOrch => {
-            get_platform_orchestrator_snapshot(canister_data.canister_id, agent).await
-        }
+    // insert into redis canister_backup_date:date_str list
+    if let Err(e) = insert_canister_backup_date_into_redis(
+        canister_backup_redis_pool,
+        date_str.clone(),
+        canister_data,
+    )
+    .await
+    {
+        log::error!("Failed to insert into redis: {}", e);
     }
-}
-
-#[instrument(skip(agent))]
-pub async fn get_user_canister_snapshot(
-    canister_id: Principal,
-    agent: &Agent,
-) -> Result<Vec<u8>, anyhow::Error> {
-    let start_time = std::time::Instant::now();
-
-    let user_canister = IndividualUserTemplate(canister_id, agent);
-
-    let save_start = std::time::Instant::now();
-    let snapshot_size = user_canister.save_snapshot_json_v_2().await.map_err(|e| {
-        log::error!("Failed to save user canister snapshot: {}", e);
-        anyhow::anyhow!("Failed to save user canister snapshot: {}", e)
-    })?;
-    let save_duration = save_start.elapsed();
-
-    // delay 2-4 seconds with jitter
-    let base_delay = 2000; // 2 second base in milliseconds
-    let jitter = rand::random::<u64>() % 2000; // 0-2000ms jitter
-    let total_delay = base_delay + jitter; // 2-4 seconds total
-    tokio::time::sleep(std::time::Duration::from_millis(total_delay)).await;
-
-    // Download snapshot
-    let download_start = std::time::Instant::now();
-    let mut snapshot_bytes = vec![];
-    let chunk_size = 1000 * 1000;
-    let num_iters = (snapshot_size as f32 / chunk_size as f32).ceil() as u32;
-
-    for i in 0..num_iters {
-        let start = i * chunk_size;
-        let mut end = (i + 1) * chunk_size;
-        if end > snapshot_size {
-            end = snapshot_size;
-        }
-
-        let res = user_canister
-            .download_snapshot(start as u64, (end - start) as u64)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to download user canister snapshot: {}", e);
-                anyhow::anyhow!("Failed to download user canister snapshot: {}", e)
-            })?;
-
-        snapshot_bytes.extend(res);
-    }
-    let download_duration = download_start.elapsed();
-
-    // clear snapshot
-    let clear_start = std::time::Instant::now();
-    user_canister.clear_snapshot().await.map_err(|e| {
-        log::error!("Failed to clear user canister snapshot: {}", e);
-        anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
-    })?;
-    let clear_duration = clear_start.elapsed();
-
-    let total_duration = start_time.elapsed();
-    log::info!(
-        "Total snapshot process for canister {} took: {:?} (save: {:?}, download: {:?}, clear: {:?})",
-        canister_id,
-        total_duration,
-        save_duration,
-        download_duration,
-        clear_duration
-    );
-
-    Ok(snapshot_bytes)
-}
-
-#[instrument(skip(agent))]
-pub async fn get_subnet_orchestrator_snapshot(
-    canister_id: Principal,
-    agent: &Agent,
-) -> Result<Vec<u8>, anyhow::Error> {
-    let subnet_orch = UserIndex(canister_id, agent);
-
-    let snapshot_size = subnet_orch.save_snapshot_json().await.map_err(|e| {
-        log::error!("Failed to save subnet orchestrator snapshot: {}", e);
-        anyhow::anyhow!("Failed to save subnet orchestrator snapshot: {}", e)
-    })?;
-
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-
-    // Download snapshot
-
-    let mut snapshot_bytes = vec![];
-    let chunk_size = 1000 * 1000;
-    let num_iters = (snapshot_size as f32 / chunk_size as f32).ceil() as u32;
-    for i in 0..num_iters {
-        let start = i * chunk_size;
-        let mut end = (i + 1) * chunk_size;
-        if end > snapshot_size {
-            end = snapshot_size;
-        }
-
-        let res = subnet_orch
-            .download_snapshot(start as u64, (end - start) as u64)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to download subnet orchestrator snapshot: {}", e);
-                anyhow::anyhow!("Failed to download subnet orchestrator snapshot: {}", e)
-            })?;
-
-        snapshot_bytes.extend(res);
-    }
-
-    // clear snapshot
-    subnet_orch.clear_snapshot().await.map_err(|e| {
-        log::error!("Failed to clear subnet orchestrator snapshot: {}", e);
-        anyhow::anyhow!("Failed to clear subnet orchestrator snapshot: {}", e)
-    })?;
-
-    Ok(snapshot_bytes)
-}
-
-#[instrument(skip(agent))]
-pub async fn get_platform_orchestrator_snapshot(
-    canister_id: Principal,
-    agent: &Agent,
-) -> Result<Vec<u8>, anyhow::Error> {
-    let platform_orchestrator = PlatformOrchestrator(canister_id, agent);
-
-    let snapshot_size = platform_orchestrator
-        .save_snapshot_json()
-        .await
-        .map_err(|e| {
-            log::error!("Failed to save platform orchestrator snapshot: {}", e);
-            anyhow::anyhow!("Failed to save platform orchestrator snapshot: {}", e)
-        })?;
-
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-
-    // Download snapshot
-
-    let mut snapshot_bytes = vec![];
-    let chunk_size = 1000 * 1000;
-    let num_iters = (snapshot_size as f32 / chunk_size as f32).ceil() as u32;
-    for i in 0..num_iters {
-        let start = i * chunk_size;
-        let mut end = (i + 1) * chunk_size;
-        if end > snapshot_size {
-            end = snapshot_size;
-        }
-
-        let res = platform_orchestrator
-            .download_snapshot(start as u64, (end - start) as u64)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to download platform orchestrator snapshot: {}", e);
-                anyhow::anyhow!("Failed to download platform orchestrator snapshot: {}", e)
-            })?;
-
-        snapshot_bytes.extend(res);
-    }
-
-    // clear snapshot
-    platform_orchestrator.clear_snapshot().await.map_err(|e| {
-        log::error!("Failed to clear platform orchestrator snapshot: {}", e);
-        anyhow::anyhow!("Failed to clear platform orchestrator snapshot: {}", e)
-    })?;
-
-    Ok(snapshot_bytes)
-}
-
-// #[instrument(skip(snapshot_bytes))]
-// #[cfg(feature = "use-uplink")]
-// pub async fn upload_snapshot_to_storj(
-//     canister_id: Principal,
-//     object_id: String,
-//     snapshot_bytes: Vec<u8>,
-// ) -> Result<(), anyhow::Error> {
-//     use uplink::{access::Grant, Project};
-
-//     let access_grant = Grant::new(&STORJ_BACKUP_CANISTER_ACCESS_GRANT)?;
-//     let bucket_name = CANISTER_BACKUPS_BUCKET;
-//     let project = &mut Project::open(&access_grant);
-//     let (_bucket, _ok) = project.create_bucket(&bucket_name).expect("create bucket");
-
-//     let upload = &mut project.upload_object(
-//         &bucket_name,
-//         &format!("{}/{}", canister_id, object_id),
-//         None,
-//     )?;
-//     upload.write_all(&snapshot_bytes)?;
-//     upload.commit()?;
-
-//     // delete object older than 15 days
-//     // TODO: change from 15 to 90
-//     let fifteen_days_ago = Utc::now() - Duration::days(15);
-//     let date_str_fifteen_days_ago = fifteen_days_ago.format("%Y-%m-%d").to_string();
-
-//     let object_key = format!("{}/{}", canister_id, date_str_fifteen_days_ago);
-
-//     if let Err(e) = project.delete_object(&bucket_name, &object_key) {
-//         log::warn!("Failed to delete object: {}", e);
-//     }
-
-//     Ok(())
-// }
-
-// #[cfg(not(feature = "use-uplink"))]
-// pub async fn upload_snapshot_to_storj(
-//     canister_id: Principal,
-//     object_id: String,
-//     snapshot_bytes: Vec<u8>,
-// ) -> Result<(), anyhow::Error> {
-//     log::warn!("Uplink is not enabled, skipping upload to storj");
-//     Ok(())
-// }
-
-pub async fn upload_snapshot_to_storj_v2(
-    canister_id: Principal,
-    object_id: String,
-    snapshot_bytes: Vec<u8>,
-) -> Result<(), anyhow::Error> {
-    // use uplink::{access::Grant, Project};
-
-    let access_grant = &STORJ_BACKUP_CANISTER_ACCESS_GRANT.to_string();
-    let bucket_name = CANISTER_BACKUPS_BUCKET;
-    let dest = format!("sj://{bucket_name}/{canister_id}/{object_id}");
-
-    let mut child = Command::new("uplink")
-        .args([
-            "cp",
-            "--interactive=false",
-            "--analytics=false",
-            "--progress=false",
-            "--access",
-            access_grant,
-            "-",
-            dest.as_str(), // from stdin to dest
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .spawn()?;
-
-    let mut pipe = child.stdin.take().expect("Stdin pipe to be opened for us");
-
-    pipe.write_all(&snapshot_bytes).await?;
-
-    // // delete object older than 15 days
-    // // TODO: change from 15 to 90
-    let fifteen_days_ago = Utc::now() - Duration::days(15);
-    let date_str_fifteen_days_ago = fifteen_days_ago.format("%Y-%m-%d").to_string();
-
-    let to_delete_dest = format!("sj://{bucket_name}/{canister_id}/{date_str_fifteen_days_ago}");
-
-    let mut child = Command::new("uplink")
-        .args(["rm", "--access", access_grant, to_delete_dest.as_str()])
-        .spawn()?;
-
-    child.wait().await?;
 
     Ok(())
 }

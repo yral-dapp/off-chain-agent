@@ -1,205 +1,61 @@
-use std::{env, io::Write, process::Stdio, sync::Arc};
-
-use axum::{extract::State, response::IntoResponse, Json};
-use candid::Principal;
-use chrono::{DateTime, Duration, Utc};
 use futures::StreamExt;
-use http::StatusCode;
 use ic_agent::Agent;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::{collections::HashMap, env};
 use tracing::instrument;
 
-use yral_canisters_client::ic::PLATFORM_ORCHESTRATOR_ID;
-
 use crate::{
-    app_state::AppState,
-    canister::utils::{get_subnet_orch_ids, get_user_canisters_list_v2},
-    consts::{CANISTER_BACKUPS_BUCKET, STORJ_BACKUP_CANISTER_ACCESS_GRANT},
+    canister::snapshot::utils::{
+        get_platform_orch_ids_list_for_backup, get_subnet_orch_ids_list_for_backup,
+        get_user_canister_list_for_backup,
+    },
+    types::RedisPool,
 };
 
 use super::{snapshot_v2::backup_canister_impl, CanisterData, CanisterType};
 
-// API for the snapshot alert job which calls the impl function
-
-#[instrument(skip(state))]
-pub async fn snapshot_alert_job(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let agent = state.agent.clone();
-    snapshot_alert_job_impl(&agent)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
-}
-
 #[instrument(skip(agent))]
-#[cfg(feature = "use-uplink")]
-pub async fn snapshot_alert_job_impl(agent: &Agent) -> Result<(), anyhow::Error> {
-    use std::str::FromStr;
-    use uplink::{access::Grant, project::options::ListObjects, Project};
-
+pub async fn snapshot_alert_job_impl(
+    agent: &Agent,
+    redis_pool: &RedisPool,
+    date_str: String,
+) -> Result<(), anyhow::Error> {
     log::info!("Starting snapshot alert job");
-
-    // Calculate backup_dates_map within a separate block to drop non-Send types
-    let backup_dates_map: HashMap<Principal, Vec<DateTime<Utc>>> = {
-        let access_grant = Grant::new(&STORJ_BACKUP_CANISTER_ACCESS_GRANT)?;
-        let bucket_name = CANISTER_BACKUPS_BUCKET;
-        let project = &mut Project::open(&access_grant);
-        let (_bucket, _ok) = project
-            .create_bucket(&bucket_name)
-            .map_err(|e| anyhow::anyhow!("Failed to create/open bucket: {}", e))?;
-
-        let mut list_objects_options = <ListObjects as std::default::Default>::default();
-        list_objects_options.recursive = true; // Ensure we get all objects, not just top-level prefixes
-        let object_list = &mut project.list_objects(&bucket_name, Some(&list_objects_options))?;
-
-        let mut map_in_scope: HashMap<Principal, Vec<DateTime<Utc>>> = HashMap::new();
-
-        log::info!("Processing backup objects from Storj...");
-        for obj_res in object_list {
-            match obj_res {
-                Ok(obj) => {
-                    if obj.is_prefix {
-                        // Skip prefixes/directories
-                        continue;
-                    }
-                    let parts: Vec<&str> = obj.key.split('/').collect();
-                    if parts.len() == 2 {
-                        let canister_id_str = parts[0];
-                        let date_str = parts[1];
-
-                        match Principal::from_text(canister_id_str) {
-                            Ok(canister_id) => {
-                                // Append time and timezone for parsing
-                                let datetime_str = format!("{}T00:00:00Z", date_str);
-                                match DateTime::parse_from_rfc3339(&datetime_str) {
-                                    Ok(obj_date) => {
-                                        map_in_scope // Use the map inside the scope
-                                            .entry(canister_id)
-                                            .or_default()
-                                            .push(obj_date.with_timezone(&Utc));
-                                    }
-                                    Err(e) => {
-                                        log::warn!(
-                                            "Failed to parse date from key '{}': {}",
-                                            obj.key,
-                                            e
-                                        );
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                log::warn!(
-                                    "Failed to parse Principal from key '{}': {}",
-                                    obj.key,
-                                    e
-                                );
-                            }
-                        }
-                    } else {
-                        log::warn!("Unexpected object key format: {}", obj.key);
-                    }
-                }
-                Err(e) => {
-                    log::error!("Error listing object: {}", e);
-                }
-            }
-        }
-        log::info!(
-            "Finished processing Storj objects. Found backups for {} canisters.",
-            map_in_scope.len() // Use the map inside the scope
-        );
-
-        // Sort dates for each canister
-        for dates in map_in_scope.values_mut() {
-            // Use the map inside the scope
-            dates.sort_unstable(); // Use unstable sort as order of equal dates doesn't matter
-        }
-
-        map_in_scope
-    };
 
     // Get all expected canisters
     log::info!("Fetching canister lists...");
-    let mut all_canisters: HashSet<Principal> = HashSet::new();
-    let mut all_subnet_orch_ids: HashSet<Principal> = HashSet::new();
+    let mut canisters_backups = Vec::new();
 
-    // Add user canisters
-    match get_user_canisters_list_v2(agent).await {
-        Ok(user_canisters) => {
-            log::info!("Found {} user canisters.", user_canisters.len());
-            all_canisters.extend(user_canisters);
-        }
-        Err(e) => {
-            log::error!("Failed to get user canisters list: {}", e);
-            return Err(anyhow::anyhow!("Failed to get user canisters list: {}", e));
-        }
+    let user_canisters_left_for_backup =
+        get_user_canister_list_for_backup(agent, redis_pool, date_str.clone()).await?;
+    for canister_id in user_canisters_left_for_backup {
+        let canister_data = CanisterData {
+            canister_id,
+            canister_type: CanisterType::User,
+        };
+        canisters_backups.push((canister_data, date_str.clone()));
     }
 
     // Add subnet orchestrators
-    match get_subnet_orch_ids(agent).await {
-        Ok(subnet_orch_ids) => {
-            log::info!("Found {} subnet orchestrators.", subnet_orch_ids.len());
-            all_canisters.extend(subnet_orch_ids.clone());
-            all_subnet_orch_ids.extend(subnet_orch_ids);
-        }
-        Err(e) => {
-            log::error!("Failed to get subnet orchestrator IDs: {}", e);
-            return Err(anyhow::anyhow!(
-                "Failed to get subnet orchestrator IDs: {}",
-                e
-            ));
-        }
-    }
-
-    // Add platform orchestrator
-    all_canisters.insert(PLATFORM_ORCHESTRATOR_ID);
-    log::info!(
-        "Total expected canisters (including Platform Orchestrator): {}",
-        all_canisters.len()
-    );
-
-    // Identify canisters needing alerts
-    let mut canisters_backups: Vec<(CanisterData, String)> = Vec::new();
-    let now = Utc::now();
-    let alert_threshold = Duration::days(4);
-
-    log::info!("Checking backup status for each canister...");
-    for canister_id in all_canisters {
-        // if canister_id is in all_subnet_orch_ids, then it's a subnet orchestrator
-        let canister_type = if all_subnet_orch_ids.contains(&canister_id) {
-            CanisterType::SubnetOrch
-        } else if canister_id == PLATFORM_ORCHESTRATOR_ID {
-            CanisterType::PlatformOrch
-        } else {
-            CanisterType::User
-        };
-
+    let subnet_orch_ids =
+        get_subnet_orch_ids_list_for_backup(agent, redis_pool, date_str.clone()).await?;
+    for canister_id in subnet_orch_ids {
         let canister_data = CanisterData {
             canister_id,
-            canister_type,
+            canister_type: CanisterType::SubnetOrch,
         };
+        canisters_backups.push((canister_data, date_str.clone()));
+    }
 
-        match backup_dates_map.get(&canister_id) {
-            Some(dates) => {
-                if let Some(latest_backup_date) = dates.last() {
-                    let time_since_last_backup = now.signed_duration_since(*latest_backup_date);
-                    if time_since_last_backup > alert_threshold {
-                        canisters_backups.push((
-                            canister_data,
-                            latest_backup_date.format("%Y-%m-%d").to_string(),
-                        ));
-                    }
-                } else {
-                    canisters_backups.push((canister_data, "missing".to_string()));
-                }
-            }
-            None => {
-                canisters_backups.push((canister_data, "missing".to_string()));
-            }
-        }
+    let platform_orch_ids =
+        get_platform_orch_ids_list_for_backup(agent, redis_pool, date_str.clone()).await?;
+    for canister_id in platform_orch_ids {
+        let canister_data = CanisterData {
+            canister_id,
+            canister_type: CanisterType::PlatformOrch,
+        };
+        canisters_backups.push((canister_data, date_str.clone()));
     }
 
     if canisters_backups.len() == 0 {
@@ -211,24 +67,17 @@ pub async fn snapshot_alert_job_impl(agent: &Agent) -> Result<(), anyhow::Error>
         );
     }
 
-    let date_str = Utc::now().format("%Y-%m-%d").to_string();
     let canisters_retry_backup_results =
-        retry_backup_canisters(agent, canisters_backups, date_str).await?;
+        retry_backup_canisters(agent, redis_pool, canisters_backups, date_str).await?;
 
     send_google_chat_alert(canisters_retry_backup_results).await?;
 
     Ok(())
 }
 
-#[cfg(not(feature = "use-uplink"))]
-pub async fn snapshot_alert_job_impl(_agent: &Agent) -> Result<(), anyhow::Error> {
-    // Add agent param here too
-    log::warn!("Uplink is not enabled, skipping snapshot alert job");
-    Ok(())
-}
-
 pub async fn retry_backup_canisters(
     agent: &Agent,
+    redis_pool: &RedisPool,
     canister_list: Vec<(CanisterData, String)>,
     date_str: String,
 ) -> Result<HashMap<String, Vec<(String, String)>>, anyhow::Error> {
@@ -246,7 +95,8 @@ pub async fn retry_backup_canisters(
             let date_str = date_str.clone();
             async move {
                 let canister_id = canister_data.canister_id.to_string();
-                if let Err(e) = backup_canister_impl(&agent, canister_data, date_str.clone()).await
+                if let Err(e) =
+                    backup_canister_impl(&agent, &redis_pool, canister_data, date_str.clone()).await
                 {
                     let err_str = e.to_string();
                     Err((err_str, canister_id, old_date_str))

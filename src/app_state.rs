@@ -3,6 +3,7 @@ use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
+use crate::types::RedisPool;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
@@ -41,6 +42,8 @@ pub struct AppState {
     pub metrics: CfMetricTx,
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
+    #[cfg(not(feature = "local-bin"))]
+    pub canister_backup_redis_pool: RedisPool,
 }
 
 impl AppState {
@@ -65,6 +68,8 @@ impl AppState {
             metrics: init_metrics(),
             #[cfg(not(feature = "local-bin"))]
             alloydb_client: init_alloydb_client().await,
+            #[cfg(not(feature = "local-bin"))]
+            canister_backup_redis_pool: init_canister_backup_redis_pool().await,
         }
     }
 
@@ -224,4 +229,13 @@ async fn init_alloydb_client() -> AlloyDbInstance {
     let db_password = env::var("ALLOYDB_DB_PASSWORD").expect("`ALLOYDB_DB_PASSWORD` is required!");
 
     AlloyDbInstance::new(client, instance, db_name, db_user, db_password)
+}
+
+async fn init_canister_backup_redis_pool() -> RedisPool {
+    let redis_url = std::env::var("CANISTER_BACKUP_CACHE_REDIS_URL")
+        .expect("CANISTER_BACKUP_CACHE_REDIS_URL must be set");
+
+    let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
+        .expect("failed to open connection to redis");
+    RedisPool::builder().build(manager).await.unwrap()
 }
