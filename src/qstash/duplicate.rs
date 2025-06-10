@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use crate::{app_state, consts::OFF_CHAIN_AGENT_URL, duplicate_video::videohash::VideoHash};
 use anyhow::Context;
-use dedup_index::client::add;
+use dedup_index::client::{add, UniqueHashTableAccess};
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use http::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
@@ -141,6 +141,9 @@ impl<'a> VideoHashDuplication<'a> {
         self.store_videohas_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
             .await?;
 
+        // TODO: the following call will be replaced with spacetimedb in
+        // https://github.com/dolr-ai/product-roadmap/issues/569
+
         // Call the video hash indexer API to check for duplicates
         let client = reqwest::Client::new();
         let response = client
@@ -229,38 +232,6 @@ impl<'a> VideoHashDuplication<'a> {
         ctx.reducers
             .add(hash.into(), video_id.into(), SystemTime::now().into())
             .context("Couldn't add hash")?;
-
-        Ok(())
-    }
-
-    async fn store_videohash_original(
-        &self,
-        video_id: &str,
-        hash: &str,
-    ) -> Result<(), anyhow::Error> {
-        let bigquery_client = app_state::init_bigquery_client().await;
-
-        let query = format!(
-            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
-             (video_id, videohash, created_at) 
-             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
-            video_id, hash
-        );
-
-        let request = QueryRequest {
-            query,
-            ..Default::default()
-        };
-
-        log::info!(
-            "Storing hash in videohash_original for video_id [{}]",
-            video_id
-        );
-
-        bigquery_client
-            .job()
-            .query("hot-or-not-feed-intelligence", &request)
-            .await?;
 
         Ok(())
     }
