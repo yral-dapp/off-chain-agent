@@ -26,13 +26,13 @@ jobs:
       - name: Cache and Install prereqs
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: protobuf-compiler build-essential clang libclang-dev
+          packages: protobuf-compiler build-essential
           version: 1.0 # cache version, for manual invalidation
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "stable"
+      # - name: Setup Go
+      #   uses: actions/setup-go@v5
+      #   with:
+      #     go-version: "stable"
 
       - name: Rust Setup
         uses: dtolnay/rust-toolchain@master
@@ -48,7 +48,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --release --target x86_64-unknown-linux-gnu --features use-uplink
+        run: cargo build --release --target x86_64-unknown-linux-gnu
       # - name: Run tests
       #   run: cargo test --verbose
       - run: touch .empty

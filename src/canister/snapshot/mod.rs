@@ -1,7 +1,7 @@
 use candid::Principal;
 use serde::{Deserialize, Serialize};
 
-pub mod alert;
+// pub mod alert;
 pub mod snapshot_v2;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

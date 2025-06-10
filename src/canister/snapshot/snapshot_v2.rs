@@ -232,11 +232,6 @@ pub async fn backup_canister_impl(
             anyhow::anyhow!("get_canister_snapshot error: {}", e)
         })?;
     let snapshot_duration = snapshot_start.elapsed();
-    log::info!(
-        "Snapshot retrieval for canister {} took: {:?}",
-        canister_id,
-        snapshot_duration
-    );
 
     let upload_start = std::time::Instant::now();
     upload_snapshot_to_storj_v2(canister_data.canister_id, date_str, snapshot_bytes)
@@ -250,19 +245,14 @@ pub async fn backup_canister_impl(
             anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
         })?;
     let upload_duration = upload_start.elapsed();
-    log::info!(
-        "Upload to Storj for canister {} took: {:?}",
-        canister_id,
-        upload_duration
-    );
 
     let total_duration = start_time.elapsed();
     log::info!(
-        "Total backup time for canister {} took: {:?} = {:?}",
+        "Total backup time for canister {} took: {:?} = {:?} + {:?}",
         canister_id,
         total_duration,
         snapshot_duration,
-        // upload_duration
+        upload_duration
     );
 
     Ok(())
@@ -301,7 +291,7 @@ pub async fn get_user_canister_snapshot(
     let save_duration = save_start.elapsed();
 
     // delay 1 second
-    // tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     // Download snapshot
     let download_start = std::time::Instant::now();
@@ -444,51 +434,51 @@ pub async fn get_platform_orchestrator_snapshot(
     Ok(snapshot_bytes)
 }
 
-#[instrument(skip(snapshot_bytes))]
-#[cfg(feature = "use-uplink")]
-pub async fn upload_snapshot_to_storj(
-    canister_id: Principal,
-    object_id: String,
-    snapshot_bytes: Vec<u8>,
-) -> Result<(), anyhow::Error> {
-    use uplink::{access::Grant, Project};
+// #[instrument(skip(snapshot_bytes))]
+// #[cfg(feature = "use-uplink")]
+// pub async fn upload_snapshot_to_storj(
+//     canister_id: Principal,
+//     object_id: String,
+//     snapshot_bytes: Vec<u8>,
+// ) -> Result<(), anyhow::Error> {
+//     use uplink::{access::Grant, Project};
 
-    let access_grant = Grant::new(&STORJ_BACKUP_CANISTER_ACCESS_GRANT)?;
-    let bucket_name = CANISTER_BACKUPS_BUCKET;
-    let project = &mut Project::open(&access_grant);
-    let (_bucket, _ok) = project.create_bucket(&bucket_name).expect("create bucket");
+//     let access_grant = Grant::new(&STORJ_BACKUP_CANISTER_ACCESS_GRANT)?;
+//     let bucket_name = CANISTER_BACKUPS_BUCKET;
+//     let project = &mut Project::open(&access_grant);
+//     let (_bucket, _ok) = project.create_bucket(&bucket_name).expect("create bucket");
 
-    let upload = &mut project.upload_object(
-        &bucket_name,
-        &format!("{}/{}", canister_id, object_id),
-        None,
-    )?;
-    upload.write_all(&snapshot_bytes)?;
-    upload.commit()?;
+//     let upload = &mut project.upload_object(
+//         &bucket_name,
+//         &format!("{}/{}", canister_id, object_id),
+//         None,
+//     )?;
+//     upload.write_all(&snapshot_bytes)?;
+//     upload.commit()?;
 
-    // delete object older than 15 days
-    // TODO: change from 15 to 90
-    let fifteen_days_ago = Utc::now() - Duration::days(15);
-    let date_str_fifteen_days_ago = fifteen_days_ago.format("%Y-%m-%d").to_string();
+//     // delete object older than 15 days
+//     // TODO: change from 15 to 90
+//     let fifteen_days_ago = Utc::now() - Duration::days(15);
+//     let date_str_fifteen_days_ago = fifteen_days_ago.format("%Y-%m-%d").to_string();
 
-    let object_key = format!("{}/{}", canister_id, date_str_fifteen_days_ago);
+//     let object_key = format!("{}/{}", canister_id, date_str_fifteen_days_ago);
 
-    if let Err(e) = project.delete_object(&bucket_name, &object_key) {
-        log::warn!("Failed to delete object: {}", e);
-    }
+//     if let Err(e) = project.delete_object(&bucket_name, &object_key) {
+//         log::warn!("Failed to delete object: {}", e);
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-#[cfg(not(feature = "use-uplink"))]
-pub async fn upload_snapshot_to_storj(
-    canister_id: Principal,
-    object_id: String,
-    snapshot_bytes: Vec<u8>,
-) -> Result<(), anyhow::Error> {
-    log::warn!("Uplink is not enabled, skipping upload to storj");
-    Ok(())
-}
+// #[cfg(not(feature = "use-uplink"))]
+// pub async fn upload_snapshot_to_storj(
+//     canister_id: Principal,
+//     object_id: String,
+//     snapshot_bytes: Vec<u8>,
+// ) -> Result<(), anyhow::Error> {
+//     log::warn!("Uplink is not enabled, skipping upload to storj");
+//     Ok(())
+// }
 
 pub async fn upload_snapshot_to_storj_v2(
     canister_id: Principal,
