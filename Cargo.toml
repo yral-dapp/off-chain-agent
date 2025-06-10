@@ -26,7 +26,6 @@ hyper = { version = "1.1.0", features = ["full"] }
 hyper-util = { version = "0.1.8", features = ["client", "client-legacy"] }
 http = "1.0.0"
 http-body-util = "0.1.2"
-axum-extra = { version = "0.9.4", features = ["typed-header"] }
 headers = "0.4.0"
 tonic-reflection = "0.13.0"
 reqwest = { version = "0.12.3", features = [

@@ -15,7 +15,7 @@ use futures::StreamExt;
 use http::StatusCode;
 use ic_agent::Agent;
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
+use tokio::{io::AsyncWriteExt, process::Command};
 use tracing::instrument;
 
 use yral_canisters_client::{
@@ -238,23 +238,23 @@ pub async fn backup_canister_impl(
         snapshot_duration
     );
 
-    // let upload_start = std::time::Instant::now();
-    // upload_snapshot_to_storj(canister_data.canister_id, date_str, snapshot_bytes)
-    //     .await
-    //     .map_err(|e| {
-    //         log::error!(
-    //             "Failed to upload user canister snapshot to storj for canister: {} error: {}",
-    //             canister_id,
-    //             e
-    //         );
-    //         anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
-    //     })?;
-    // let upload_duration = upload_start.elapsed();
-    // log::info!(
-    //     "Upload to Storj for canister {} took: {:?}",
-    //     canister_id,
-    //     upload_duration
-    // );
+    let upload_start = std::time::Instant::now();
+    upload_snapshot_to_storj_v2(canister_data.canister_id, date_str, snapshot_bytes)
+        .await
+        .map_err(|e| {
+            log::error!(
+                "Failed to upload user canister snapshot to storj for canister: {} error: {}",
+                canister_id,
+                e
+            );
+            anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
+        })?;
+    let upload_duration = upload_start.elapsed();
+    log::info!(
+        "Upload to Storj for canister {} took: {:?}",
+        canister_id,
+        upload_duration
+    );
 
     let total_duration = start_time.elapsed();
     log::info!(
@@ -290,7 +290,6 @@ pub async fn get_user_canister_snapshot(
     agent: &Agent,
 ) -> Result<Vec<u8>, anyhow::Error> {
     let start_time = std::time::Instant::now();
-    // log::info!("Starting snapshot process for canister {}", canister_id);
 
     let user_canister = IndividualUserTemplate(canister_id, agent);
 
@@ -300,12 +299,6 @@ pub async fn get_user_canister_snapshot(
         anyhow::anyhow!("Failed to save user canister snapshot: {}", e)
     })?;
     let save_duration = save_start.elapsed();
-    // log::info!(
-    //     "Save snapshot for canister {} took: {:?}, size: {} bytes",
-    //     canister_id,
-    //     save_duration,
-    //     snapshot_size
-    // );
 
     // delay 1 second
     // tokio::time::sleep(std::time::Duration::from_secs(3)).await;
@@ -315,14 +308,8 @@ pub async fn get_user_canister_snapshot(
     let mut snapshot_bytes = vec![];
     let chunk_size = 1000 * 1000;
     let num_iters = (snapshot_size as f32 / chunk_size as f32).ceil() as u32;
-    // log::info!(
-    //     "Starting download of {} chunks for canister {}",
-    //     num_iters,
-    //     canister_id
-    // );
 
     for i in 0..num_iters {
-        // let chunk_start = std::time::Instant::now();
         let start = i * chunk_size;
         let mut end = (i + 1) * chunk_size;
         if end > snapshot_size {
@@ -338,44 +325,25 @@ pub async fn get_user_canister_snapshot(
             })?;
 
         snapshot_bytes.extend(res);
-        // let chunk_duration = chunk_start.elapsed();
-        // if i % 10 == 0 || i == num_iters - 1 {
-        //     log::info!(
-        //         "Downloaded chunk {}/{} for canister {} in {:?}",
-        //         i + 1,
-        //         num_iters,
-        //         canister_id,
-        //         chunk_duration
-        //     );
-        // }
     }
     let download_duration = download_start.elapsed();
-    // log::info!(
-    //     "Download complete for canister {} took: {:?}",
-    //     canister_id,
-    //     download_duration
-    // );
 
     // clear snapshot
-    // let clear_start = std::time::Instant::now();
-    // user_canister.clear_snapshot().await.map_err(|e| {
-    //     log::error!("Failed to clear user canister snapshot: {}", e);
-    //     anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
-    // })?;
-    // let clear_duration = clear_start.elapsed();
-    // log::info!(
-    //     "Clear snapshot for canister {} took: {:?}",
-    //     canister_id,
-    //     clear_duration
-    // );
+    let clear_start = std::time::Instant::now();
+    user_canister.clear_snapshot().await.map_err(|e| {
+        log::error!("Failed to clear user canister snapshot: {}", e);
+        anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
+    })?;
+    let clear_duration = clear_start.elapsed();
 
     let total_duration = start_time.elapsed();
     log::info!(
-        "Total snapshot process for canister {} took: {:?} (save: {:?}, download: {:?})",
+        "Total snapshot process for canister {} took: {:?} (save: {:?}, download: {:?}, clear: {:?})",
         canister_id,
         total_duration,
         save_duration,
-        download_duration
+        download_duration,
+        clear_duration
     );
 
     Ok(snapshot_bytes)
@@ -519,5 +487,55 @@ pub async fn upload_snapshot_to_storj(
     snapshot_bytes: Vec<u8>,
 ) -> Result<(), anyhow::Error> {
     log::warn!("Uplink is not enabled, skipping upload to storj");
+    Ok(())
+}
+
+pub async fn upload_snapshot_to_storj_v2(
+    canister_id: Principal,
+    object_id: String,
+    snapshot_bytes: Vec<u8>,
+) -> Result<(), anyhow::Error> {
+    // use uplink::{access::Grant, Project};
+
+    let access_grant = &STORJ_BACKUP_CANISTER_ACCESS_GRANT;
+    let bucket_name = CANISTER_BACKUPS_BUCKET;
+    let dest = format!("sj://{bucket_name}/{canister_id}/{object_id}");
+
+    let mut child = Command::new("uplink")
+        .args([
+            "cp",
+            "--interactive=false",
+            "--analytics=false",
+            "--progress=false",
+            "--access",
+            access_grant,
+            "-",
+            dest.as_str(), // from stdin to dest
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .spawn()?;
+
+    let mut pipe = child.stdin.take().expect("Stdin pipe to be opened for us");
+
+    pipe.write_all(&snapshot_bytes).await?;
+
+    pipe.flush().await?;
+
+    child.wait().await?;
+
+    // // delete object older than 15 days
+    // // TODO: change from 15 to 90
+    let fifteen_days_ago = Utc::now() - Duration::days(15);
+    let date_str_fifteen_days_ago = fifteen_days_ago.format("%Y-%m-%d").to_string();
+
+    let to_delete_dest = format!("sj://{bucket_name}/{canister_id}/{date_str_fifteen_days_ago}");
+
+    let mut child = Command::new("uplink")
+        .args(["rm", to_delete_dest.as_str()])
+        .spawn()?;
+
+    child.wait().await?;
+
     Ok(())
 }
