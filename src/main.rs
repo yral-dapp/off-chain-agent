@@ -5,6 +5,8 @@ use anyhow::Result;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{routing::get, Router};
+use candid::Principal;
+use canister::snapshot::snapshot_v2::upload_snapshot_to_storj_v2;
 use canister::upgrade_user_token_sns_canister::{
     upgrade_user_token_sns_canister_for_entire_network, upgrade_user_token_sns_canister_handler,
 };
@@ -64,6 +66,16 @@ async fn main_impl() -> Result<()> {
     let conf = AppConfig::load()?;
 
     let shared_state = Arc::new(AppState::new(conf.clone()).await);
+
+    // if let Err(e) = upload_snapshot_to_storj_v2(
+    //     Principal::from_text("733zw-raaaa-aaaap-qfqkq-cai").unwrap(),
+    //     "2025-06-10".to_string(),
+    //     include_bytes!("../snapshot.json").to_vec(),
+    // )
+    // .await
+    // {
+    //     log::error!("Error uploading snapshot to storj: {}", e);
+    // }
 
     let sentry_tower_layer = ServiceBuilder::new()
         .layer(NewSentryLayer::new_from_top())
