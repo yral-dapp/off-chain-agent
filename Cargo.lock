@@ -1770,7 +1770,7 @@ dependencies = [
 [[package]]
 name = "dedup_index"
 version = "0.1.0"
-source = "git+https://github.com/dolr-ai/yral-spacetime?branch=feat%2Fdedup-index#5e9534eeab7d68789663f119b6f26953775f59a8"
+source = "git+https://github.com/dolr-ai/yral-spacetime?branch=feat%2Fdedup-index#a4575030bd93289736735b51c2f2eb97fd05ef0a"
 dependencies = [
  "log",
  "spacetimedb-sdk",
