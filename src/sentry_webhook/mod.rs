@@ -76,14 +76,22 @@ pub async fn sentry_webhook_handler(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    log::info!("Sentry webhook received");
     // Verify signature
     if let Err(status) = verify_sentry_signature(&headers, &body).await {
         return Err((status, "Signature verification failed".to_string()));
     }
 
+    log::info!("Sentry webhook signature verified");
+
     // Parse the JSON payload
-    let payload: SentryWebhookPayload = serde_json::from_slice(&body)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid JSON: {}", e)))?;
+    let payload: SentryWebhookPayload = serde_json::from_slice(&body).map_err(|e| {
+        log::error!("Invalid JSON: {}", e);
+        (
+            StatusCode::BAD_REQUEST,
+            format!("Invalid JSON: {} {}", e, String::from_utf8_lossy(&body)),
+        )
+    })?;
 
     let web_url = payload
         .data
