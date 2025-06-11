@@ -73,6 +73,8 @@ jobs:
           flyctl secrets set "ALLOYDB_INSTANCE=$ALLOYDB_INSTANCE" --app "$APP_NAME" --stage
           flyctl secrets set "ALLOYDB_DB_PASSWORD=$ALLOYDB_DB_PASSWORD" --app "$APP_NAME" --stage
           flyctl secrets set "CANISTER_BACKUP_CACHE_REDIS_URL=$CANISTER_BACKUP_CACHE_REDIS_URL" --app "$APP_NAME" --stage
+          flyctl secrets set "SENTRY_GOOGLE_CHAT_WEBHOOK_URL=$SENTRY_GOOGLE_CHAT_WEBHOOK_URL" --app "$APP_NAME" --stage
+          flyctl secrets set "SENTRY_CLIENT_SECRET=$SENTRY_CLIENT_SECRET" --app "$APP_NAME" --stage
           flyctl deploy --app $APP_NAME
         env:
           OFF_CHAIN_AGENT_URL: https://pr-${{github.event.number}}-${{github.repository_owner}}-off-chain-agent.fly.dev/
@@ -101,3 +103,5 @@ jobs:
           ALLOYDB_INSTANCE: ${{ secrets.ALLOYDB_INSTANCE_PROD }}
           ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}
           CANISTER_BACKUP_CACHE_REDIS_URL: ${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}
+          SENTRY_GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.SENTRY_GOOGLE_CHAT_WEBHOOK_URL }}
+          SENTRY_CLIENT_SECRET: ${{ secrets.SENTRY_CLIENT_SECRET }}
