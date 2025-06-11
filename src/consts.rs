@@ -1,6 +1,17 @@
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
+pub const STDB_URL: &str = "https://maincloud.spacetimedb.com";
+
+// TODO: switch to using production identity
+pub const DEDUP_INDEX_MODULE_IDENTITY: &str =
+    "c2007dac899a3a4fc29eefc18fdd99762bd06eb6c69d114024af28d4c16e6b08";
+
+// TODO: switch to using production token stored in env
+pub static STDB_ACCESS_TOKEN: Lazy<String> = Lazy::new(|| {
+    "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJoZXhfaWRlbnRpdHkiOiJjMjAwYzE4M2M0Y2Y1OTllMzQxZDNjM2Y0NDBlNDI4ODFiNDFiMmNlNWVjZGVjZjRiZGYyOTEzNjc2ZTBkNDg2Iiwic3ViIjoiMDUzNzUyNTYtNjE5ZC00ODBhLWJjYjItMWZhZjBiNTM0NWE4IiwiaXNzIjoibG9jYWxob3N0IiwiYXVkIjpbInNwYWNldGltZWRiIl0sImlhdCI6MTc0OTU2MzY5MywiZXhwIjpudWxsfQ.r5-I3zFc5dUMuT4csBFDoKeuanLv5hAxpliUfp3QDqBLJUAKrSrHRq7erOn2F1PeUf8URM_N3ceCtMChozyT3w".into()
+});
+
 /// with nsfw detection v2, nsfw probablity greater or equal to this is considered nsfw
 pub const NSFW_THRESHOLD: f32 = 0.4;
 
