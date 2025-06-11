@@ -2,7 +2,10 @@ use candid::Principal;
 use serde::{Deserialize, Serialize};
 
 pub mod alert;
+pub mod download;
 pub mod snapshot_v2;
+pub mod upload;
+pub mod utils;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum CanisterType {

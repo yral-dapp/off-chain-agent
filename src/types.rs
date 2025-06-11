@@ -4,6 +4,8 @@ use k256::elliptic_curve::JwkEcKey;
 use serde::{Deserialize, Serialize};
 use utoipa::{schema, ToSchema};
 
+pub type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
+
 #[derive(Serialize, Deserialize, Clone, Copy, CandidType, Debug, PartialEq)]
 pub enum SessionType {
     AnonymousSession,

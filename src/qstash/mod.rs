@@ -34,6 +34,7 @@ use crate::{
     app_state::AppState,
     canister::{
         snapshot::{
+            // alert::snapshot_alert_job,
             alert::snapshot_alert_job,
             snapshot_v2::{backup_canisters_job_v2, backup_user_canister},
         },

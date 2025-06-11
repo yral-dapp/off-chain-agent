@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:noble
 
 WORKDIR /app
 
@@ -7,10 +7,11 @@ RUN apt-get update \
     ca-certificates \
     curl \
     ffmpeg \
-    golang-go \
-    libc6 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    unzip
+
+RUN curl -L https://github.com/storj/storj/releases/latest/download/uplink_linux_amd64.zip -o uplink_linux_amd64.zip
+RUN unzip -o uplink_linux_amd64.zip
+RUN install uplink /usr/local/bin/uplink
 
 EXPOSE 50051
 
