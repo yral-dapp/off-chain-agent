@@ -15,6 +15,7 @@ use http::header::CONTENT_TYPE;
 use offchain_service::report_approved_handler;
 use qstash::qstash_router;
 use sentry_tower::{NewSentryLayer, SentryHttpLayer};
+use sentry_webhook::sentry_webhook_handler;
 use tonic::service::Routes;
 use tower::make::Shared;
 use tower::steer::Steer;
@@ -47,6 +48,7 @@ pub mod metrics;
 mod offchain_service;
 mod posts;
 mod qstash;
+pub mod sentry_webhook;
 mod types;
 pub mod utils;
 
@@ -103,6 +105,7 @@ async fn main_impl() -> Result<()> {
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
+        .route("/sentry", post(sentry_webhook_handler))
         .nest("/admin", admin_routes)
         .nest("/qstash", qstash_routes)
         .fallback_service(router)

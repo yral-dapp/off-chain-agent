@@ -103,6 +103,7 @@ redis = { version = "0.29.1", features = [
 ] }
 bb8 = "0.9.0"
 bb8-redis = "0.21.0"
+hmac = "0.12.1"
 
 [build-dependencies]
 tonic-build = "0.13.0"
