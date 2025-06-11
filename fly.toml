@@ -8,21 +8,29 @@ SENTRY_ENVIRONMENT = "staging"
 ALLOYDB_DB_NAME = "postgres"
 ALLOYDB_DB_USER = "postgres"
 
-[[services]]
-internal_port = 50051
-protocol = "tcp"
+[http_service]
+internal_port = 8080
+force_https = true
+auto_stop_machines = "off"
+auto_start_machines = false
+min_machines_running = 1
 processes = ["app"]
 
-[[services.ports]]
-handlers = ["tls"]
-tls_options = { "alpn" = [
-    "h2",
-    "http/1.1",
-], "versions" = [
-    "TLSv1.2",
-    "TLSv1.3",
-] }
-port = 443
+# [[services]]
+# internal_port = 50051
+# protocol = "tcp"
+# processes = ["app"]
+
+# [[services.ports]]
+# handlers = ["tls"]
+# tls_options = { "alpn" = [
+#     "h2",
+#     "http/1.1",
+# ], "versions" = [
+#     "TLSv1.2",
+#     "TLSv1.3",
+# ] }
+# port = 443
 
 [services.concurrency]
 hard_limit = 1000
