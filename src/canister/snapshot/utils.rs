@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use candid::Principal;
 use ic_agent::Agent;
 use redis::AsyncCommands;
@@ -31,6 +33,35 @@ pub async fn insert_canister_backup_date_into_redis(
     Ok(())
 }
 
+pub async fn get_canister_backup_date_list(
+    canister_backup_redis_pool: &RedisPool,
+    canister_type: CanisterType,
+    date_str: String,
+) -> Result<Vec<String>, anyhow::Error> {
+    let mut conn = canister_backup_redis_pool.get().await?;
+    let len = conn
+        .llen::<String, usize>(format!(
+            "canister_backup_date:{:?}:{}",
+            canister_type, date_str
+        ))
+        .await?;
+
+    // fetch in chunks of 10000
+    let mut canister_backup_date_list = vec![];
+    for i in (0..len).step_by(10000) {
+        let chunk = conn
+            .lrange::<String, Vec<String>>(
+                format!("canister_backup_date:{:?}:{}", canister_type, date_str),
+                i as isize,
+                (i + 9999) as isize,
+            )
+            .await?;
+        canister_backup_date_list.extend(chunk);
+    }
+
+    Ok(canister_backup_date_list)
+}
+
 pub async fn get_user_canister_list_for_backup(
     agent: &Agent,
     canister_backup_redis_pool: &RedisPool,
@@ -40,23 +71,17 @@ pub async fn get_user_canister_list_for_backup(
 
     log::info!("User canister list length: {:?}", user_canister_list.len());
 
-    let mut conn = canister_backup_redis_pool.get().await?;
-    let canister_backup_date_list = conn
-        .lrange::<String, Vec<String>>(
-            format!("canister_backup_date:{:?}:{}", CanisterType::User, date_str),
-            0,
-            -1,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to get canister backup date list: {}", e))?;
-    let canister_backup_date_list = canister_backup_date_list
+    let canister_backup_date_list =
+        get_canister_backup_date_list(canister_backup_redis_pool, CanisterType::User, date_str)
+            .await?;
+    let canister_backup_date_set = canister_backup_date_list
         .iter()
         .map(|canister_id| Principal::from_text(canister_id).unwrap())
-        .collect::<Vec<_>>();
+        .collect::<HashSet<_>>();
 
     let user_canister_list = user_canister_list
         .into_iter()
-        .filter(|canister_id| !canister_backup_date_list.contains(canister_id))
+        .filter(|canister_id| !canister_backup_date_set.contains(canister_id))
         .collect::<Vec<_>>();
 
     log::info!(
@@ -79,27 +104,20 @@ pub async fn get_subnet_orch_ids_list_for_backup(
         subnet_orch_ids_list.len()
     );
 
-    let mut conn = canister_backup_redis_pool.get().await?;
-    let canister_backup_date_list = conn
-        .lrange::<String, Vec<String>>(
-            format!(
-                "canister_backup_date:{:?}:{}",
-                CanisterType::SubnetOrch,
-                date_str
-            ),
-            0,
-            -1,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to get canister backup date list: {}", e))?;
-    let canister_backup_date_list = canister_backup_date_list
+    let canister_backup_date_list = get_canister_backup_date_list(
+        canister_backup_redis_pool,
+        CanisterType::SubnetOrch,
+        date_str,
+    )
+    .await?;
+    let canister_backup_date_set = canister_backup_date_list
         .iter()
         .map(|canister_id| Principal::from_text(canister_id).unwrap())
-        .collect::<Vec<_>>();
+        .collect::<HashSet<_>>();
 
     let subnet_orch_ids_list = subnet_orch_ids_list
         .into_iter()
-        .filter(|canister_id| !canister_backup_date_list.contains(canister_id))
+        .filter(|canister_id| !canister_backup_date_set.contains(canister_id))
         .collect::<Vec<_>>();
 
     log::info!(
@@ -117,19 +135,12 @@ pub async fn get_platform_orch_ids_list_for_backup(
 ) -> Result<Vec<Principal>, anyhow::Error> {
     let platform_orch_id = PLATFORM_ORCHESTRATOR_ID;
 
-    let mut conn = canister_backup_redis_pool.get().await?;
-    let canister_backup_date_list = conn
-        .lrange::<String, Vec<String>>(
-            format!(
-                "canister_backup_date:{:?}:{}",
-                CanisterType::PlatformOrch,
-                date_str
-            ),
-            0,
-            -1,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to get canister backup date list: {}", e))?;
+    let canister_backup_date_list = get_canister_backup_date_list(
+        canister_backup_redis_pool,
+        CanisterType::PlatformOrch,
+        date_str,
+    )
+    .await?;
 
     if canister_backup_date_list.contains(&platform_orch_id.to_string()) {
         return Ok(vec![]);

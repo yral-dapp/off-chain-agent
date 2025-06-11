@@ -7,4 +7,3 @@ google_service_account.json
 /.cargo
 .zed/*
 .vscode/
-snapshot.json

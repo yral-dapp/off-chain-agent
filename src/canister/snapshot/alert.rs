@@ -1,11 +1,15 @@
+use axum::{extract::State, response::IntoResponse, Json};
 use futures::StreamExt;
+use http::StatusCode;
 use ic_agent::Agent;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{collections::HashMap, env};
+use std::{collections::HashMap, env, sync::Arc};
 use tracing::instrument;
 
 use crate::{
+    app_state::AppState,
     canister::snapshot::utils::{
         get_platform_orch_ids_list_for_backup, get_subnet_orch_ids_list_for_backup,
         get_user_canister_list_for_backup,
@@ -14,6 +18,23 @@ use crate::{
 };
 
 use super::{snapshot_v2::backup_canister_impl, CanisterData, CanisterType};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SnapshotAlertJobPayload {
+    pub date_str: String,
+}
+
+#[instrument(skip(state))]
+pub async fn snapshot_alert_job(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SnapshotAlertJobPayload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let agent = state.agent.clone();
+    let canister_backup_redis_pool = state.canister_backup_redis_pool.clone();
+    snapshot_alert_job_impl(&agent, &canister_backup_redis_pool, payload.date_str)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
 
 #[instrument(skip(agent))]
 pub async fn snapshot_alert_job_impl(

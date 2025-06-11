@@ -29,16 +29,12 @@ pub async fn get_user_canister_snapshot(
     canister_id: Principal,
     agent: &Agent,
 ) -> Result<Vec<u8>, anyhow::Error> {
-    // let start_time = std::time::Instant::now();
-
     let user_canister = IndividualUserTemplate(canister_id, agent);
 
-    // let save_start = std::time::Instant::now();
     let snapshot_size = user_canister.save_snapshot_json_v_2().await.map_err(|e| {
         log::error!("Failed to save user canister snapshot: {}", e);
         anyhow::anyhow!("Failed to save user canister snapshot: {}", e)
     })?;
-    // let save_duration = save_start.elapsed();
 
     // delay 2-3 seconds with jitter
     let base_delay = 2000; // 2 second base in milliseconds
@@ -47,7 +43,6 @@ pub async fn get_user_canister_snapshot(
     tokio::time::sleep(std::time::Duration::from_millis(total_delay)).await;
 
     // Download snapshot
-    // let download_start = std::time::Instant::now();
     let mut snapshot_bytes = vec![];
     let chunk_size = 1000 * 1000;
     let num_iters = (snapshot_size as f32 / chunk_size as f32).ceil() as u32;
@@ -69,25 +64,12 @@ pub async fn get_user_canister_snapshot(
 
         snapshot_bytes.extend(res);
     }
-    // let download_duration = download_start.elapsed();
 
     // clear snapshot
-    // let clear_start = std::time::Instant::now();
     user_canister.clear_snapshot().await.map_err(|e| {
         log::error!("Failed to clear user canister snapshot: {}", e);
         anyhow::anyhow!("Failed to clear user canister snapshot: {}", e)
     })?;
-    // let clear_duration = clear_start.elapsed();
-
-    // let total_duration = start_time.elapsed();
-    // log::info!(
-    //     "Total snapshot process for canister {} took: {:?} (save: {:?}, download: {:?}, clear: {:?})",
-    //     canister_id,
-    //     total_duration,
-    //     save_duration,
-    //     download_duration,
-    //     clear_duration
-    // );
 
     Ok(snapshot_bytes)
 }

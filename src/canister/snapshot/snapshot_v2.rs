@@ -253,10 +253,8 @@ pub async fn backup_canister_impl(
     canister_data: CanisterData,
     date_str: String,
 ) -> Result<(), anyhow::Error> {
-    // let start_time = std::time::Instant::now();
     let canister_id = canister_data.canister_id.to_string();
 
-    // let snapshot_start = std::time::Instant::now();
     let snapshot_bytes = get_canister_snapshot(canister_data.clone(), agent)
         .await
         .map_err(|e| {
@@ -267,9 +265,7 @@ pub async fn backup_canister_impl(
             );
             anyhow::anyhow!("get_canister_snapshot error: {}", e)
         })?;
-    // let snapshot_duration = snapshot_start.elapsed();
 
-    // let upload_start = std::time::Instant::now();
     upload_snapshot_to_storj_v2(canister_data.canister_id, date_str.clone(), snapshot_bytes)
         .await
         .map_err(|e| {
@@ -280,18 +276,7 @@ pub async fn backup_canister_impl(
             );
             anyhow::anyhow!("upload_snapshot_to_storj error: {}", e)
         })?;
-    // let upload_duration = upload_start.elapsed();
 
-    // let total_duration = start_time.elapsed();
-    // log::info!(
-    //     "Total backup time for canister {} took: {:?} = {:?} + {:?}",
-    //     canister_id,
-    //     total_duration,
-    //     snapshot_duration,
-    //     upload_duration
-    // );
-
-    // insert into redis canister_backup_date:date_str list
     if let Err(e) = insert_canister_backup_date_into_redis(
         canister_backup_redis_pool,
         date_str.clone(),
