@@ -9,7 +9,7 @@ ALLOYDB_DB_NAME = "postgres"
 ALLOYDB_DB_USER = "postgres"
 
 [http_service]
-internal_port = 8080
+internal_port = 50051
 force_https = true
 auto_stop_machines = "off"
 auto_start_machines = false
