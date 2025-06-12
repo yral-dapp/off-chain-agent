@@ -1,7 +1,6 @@
+use crate::async_dedup_index;
 use crate::config::AppConfig;
-use crate::consts::{
-    DEDUP_INDEX_MODULE_IDENTITY, NSFW_SERVER_URL, STDB_ACCESS_TOKEN, STDB_URL, YRAL_METADATA_URL,
-};
+use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
@@ -45,7 +44,7 @@ pub struct AppState {
     pub metrics: CfMetricTx,
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
-    pub dedup_index_ctx: Arc<dedup_index::DbConnection>,
+    pub dedup_index_ctx: async_dedup_index::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
 }
@@ -213,27 +212,8 @@ pub async fn init_qstash_client() -> QStashClient {
     QStashClient::new(auth_token.as_str())
 }
 
-pub async fn init_dedup_index_ctx() -> Arc<dedup_index::DbConnection> {
-    let ctx = dedup_index::DbConnection::builder()
-        .with_uri(STDB_URL)
-        .with_module_name(DEDUP_INDEX_MODULE_IDENTITY)
-        .with_token(Some(STDB_ACCESS_TOKEN.as_str()))
-        .build()
-        .context("Couldn't connect to the db")
-        .unwrap();
-
-    let ctx = Arc::new(ctx);
-    let ctx_for_ticking = ctx.clone();
-
-    tokio::spawn(async move {
-        let Err(err) = ctx_for_ticking.run_async().await else {
-            return;
-        };
-
-        log::error!("connection to dedup index broke with an error: {err:#?}");
-    });
-
-    ctx
+pub async fn init_dedup_index_ctx() -> async_dedup_index::WrappedContext {
+    async_dedup_index::WrappedContext::new().expect("Stdb dedup index to be connected")
 }
 
 async fn init_alloydb_client() -> AlloyDbInstance {

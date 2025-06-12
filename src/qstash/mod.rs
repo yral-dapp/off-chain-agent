@@ -7,7 +7,7 @@ use std::{
 };
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     middleware::{self},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -65,18 +65,27 @@ pub mod client;
 pub mod duplicate;
 pub mod hotornot_job;
 
-pub async fn test_dedup_index_access(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let res = state.dedup_index_ctx.reducers.add(
-        "test_hash".into(),
-        "test_video_id".into(),
-        SystemTime::now().into(),
-    );
+#[derive(Debug, Deserialize)]
+pub struct TestQuery {
+    pub id: String,
+}
 
-    if let Err(err) = res {
-        return format!("add failed: {err:?}");
+pub async fn test_dedup_index_access(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<TestQuery>,
+) -> impl IntoResponse {
+    let TestQuery { id } = query;
+    let res = state
+        .dedup_index_ctx
+        .clone()
+        .add(&id, "test_hash", SystemTime::now())
+        .await;
+
+    match res {
+        Ok(Ok(())) => "add succeeded".into(),
+        Ok(Err(msg)) => format!("add failed with message: {msg}"),
+        Err(err) => format!("add failed on reducer request: {err:#?}"),
     }
-
-    "add succeeded".into()
 }
 
 #[derive(Clone)]
