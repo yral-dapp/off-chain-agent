@@ -232,7 +232,7 @@ impl<'a> VideoHashDuplication<'a> {
         hash: &str,
     ) -> anyhow::Result<()> {
         ctx.clone()
-            .add(hash.into(), video_id.into(), SystemTime::now().into())
+            .add(video_id, hash, SystemTime::now())
             .await
             .context("Couldn't send request to stdb")?
             .map_err(|err| anyhow!("{err}"))
