@@ -91,7 +91,7 @@ jobs:
           ALLOYDB_INSTANCE: ${{ secrets.ALLOYDB_INSTANCE_PROD }}
           ALLOYDB_DB_PASSWORD: ${{ secrets.ALLOYDB_DB_PASSWORD_PROD }}
           CANISTER_BACKUP_CACHE_REDIS_URL: ${{ secrets.CANISTER_BACKUP_CACHE_REDIS_URL }}
-          DEDUP_INDEX_ACCESS_TOKEN: $ {{ secrets.DEDUP_INDEX_ACCESS_TOKEN }}
+          DEDUP_INDEX_ACCESS_TOKEN: ${{ secrets.DEDUP_INDEX_ACCESS_TOKEN }}
       - name: Deploy a docker container to fly.io
         run: flyctl deploy --remote-only -c fly-prod.toml
         env:
