@@ -250,23 +250,3 @@ async fn queue_video_to_qstash(
     info!("Queued video_id [{}] for processing", video_id);
     Ok(())
 }
-
-#[derive(Debug, Deserialize)]
-pub struct ProcessVideoRequest {
-    video_id: String,
-    video_url: String,
-    publisher_data: VideoPublisherData,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ProcessVideoResponse {
-    message: String,
-    status: String,
-}
-
-pub async fn process_single_video(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<ProcessVideoRequest>,
-) -> Result<Json<ProcessVideoResponse>, StatusCode> {
-    unimplemented!("i believe this is not needed, but gotta confirm")
-}

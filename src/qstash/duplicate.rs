@@ -122,6 +122,7 @@ impl<'a> VideoHashDuplication<'a> {
     pub async fn process_video_deduplication(
         &self,
         dedup_index_ctx: &async_dedup_index::WrappedContext,
+        bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         video_url: &str,
         publisher_data: VideoPublisherData,
@@ -140,7 +141,9 @@ impl<'a> VideoHashDuplication<'a> {
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
 
         // Store the original hash regardless of duplication status
-        self.store_videohas_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
+        self.store_videohash_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
+            .await?;
+        self.store_videohash_original(bigquery_client, video_id, &video_hash.hash)
             .await?;
 
         // TODO: the following call will be replaced with spacetimedb in
@@ -225,7 +228,38 @@ impl<'a> VideoHashDuplication<'a> {
         Ok(())
     }
 
-    async fn store_videohas_to_spacetime(
+    async fn store_videohash_original(
+        &self,
+        bigquery_client: &google_cloud_bigquery::client::Client,
+        video_id: &str,
+        hash: &str,
+    ) -> Result<(), anyhow::Error> {
+        let query = format!(
+            "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
+             (video_id, videohash, created_at) 
+             VALUES ('{}', '{}', CURRENT_TIMESTAMP())",
+            video_id, hash
+        );
+
+        let request = QueryRequest {
+            query,
+            ..Default::default()
+        };
+
+        log::info!(
+            "Storing hash in videohash_original for video_id [{}]",
+            video_id
+        );
+
+        bigquery_client
+            .job()
+            .query("hot-or-not-feed-intelligence", &request)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn store_videohash_to_spacetime(
         &self,
         ctx: &async_dedup_index::WrappedContext,
         video_id: &str,
