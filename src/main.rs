@@ -13,7 +13,7 @@ use config::AppConfig;
 use events::event::storj::enqueue_storj_backfill_item;
 use http::header::CONTENT_TYPE;
 use offchain_service::report_approved_handler;
-use qstash::{qstash_router, test_dedup_index_access};
+use qstash::qstash_router;
 use sentry_tower::{NewSentryLayer, SentryHttpLayer};
 use tonic::service::Routes;
 use tower::make::Shared;
@@ -104,7 +104,6 @@ async fn main_impl() -> Result<()> {
             "/enqueue_storj_backfill_item",
             post(enqueue_storj_backfill_item),
         )
-        .route("/dedup_index_test", get(test_dedup_index_access))
         .nest("/admin", admin_routes)
         .nest("/qstash", qstash_routes)
         .fallback_service(router)

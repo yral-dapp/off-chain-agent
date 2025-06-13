@@ -3,13 +3,11 @@ use reqwest::Url;
 
 pub const STDB_URL: &str = "https://maincloud.spacetimedb.com";
 
-// TODO: switch to using production identity
-pub const DEDUP_INDEX_MODULE_IDENTITY: &str =
-    "c2007dac899a3a4fc29eefc18fdd99762bd06eb6c69d114024af28d4c16e6b08";
+pub const DEDUP_INDEX_MODULE_IDENTITY: &str = "yral-dedup-index";
 
 // TODO: switch to using production token stored in env
 pub static STDB_ACCESS_TOKEN: Lazy<String> = Lazy::new(|| {
-    "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRlZmF1bHQifQ.eyJhdWQiOiJlMWE2YTdmYi04YTFkLTQyZGMtODdiNC0xM2ZmOTRlY2JlMzQiLCJleHAiOjE3NTAxMzk3MzAsImlhdCI6MTc0OTUzNDkzMCwiaXNzIjoiaHR0cHM6Ly9hdXRoLnlyYWwuY29tIiwic3ViIjoibzNoaHAtdXI2NHQtcmY0MmotcGdieDMtNWFodTcta2JlbWEtemhuaWUtdWVtbnotdHpzd2gtYnBnaGEtYnFlIiwiZXh0X2lzX2Fub255bW91cyI6dHJ1ZX0.HlPygs1EPn2iioCWhQKBhGe_sNNekOFPfAphaM1ALgXv171pBsZujpXhgJaND70l9V95G1Cvh3_nxe7HGLuFvA".into()
+    std::env::var("DEDUP_INDEX_ACCESS_TOKEN").expect("DEDUP_INDEX_ACCESS_TOKEN to be set")
 });
 
 /// with nsfw detection v2, nsfw probablity greater or equal to this is considered nsfw
