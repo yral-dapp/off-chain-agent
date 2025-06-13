@@ -50,42 +50,6 @@ impl QStashClient {
     }
 
     #[instrument(skip(self))]
-    pub async fn publish_video_hash_indexing(
-        &self,
-        video_id: &str,
-        video_url: &str,
-        publisher_data: VideoPublisherData,
-    ) -> Result<(), anyhow::Error> {
-        let duplication_handler = VideoHashDuplication::new(&self.client, &self.base_url);
-
-        duplication_handler
-            .process_video_deduplication(
-                video_id,
-                video_url,
-                publisher_data,
-                |vid_id, canister_id, post_id, timestamp, publisher_user_id| {
-                    // Clone the string references to own the data
-                    let vid_id = vid_id.to_string();
-                    let canister_id = canister_id.to_string();
-                    let publisher_user_id = publisher_user_id.to_string();
-
-                    // Create a boxed future from an async block
-                    Box::pin(async move {
-                        self.publish_video(
-                            &vid_id,
-                            &canister_id,
-                            post_id,
-                            timestamp,
-                            &publisher_user_id,
-                        )
-                        .await
-                    })
-                },
-            )
-            .await
-    }
-
-    #[instrument(skip(self))]
     pub async fn duplicate_to_storj(
         &self,
         data: storj_interface::duplicate::Args,

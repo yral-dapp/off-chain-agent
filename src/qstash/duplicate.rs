@@ -1,4 +1,10 @@
-use crate::{app_state, consts::OFF_CHAIN_AGENT_URL, duplicate_video::videohash::VideoHash};
+use std::time::SystemTime;
+
+use crate::{
+    app_state, async_dedup_index, consts::OFF_CHAIN_AGENT_URL,
+    duplicate_video::videohash::VideoHash,
+};
+use anyhow::{anyhow, Context};
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use http::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
@@ -46,109 +52,6 @@ pub struct VideoHashDuplication<'a> {
 impl<'a> VideoHashDuplication<'a> {
     pub fn new(client: &'a reqwest::Client, base_url: &'a reqwest::Url) -> Self {
         Self { client, base_url }
-    }
-
-    pub async fn publish_video_hash_indexing(
-        &self,
-        video_id: &str,
-        video_url: &str,
-        publisher_data: VideoPublisherData,
-        publish_video_callback: impl Fn(&str, &str, u64, String, &str) -> Result<(), anyhow::Error>,
-    ) -> Result<(), anyhow::Error> {
-        log::info!("Calculating videohash for video URL: {}", video_url);
-        let video_hash = VideoHash::from_url(video_url)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
-
-        // Store the original hash regardless of duplication status
-        self.store_videohash_original(video_id, &video_hash.hash)
-            .await?;
-
-        // Call the video hash indexer API to check for duplicates
-        let client = reqwest::Client::new();
-        let response = client
-            .post("https://videohash-indexer.fly.dev/search")
-            .json(&serde_json::json!({
-                "video_id": video_id,
-                "hash": video_hash.hash,
-            }))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!(
-                "VideoHash Indexer API failed: {} - {}",
-                status,
-                error_text
-            ));
-        }
-
-        let indexer_response: VideoHashIndexerResponse = response.json().await?;
-        log::info!(
-            "VideoHash Indexer response for video_id [{}]: {:?}",
-            video_id,
-            indexer_response
-        );
-
-        if indexer_response.match_found {
-            // A similar video was found - record as duplicate
-            if let Some(match_details) = indexer_response.match_details {
-                self.store_duplicate_video(
-                    video_id,
-                    &video_hash.hash,
-                    &match_details,
-                    &publisher_data,
-                )
-                .await?;
-
-                log::info!(
-                    "Duplicate video detected: video_id [{}] is similar to parent_video_id [{}] (score: {})",
-                    video_id,
-                    match_details.video_id,
-                    match_details.similarity_percentage
-                );
-
-                let exact_duplicate = match_details.similarity_percentage > 99.0;
-                let duplicate_event = DuplicateVideoEvent {
-                    original_video_id: video_id.to_string(),
-                    parent_video_id: match_details.video_id.clone(),
-                    similarity_percentage: match_details.similarity_percentage,
-                    exact_duplicate,
-                    publisher_canister_id: publisher_data.canister_id.clone(),
-                    publisher_principal: publisher_data.publisher_principal.clone(),
-                    post_id: publisher_data.post_id,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                };
-
-                // self.publish_duplicate_video_event(duplicate_event).await?;
-            }
-        } else {
-            // For unique videos
-            self.store_unique_video(video_id, &video_hash.hash).await?;
-            log::info!("Unique video recorded: video_id [{}]", video_id);
-
-            let timestamp = chrono::Utc::now().to_rfc3339();
-            publish_video_callback(
-                video_id,
-                &publisher_data.canister_id,
-                publisher_data.post_id,
-                timestamp,
-                &publisher_data.publisher_principal,
-            )?;
-        }
-
-        // Publish "de-duplication_check_done" event regardless of whether it's duplicate or not
-        // self.publish_deduplication_completed(
-        //     video_id,
-        //     &publisher_data.canister_id,
-        //     publisher_data.post_id,
-        //     &publisher_data.publisher_principal,
-        // )
-        // .await?;
-
-        Ok(())
     }
 
     pub async fn publish_duplicate_video_event(
@@ -218,6 +121,8 @@ impl<'a> VideoHashDuplication<'a> {
 
     pub async fn process_video_deduplication(
         &self,
+        dedup_index_ctx: &async_dedup_index::WrappedContext,
+        bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         video_url: &str,
         publisher_data: VideoPublisherData,
@@ -236,8 +141,13 @@ impl<'a> VideoHashDuplication<'a> {
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
 
         // Store the original hash regardless of duplication status
-        self.store_videohash_original(video_id, &video_hash.hash)
+        self.store_videohash_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
             .await?;
+        self.store_videohash_original(bigquery_client, video_id, &video_hash.hash)
+            .await?;
+
+        // TODO: the following call will be replaced with spacetimedb in
+        // https://github.com/dolr-ai/product-roadmap/issues/569
 
         // Call the video hash indexer API to check for duplicates
         let client = reqwest::Client::new();
@@ -320,11 +230,10 @@ impl<'a> VideoHashDuplication<'a> {
 
     async fn store_videohash_original(
         &self,
+        bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         hash: &str,
     ) -> Result<(), anyhow::Error> {
-        let bigquery_client = app_state::init_bigquery_client().await;
-
         let query = format!(
             "INSERT INTO `hot-or-not-feed-intelligence.yral_ds.videohash_original` 
              (video_id, videohash, created_at) 
@@ -346,6 +255,22 @@ impl<'a> VideoHashDuplication<'a> {
             .job()
             .query("hot-or-not-feed-intelligence", &request)
             .await?;
+
+        Ok(())
+    }
+
+    async fn store_videohash_to_spacetime(
+        &self,
+        ctx: &async_dedup_index::WrappedContext,
+        video_id: &str,
+        hash: &str,
+    ) -> anyhow::Result<()> {
+        ctx.clone()
+            .add(video_id, hash, SystemTime::now())
+            .await
+            .context("Couldn't send request to stdb")?
+            .map_err(|err| anyhow!("{err}"))
+            .context("Module returned error")?;
 
         Ok(())
     }
@@ -381,7 +306,7 @@ impl<'a> VideoHashDuplication<'a> {
     async fn store_duplicate_video(
         &self,
         video_id: &str,
-        hash: &str,
+        _hash: &str,
         match_details: &MatchDetails,
         publisher_data: &VideoPublisherData,
     ) -> Result<(), anyhow::Error> {

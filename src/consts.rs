@@ -1,6 +1,14 @@
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
+pub const STDB_URL: &str = "https://maincloud.spacetimedb.com";
+
+pub const DEDUP_INDEX_MODULE_IDENTITY: &str = "yral-dedup-index";
+
+pub static STDB_ACCESS_TOKEN: Lazy<String> = Lazy::new(|| {
+    std::env::var("DEDUP_INDEX_ACCESS_TOKEN").expect("DEDUP_INDEX_ACCESS_TOKEN to be set")
+});
+
 /// with nsfw detection v2, nsfw probablity greater or equal to this is considered nsfw
 pub const NSFW_THRESHOLD: f32 = 0.4;
 
