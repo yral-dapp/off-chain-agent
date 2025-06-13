@@ -5,7 +5,6 @@ pub const STDB_URL: &str = "https://maincloud.spacetimedb.com";
 
 pub const DEDUP_INDEX_MODULE_IDENTITY: &str = "yral-dedup-index";
 
-// TODO: switch to using production token stored in env
 pub static STDB_ACCESS_TOKEN: Lazy<String> = Lazy::new(|| {
     std::env::var("DEDUP_INDEX_ACCESS_TOKEN").expect("DEDUP_INDEX_ACCESS_TOKEN to be set")
 });

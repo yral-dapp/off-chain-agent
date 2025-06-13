@@ -75,8 +75,9 @@ impl WrappedContext {
     ///
     /// Outer error is any error when sending request, for example, network error.
     /// The inner error is the result of the operation itself
+    ///
+    /// taking ownership as that will require caller to clone and we need the underlying rx to be cloned to add a listener
     pub async fn add(
-        // taking ownership as that will require and we need the underlying rx to be cloned to add a listener
         self,
         video_id: &str,
         hash: &str,
