@@ -52,7 +52,15 @@ impl WrappedContext {
             log::error!("connection to dedup index broke with an error: {err:#?}");
         });
 
-        let (tx, _) = broadcast::channel(1024);
+        // this limit is for lagging mechanism of broadcast channel
+        //
+        // in our case, the receivers don't any slow work after receiving
+        // messages, so we wont run into "slow receiver" problem.
+        //
+        // however, in case we end up with more than this limit number of
+        // requests at the same time, the receiver would fail with error and
+        // will most likely be retried by qstash
+        let (tx, _) = broadcast::channel(65536);
         let tx_clone = tx.clone();
 
         conn.reducers
