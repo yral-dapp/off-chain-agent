@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::Context;
+#[cfg(feature = "prod-bin")]
 use fasthash::{BufHasher, HasherExt, MetroHasherExt};
 use spacetimedb_sdk::{Status, Timestamp};
 use tokio::sync::broadcast;
@@ -16,6 +17,7 @@ pub type ReducerResult = Result<(), String>;
 /// (input hash, reducer result)
 type BusMessage = (u128, ReducerResult);
 
+#[cfg(feature = "prod-bin")]
 fn fast_hash<H: std::hash::Hash>(data: H) -> u128 {
     // set constant seed to get consistent result
     let mut hasher = MetroHasherExt::with_capacity_and_seed(0, Some(0));
@@ -23,6 +25,16 @@ fn fast_hash<H: std::hash::Hash>(data: H) -> u128 {
     data.hash(&mut hasher);
 
     hasher.finish_ext()
+}
+
+#[cfg(not(feature = "prod-bin"))]
+fn fast_hash<H: std::hash::Hash>(data: H) -> u128 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    
+    let mut hasher = DefaultHasher::new();
+    data.hash(&mut hasher);
+    hasher.finish() as u128
 }
 
 /// A wrapper around the [`dedup_index::DbConnection`] with an internal message bus that allows for async operations
