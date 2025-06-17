@@ -36,7 +36,7 @@ use crate::offchain_service::{off_chain, OffChainService};
 use error::*;
 
 mod app_state;
-pub(crate) mod async_dedup_index;
+// pub(crate) mod async_dedup_index;
 mod auth;
 pub mod canister;
 mod config;

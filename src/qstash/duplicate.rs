@@ -1,9 +1,6 @@
 use std::time::SystemTime;
 
-use crate::{
-    app_state, async_dedup_index, consts::OFF_CHAIN_AGENT_URL,
-    duplicate_video::videohash::VideoHash,
-};
+use crate::{app_state, consts::OFF_CHAIN_AGENT_URL, duplicate_video::videohash::VideoHash};
 use anyhow::{anyhow, Context};
 use google_cloud_bigquery::http::job::query::QueryRequest;
 use http::header::CONTENT_TYPE;
@@ -121,7 +118,7 @@ impl<'a> VideoHashDuplication<'a> {
 
     pub async fn process_video_deduplication(
         &self,
-        dedup_index_ctx: &async_dedup_index::WrappedContext,
+        // dedup_index_ctx: &async_dedup_index::WrappedContext,
         bigquery_client: &google_cloud_bigquery::client::Client,
         video_id: &str,
         video_url: &str,
@@ -260,21 +257,21 @@ impl<'a> VideoHashDuplication<'a> {
         Ok(())
     }
 
-    async fn store_videohash_to_spacetime(
-        &self,
-        ctx: &async_dedup_index::WrappedContext,
-        video_id: &str,
-        hash: &str,
-    ) -> anyhow::Result<()> {
-        ctx.clone()
-            .add(video_id, hash, SystemTime::now())
-            .await
-            .context("Couldn't send request to stdb")?
-            .map_err(|err| anyhow!("{err}"))
-            .context("Module returned error")?;
+    // async fn store_videohash_to_spacetime(
+    //     &self,
+    //     ctx: &async_dedup_index::WrappedContext,
+    //     video_id: &str,
+    //     hash: &str,
+    // ) -> anyhow::Result<()> {
+    //     ctx.clone()
+    //         .add(video_id, hash, SystemTime::now())
+    //         .await
+    //         .context("Couldn't send request to stdb")?
+    //         .map_err(|err| anyhow!("{err}"))
+    //         .context("Module returned error")?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     async fn store_unique_video(&self, video_id: &str, hash: &str) -> Result<(), anyhow::Error> {
         let bigquery_client = app_state::init_bigquery_client().await;
