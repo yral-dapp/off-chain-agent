@@ -57,3 +57,5 @@ pub static STORJ_BACKUP_CANISTER_ACCESS_GRANT: Lazy<String> = Lazy::new(|| {
 });
 
 pub const CANISTER_BACKUPS_BUCKET: &str = "canister-backups";
+
+pub const YRAL_AUTH_V2_ACCESS_TOKEN_ISS: &str = "https://auth.yral.com";
