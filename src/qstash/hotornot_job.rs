@@ -3,7 +3,6 @@ use std::{collections::HashMap, sync::Arc};
 use axum::{extract::State, response::IntoResponse};
 use futures::{stream::FuturesUnordered, StreamExt};
 use http::StatusCode;
-use yral_canisters_client::individual_user_template::WatchHistoryItem;
 use yral_ml_feed_cache::{
     consts::USER_WATCH_HISTORY_PLAIN_POST_ITEM_SUFFIX,
     types::{MLFeedCacheHistoryItem, PlainPostItem},
