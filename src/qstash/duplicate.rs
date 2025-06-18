@@ -141,8 +141,13 @@ impl<'a> VideoHashDuplication<'a> {
             .map_err(|e| anyhow::anyhow!("Failed to generate videohash: {}", e))?;
 
         // Store the original hash regardless of duplication status
-        // self.store_videohash_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
-        //     .await?;
+        let res = self
+            .store_videohash_to_spacetime(dedup_index_ctx, video_id, &video_hash.hash)
+            .await;
+        match res {
+            Ok(_) => log::info!("stored the video hash to stdb"),
+            Err(err) => log::info!("error while storing to stdb: {err:#?}"),
+        }
         self.store_videohash_original(bigquery_client, video_id, &video_hash.hash)
             .await?;
 
@@ -265,8 +270,7 @@ impl<'a> VideoHashDuplication<'a> {
         video_id: &str,
         hash: &str,
     ) -> anyhow::Result<()> {
-        ctx.clone()
-            .add(video_id, hash, SystemTime::now())
+        ctx.add(video_id, hash, SystemTime::now())
             .await
             .context("Couldn't send request to stdb")?
             .map_err(|err| anyhow!("{err}"))
