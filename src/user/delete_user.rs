@@ -26,7 +26,7 @@ pub struct DeleteUserRequest {
 
 #[utoipa::path(
     delete,
-    path = "/user",
+    path = "/",
     request_body = DeleteUserRequest,
     tag = "user",
     responses(
@@ -95,7 +95,7 @@ pub async fn handle_delete_user(
     // 5. Delete from Redis caches
     let ml_feed_cache = state.ml_feed_cache.clone();
     ml_feed_cache
-        .delete_user_caches(&user_principal.to_string())
+        .delete_user_caches(&user_canister.to_string())
         .await
         .map_err(|e| {
             log::error!("Failed to delete user caches: {}", e);
@@ -104,6 +104,18 @@ pub async fn handle_delete_user(
                 format!("Failed to delete user caches: {}", e),
             )
         })?;
+
+    // TODO: uncomment this when we migrate principal. remove above as well
+    // ml_feed_cache
+    //     .delete_user_caches(&user_principal.to_string())
+    //     .await
+    //     .map_err(|e| {
+    //         log::error!("Failed to delete user caches: {}", e);
+    //         (
+    //             StatusCode::INTERNAL_SERVER_ERROR,
+    //             format!("Failed to delete user caches: {}", e),
+    //         )
+    //     })?;
 
     // 6. Delete user metadata using yral_metadata_client
     state
