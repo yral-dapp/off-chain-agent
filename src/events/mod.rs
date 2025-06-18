@@ -19,7 +19,6 @@ use yral_metrics::metrics::sealed_metric::SealedMetric;
 use warehouse_events::warehouse_events_server::WarehouseEvents;
 
 use crate::auth::check_auth_events;
-use crate::events::push_notifications::dispatch_notif;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::types::DelegatedIdentityWire;
 use crate::AppState;
@@ -33,7 +32,6 @@ pub mod warehouse_events {
 
 pub mod event;
 pub mod nsfw;
-pub mod push_notifications;
 pub mod queries;
 pub mod types;
 pub mod verify;
@@ -177,13 +175,6 @@ async fn process_event_impl(
     event: Event,
     shared_state: Arc<AppState>,
 ) -> Result<(), anyhow::Error> {
-    let params: Value = serde_json::from_str(&event.event.params).map_err(|e| {
-        log::error!("Failed to parse params: {}", e);
-        anyhow::anyhow!("Failed to parse params: {}", e)
-    })?;
-
-    let event_type: &str = &event.event.event;
-
     #[cfg(not(feature = "local-bin"))]
     event.stream_to_bigquery(&shared_state.clone());
 
@@ -201,8 +192,6 @@ async fn process_event_impl(
     if let Err(e) = event.handle_login_successful(&shared_state.clone()) {
         log::error!("Error handling login successful: {:?}", e);
     }
-
-    let _ = dispatch_notif(event_type, params, &shared_state.clone()).await;
 
     Ok(())
 }
