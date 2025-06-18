@@ -25,7 +25,7 @@ use crate::posts::report_post::{__path_handle_report_post, __path_handle_report_
 pub mod delete_post;
 mod queries;
 pub mod report_post;
-mod types;
+pub mod types;
 mod utils;
 mod verify;
 
