@@ -1,8 +1,8 @@
 pub mod delete_user;
+pub mod utils;
 
 use std::sync::Arc;
 
-use axum::routing::delete;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::app_state::AppState;

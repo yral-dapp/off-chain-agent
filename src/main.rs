@@ -77,7 +77,7 @@ async fn main_impl() -> Result<()> {
             "/api/v1/events",
             events::events_router(shared_state.clone()),
         )
-        // .nest("/api/v1/user", user::user_router(shared_state.clone()))
+        .nest("/api/v1/user", user::user_router(shared_state.clone()))
         .split_for_parts();
 
     let router =

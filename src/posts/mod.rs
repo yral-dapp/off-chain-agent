@@ -9,7 +9,6 @@ use report_post::{
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use types::PostRequest;
-use utils::get_agent_from_delegated_identity_wire;
 use utoipa::ToSchema;
 use utoipa_axum::{
     router::{OpenApiRouter, UtoipaMethodRouterExt},
