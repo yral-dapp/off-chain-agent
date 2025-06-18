@@ -2,7 +2,6 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::{middleware, Json};
 use candid::Principal;
-use chrono::Utc;
 use event::Event;
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -22,7 +21,6 @@ use crate::auth::check_auth_events;
 use crate::events::warehouse_events::{Empty, WarehouseEvent};
 use crate::types::DelegatedIdentityWire;
 use crate::AppState;
-use serde_json::Value;
 
 pub mod warehouse_events {
     tonic::include_proto!("warehouse_events");

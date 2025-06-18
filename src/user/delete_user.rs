@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use candid::Principal;
-use futures::stream::{StreamExt};
+use futures::stream::StreamExt;
 use google_cloud_bigquery::{
     client::Client,
     http::tabledata::insert_all::{InsertAllRequest, Row},
@@ -17,6 +17,8 @@ use crate::{app_state::AppState, posts::types::VideoDeleteRow};
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct DeleteUserRequest {
     pub id_token: String,
+    pub canister_id: String,
+    pub user_principal: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,24 +46,30 @@ pub async fn handle_delete_user(
     Json(request): Json<DeleteUserRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     // Verify the ID token
-    let claims = state
-        .yral_auth_jwt
-        .verify_token(&request.id_token)
-        .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)))?;
+    // let claims = state
+    //     .yral_auth_jwt
+    //     .verify_token(&request.id_token)
+    //     .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)))?;
 
-    let user_principal = Principal::from_text(&claims.sub)
+    // let user_principal = Principal::from_text(&claims.sub)
+    //     .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
+
+    // // Get user's canister ID
+    // let user_canister = state
+    //     .get_individual_canister_by_user_principal(user_principal)
+    //     .await
+    //     .map_err(|e| {
+    //         (
+    //             StatusCode::NOT_FOUND,
+    //             format!("User canister not found: {}", e),
+    //         )
+    //     })?;
+
+    let user_principal = Principal::from_text(&request.user_principal)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid principal: {}", e)))?;
 
-    // Get user's canister ID
-    let user_canister = state
-        .get_individual_canister_by_user_principal(user_principal)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("User canister not found: {}", e),
-            )
-        })?;
+    let user_canister = Principal::from_text(&request.canister_id)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid canister: {}", e)))?;
 
     // 1. Get all posts for the user from canister
     let posts = get_user_posts(&state, user_canister).await.map_err(|e| {
@@ -110,6 +118,19 @@ pub async fn handle_delete_user(
                 format!("Failed to delete user caches: {}", e),
             )
         })?;
+
+    // 7. Add deleted canister to SpaceTimeDB [TODO: place this below after testing]
+    #[cfg(not(feature = "local-bin"))]
+    {
+        if let Err(e) = state
+            .canisters_ctx
+            .add_deleted_canister(user_canister, user_principal)
+            .await
+        {
+            log::error!("Failed to add deleted canister to SpaceTimeDB: {}", e);
+            // Don't fail the request if SpaceTimeDB call fails
+        }
+    }
 
     // 6. Delete user metadata using yral_metadata_client
     state
@@ -216,13 +237,25 @@ async fn handle_duplicate_posts_cleanup(bigquery_client: Client, video_ids: Vec<
         .map(|video_id| {
             let client = bigquery_client.clone();
             async move {
-                match crate::posts::delete_post::handle_duplicate_post_on_delete(client, video_id.clone()).await {
+                match crate::posts::delete_post::handle_duplicate_post_on_delete(
+                    client,
+                    video_id.clone(),
+                )
+                .await
+                {
                     Ok(_) => {
-                        log::info!("Successfully handled duplicate post cleanup for video: {}", video_id);
+                        log::info!(
+                            "Successfully handled duplicate post cleanup for video: {}",
+                            video_id
+                        );
                         Ok(())
                     }
                     Err(e) => {
-                        log::error!("Failed to handle duplicate post on delete for video {}: {}", video_id, e);
+                        log::error!(
+                            "Failed to handle duplicate post on delete for video {}: {}",
+                            video_id,
+                            e
+                        );
                         Err(format!("Failed to handle duplicate post: {}", e))
                     }
                 }
