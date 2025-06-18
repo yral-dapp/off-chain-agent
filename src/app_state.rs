@@ -5,6 +5,7 @@ use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::types::RedisPool;
+use crate::utils::yral_auth_jwt::YralAuthJwt;
 use anyhow::{anyhow, Context, Result};
 use candid::Principal;
 use firestore::{FirestoreDb, FirestoreDbOptions};
@@ -48,6 +49,7 @@ pub struct AppState {
     pub dedup_index_ctx: async_dedup_index::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
+    pub yral_auth_jwt: YralAuthJwt,
 }
 
 impl AppState {
@@ -76,6 +78,7 @@ impl AppState {
             dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
+            yral_auth_jwt: init_yral_auth_jwt(&app_config),
         }
     }
 
@@ -248,4 +251,9 @@ async fn init_canister_backup_redis_pool() -> RedisPool {
     let manager = bb8_redis::RedisConnectionManager::new(redis_url.clone())
         .expect("failed to open connection to redis");
     RedisPool::builder().build(manager).await.unwrap()
+}
+
+pub fn init_yral_auth_jwt(conf: &AppConfig) -> YralAuthJwt {
+    YralAuthJwt::init(conf.yral_auth_v2_signing_public_key.clone())
+        .expect("Failed to initialize YralAuthJwt")
 }

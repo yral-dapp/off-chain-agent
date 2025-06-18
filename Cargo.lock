@@ -75,7 +75,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?rev=ef8cf31f843a61a36738f006fa49bfb3a1a7e28b#ef8cf31f843a61a36738f006fa49bfb3a1a7e28b"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -4549,7 +4549,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?rev=ef8cf31f843a61a36738f006fa49bfb3a1a7e28b#ef8cf31f843a61a36738f006fa49bfb3a1a7e28b"
 dependencies = [
  "anyhow",
  "bb8",
@@ -5688,12 +5688,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "redis-macros"
-version = "0.5.2"
+name = "redis"
+version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0887a0ff58093e610a414c44101707382a559a7aff3edd2d2d2a514d6c4db00f"
+checksum = "c65f367b70919b9600eb6a77436dacd7131fc185cc3bda949a97ab27bfd6213e"
 dependencies = [
- "redis 0.29.1",
+ "combine",
+ "itoa",
+ "num-bigint 0.4.6",
+ "percent-encoding",
+ "ryu",
+ "sha1_smol",
+ "socket2 0.5.8",
+ "url",
+]
+
+[[package]]
+name = "redis-macros"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc92242f0a306754b0e0f08e2edb04dff85a3040d8d7ee3af74eb94e1fd19304"
+dependencies = [
+ "redis 0.32.1",
  "redis-macros-derive",
  "serde",
  "serde_json",
@@ -5701,12 +5717,13 @@ dependencies = [
 
 [[package]]
 name = "redis-macros-derive"
-version = "0.5.2"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5897310e5c51a7e94c4219062c2c61740a90dc1dd6bd61583fe16e5e544f324"
+checksum = "739c18bd7885800eadb34bd3993aadb44ec1ba1330700d5b5b7edbc8b8625b9f"
 dependencies = [
  "proc-macro2",
  "quote",
+ "redis 0.32.1",
  "syn 2.0.103",
 ]
 
@@ -7061,9 +7078,9 @@ dependencies = [
 
 [[package]]
 name = "string_cache"
-version = "0.8.8"
+version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "938d512196766101d333398efde81bc1f37b00cb42c2f8350e5df639f040bbbe"
+checksum = "bf776ba3fa74f83bf4b63c3dcbbf82173db2632ed8452cb2d891d33f459de70f"
 dependencies = [
  "new_debug_unreachable",
  "parking_lot",
@@ -8620,7 +8637,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?rev=ef8cf31f843a61a36738f006fa49bfb3a1a7e28b#ef8cf31f843a61a36738f006fa49bfb3a1a7e28b"
 dependencies = [
  "anyhow",
  "candid",
@@ -8675,7 +8692,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?rev=ef8cf31f843a61a36738f006fa49bfb3a1a7e28b#ef8cf31f843a61a36738f006fa49bfb3a1a7e28b"
 dependencies = [
  "candid",
  "log",
@@ -8690,7 +8707,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?rev=ef8cf31f843a61a36738f006fa49bfb3a1a7e28b#ef8cf31f843a61a36738f006fa49bfb3a1a7e28b"
 dependencies = [
  "candid",
  "serde",
@@ -8708,7 +8725,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?rev=ef8cf31f843a61a36738f006fa49bfb3a1a7e28b#ef8cf31f843a61a36738f006fa49bfb3a1a7e28b"
 dependencies = [
  "ic-agent",
  "k256",

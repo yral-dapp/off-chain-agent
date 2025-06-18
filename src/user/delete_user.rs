@@ -2,23 +2,17 @@ use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use candid::Principal;
+use futures::stream::{StreamExt};
 use google_cloud_bigquery::{
     client::Client,
-    http::{
-        job::query::QueryRequest,
-        tabledata::insert_all::{InsertAllRequest, Row},
-    },
-    query::row::Row as QueryRow,
+    http::tabledata::insert_all::{InsertAllRequest, Row},
 };
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use utoipa::ToSchema;
+use yral_canisters_client::individual_user_template::Result6;
 
-use crate::{
-    app_state::AppState,
-    posts::{delete_post::insert_video_delete_row_to_bigquery, types::VideoDeleteRow},
-    utils::yral_auth_jwt::YralAuthJwt,
-};
+use crate::{app_state::AppState, posts::types::VideoDeleteRow};
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct DeleteUserRequest {
@@ -50,22 +44,8 @@ pub async fn handle_delete_user(
     Json(request): Json<DeleteUserRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     // Verify the ID token
-    let yral_auth_jwt = YralAuthJwt::init(
-        std::env::var("YRAL_AUTH_V2_SIGNING_PUBLIC_KEY").map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Missing auth config".to_string(),
-            )
-        })?,
-    )
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Auth init error: {}", e),
-        )
-    })?;
-
-    let claims = yral_auth_jwt
+    let claims = state
+        .yral_auth_jwt
         .verify_token(&request.id_token)
         .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)))?;
 
@@ -83,24 +63,20 @@ pub async fn handle_delete_user(
             )
         })?;
 
-    let canister_id = user_canister.to_string();
-
-    // 1. Get all posts for the user from BigQuery
-    #[cfg(not(feature = "local-bin"))]
-    let posts = get_user_posts(&state.bigquery_client, &canister_id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get user posts: {}", e),
-            )
-        })?;
+    // 1. Get all posts for the user from canister
+    let posts = get_user_posts(&state, user_canister).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get user posts: {}", e),
+        )
+    })?;
 
     // 2. Bulk insert into video_deleted table
     if !posts.is_empty() {
         bulk_insert_video_delete_rows(&state.bigquery_client, posts.clone())
             .await
             .map_err(|e| {
+                log::error!("Failed to bulk insert video delete rows: {}", e);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Failed to bulk delete posts: {}", e),
@@ -108,139 +84,184 @@ pub async fn handle_delete_user(
             })?;
     }
 
-    // 3. Handle duplicate posts cleanup (spawn as background task)
+    // 3. Delete posts from canister (spawn as background task with concurrency)
+    let state_clone = state.clone();
+    let posts_for_deletion = posts.clone();
+    tokio::spawn(async move {
+        delete_posts_from_canister(state_clone, posts_for_deletion).await;
+    });
+
+    // 4. Handle duplicate posts cleanup (spawn as background task with concurrency)
     let bigquery_client = state.bigquery_client.clone();
     let video_ids: Vec<String> = posts.iter().map(|p| p.video_id.clone()).collect();
     tokio::spawn(async move {
-        for video_id in video_ids {
-            if let Err(e) = crate::posts::delete_post::handle_duplicate_post_on_delete(
-                bigquery_client.clone(),
-                video_id,
-            )
-            .await
-            {
-                log::error!("Failed to handle duplicate post on delete: {}", e);
-            }
-        }
+        handle_duplicate_posts_cleanup(bigquery_client, video_ids).await;
     });
 
-    // 4. Delete from Redis caches
-    #[cfg(not(feature = "local-bin"))]
-    {
-        // Delete from ML feed cache - implementation would depend on ML feed cache structure
-        // For now, we'll log that this needs to be implemented
-        log::info!(
-            "TODO: Implement ML feed cache deletion for user: {}",
-            user_principal
-        );
-
-        // Delete from canister backup cache if needed
-        // This would need to be implemented based on your Redis structure
-    }
-
-    // 5. Call yral-metadata delete API
-    let metadata_url = format!(
-        "https://yral-metadata.fly.dev/delete_user_metadata?user_principal={}",
-        user_principal
-    );
-
-    let client = reqwest::Client::new();
-    let metadata_response = client
-        .delete(&metadata_url)
-        .header(
-            "Authorization",
-            format!(
-                "Bearer {}",
-                std::env::var("YRAL_METADATA_TOKEN").unwrap_or_default()
-            ),
-        )
-        .send()
+    // 5. Delete from Redis caches
+    let ml_feed_cache = state.ml_feed_cache.clone();
+    ml_feed_cache
+        .delete_user_caches(&user_principal.to_string())
         .await
         .map_err(|e| {
+            log::error!("Failed to delete user caches: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to call metadata API: {}", e),
+                format!("Failed to delete user caches: {}", e),
             )
         })?;
 
-    if !metadata_response.status().is_success() {
-        log::error!(
-            "Metadata API returned non-success status: {}",
-            metadata_response.status()
-        );
-    }
+    // 6. Delete user metadata using yral_metadata_client
+    state
+        .yral_metadata_client
+        .delete_metadata_bulk(vec![user_principal])
+        .await
+        .map_err(|e| {
+            log::error!("Failed to delete user metadata: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to delete user metadata: {}", e),
+            )
+        })?;
 
     Ok((StatusCode::OK, "User deleted successfully".to_string()))
 }
 
 async fn get_user_posts(
-    bq_client: &Client,
-    canister_id: &str,
+    state: &AppState,
+    canister_id: Principal,
 ) -> Result<Vec<UserPost>, anyhow::Error> {
-    let query = format!(
-        r#"
-        SELECT
-            v.publisher_canister_id as canister_id,
-            CAST(v.post_id AS INT64) as post_id,
-            v.video_id
-        FROM `hot-or-not-feed-intelligence.yral_ds.video_transcoding_queue_replica` v
-        LEFT JOIN `hot-or-not-feed-intelligence.yral_ds.video_deleted` d
-            ON v.video_id = d.video_id
-        WHERE v.publisher_canister_id = '{}'
-            AND d.video_id IS NULL
-        "#,
-        canister_id
-    );
+    let mut all_posts = Vec::new();
+    let mut start = 0u64;
+    let batch_size = 100u64; // Get 100 posts at a time
 
-    let request = QueryRequest {
-        query,
-        ..Default::default()
-    };
+    loop {
+        let end = start + batch_size;
 
-    let mut response = bq_client
-        .query::<QueryRow>("hot-or-not-feed-intelligence", request)
-        .await?;
+        let result = state
+            .individual_user(canister_id)
+            .get_posts_of_this_user_profile_with_pagination_cursor(start, end)
+            .await?;
 
-    let mut posts = Vec::new();
-    while let Some(row) = response.next().await? {
-        let canister_id: String = row.column(0)?;
-        let post_id: i64 = row.column(1)?;
-        let video_id: String = row.column(2)?;
+        match result {
+            Result6::Ok(posts) => {
+                let result_len = posts.len();
+                all_posts.extend(posts.into_iter().map(|p| UserPost {
+                    canister_id: canister_id.to_string(),
+                    post_id: p.id,
+                    video_id: p.video_uid,
+                }));
+                if result_len < batch_size as usize {
+                    break;
+                }
+            }
+            Result6::Err(_) => {
+                break;
+            }
+        }
 
-        posts.push(UserPost {
-            canister_id,
-            post_id: post_id as u64,
-            video_id,
-        });
+        start = end;
     }
 
-    Ok(posts)
+    Ok(all_posts)
+}
+
+async fn delete_posts_from_canister(state: Arc<AppState>, posts: Vec<UserPost>) {
+    let futures: Vec<_> = posts
+        .into_iter()
+        .map(|post| {
+            let state_inner = state.clone();
+            async move {
+                let canister_principal = Principal::from_text(&post.canister_id)
+                    .map_err(|e| format!("Invalid canister principal: {}", e))?;
+
+                match state_inner
+                    .individual_user(canister_principal)
+                    .delete_post(post.post_id)
+                    .await
+                {
+                    Ok(_) => {
+                        log::info!(
+                            "Successfully deleted post {} from canister {}",
+                            post.post_id,
+                            post.canister_id
+                        );
+                        Ok(())
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to delete post {} from canister {}: {}",
+                            post.post_id,
+                            post.canister_id,
+                            e
+                        );
+                        Err(format!("Failed to delete post: {}", e))
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let mut buffered = futures::stream::iter(futures).buffer_unordered(10);
+    while let Some(result) = buffered.next().await {
+        if let Err(e) = result {
+            log::error!("Post deletion error: {}", e);
+        }
+    }
+}
+
+async fn handle_duplicate_posts_cleanup(bigquery_client: Client, video_ids: Vec<String>) {
+    let futures: Vec<_> = video_ids
+        .into_iter()
+        .map(|video_id| {
+            let client = bigquery_client.clone();
+            async move {
+                match crate::posts::delete_post::handle_duplicate_post_on_delete(client, video_id.clone()).await {
+                    Ok(_) => {
+                        log::info!("Successfully handled duplicate post cleanup for video: {}", video_id);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        log::error!("Failed to handle duplicate post on delete for video {}: {}", video_id, e);
+                        Err(format!("Failed to handle duplicate post: {}", e))
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let mut buffered = futures::stream::iter(futures).buffer_unordered(10);
+    while let Some(result) = buffered.next().await {
+        if let Err(e) = result {
+            log::error!("Duplicate post cleanup error: {}", e);
+        }
+    }
 }
 
 async fn bulk_insert_video_delete_rows(
     bq_client: &Client,
     posts: Vec<UserPost>,
 ) -> Result<(), anyhow::Error> {
-    let rows: Vec<Row<VideoDeleteRow>> = posts
-        .into_iter()
-        .map(|post| {
-            let video_delete_row = VideoDeleteRow {
-                canister_id: post.canister_id,
-                post_id: post.post_id,
-                video_id: post.video_id.clone(),
-                gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
-            };
-            Row::<VideoDeleteRow> {
-                insert_id: None,
-                json: video_delete_row,
-            }
-        })
-        .collect();
+    // Process posts in batches of 500
+    for chunk in posts.chunks(500) {
+        let rows: Vec<Row<VideoDeleteRow>> = chunk
+            .iter()
+            .map(|post| {
+                let video_delete_row = VideoDeleteRow {
+                    canister_id: post.canister_id.clone(),
+                    post_id: post.post_id,
+                    video_id: post.video_id.clone(),
+                    gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
+                };
+                Row::<VideoDeleteRow> {
+                    insert_id: None,
+                    json: video_delete_row,
+                }
+            })
+            .collect();
 
-    // Insert in batches of 500 rows
-    for chunk in rows.chunks(500) {
         let request = InsertAllRequest {
-            rows: chunk.to_vec(),
+            rows,
             ..Default::default()
         };
 
