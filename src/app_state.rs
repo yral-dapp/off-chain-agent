@@ -3,6 +3,8 @@ use crate::async_backend;
 use crate::async_dedup_index;
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
+#[cfg(not(feature = "local-bin"))]
+use crate::events::push_notifications::NotificationClient;
 use crate::metrics::{init_metrics, CfMetricTx};
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
@@ -52,6 +54,8 @@ pub struct AppState {
     pub notification_store_ctx: async_backend::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
+    #[cfg(not(feature = "local-bin"))]
+    pub notification_client: NotificationClient,
 }
 
 impl AppState {
@@ -82,6 +86,8 @@ impl AppState {
             notification_store_ctx: init_backend_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
+            #[cfg(not(feature = "local-bin"))]
+            notification_client: NotificationClient::new("ADD_API_KEY_HERE".to_string()),
         }
     }
 

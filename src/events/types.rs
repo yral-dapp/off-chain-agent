@@ -1,11 +1,17 @@
 use candid::Principal;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use utoipa::ToSchema;
+use yral_metadata_types::{
+    AndroidConfig, AndroidNotification, ApnsConfig, ApnsFcmOptions, NotificationPayload,
+    SendNotificationReq, WebpushConfig, WebpushFcmOptions,
+};
 use yral_metrics::metrics::{
     like_video::LikeVideo, sealed_metric::SealedMetric,
     video_duration_watched::VideoDurationWatched, video_watched::VideoWatched,
 };
+
+use crate::{app_state::AppState, events::push_notifications::NotificationClient};
 
 #[derive(Serialize, Clone, Debug, ToSchema)]
 #[serde(tag = "event")]
@@ -589,6 +595,148 @@ pub enum EventPayload {
 /// * Returns `serde_json::Error` if the event name is unknown OR the payload cannot
 ///   be deserialized into the expected structure.
 ///
+
+impl EventPayload {
+    pub async fn send_notification(&self, app_state: &AppState) {
+        match self {
+            EventPayload::VideoUploadSuccessful(payload) => {
+                let title = "Video Uploaded";
+                let body = "Your video has been uploaded successfully";
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            click_action: Some(format!(
+                                "https://yral.com/hot-or-not/{}/{}",
+                                payload.canister_id.to_text(),
+                                payload.post_id
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(format!(
+                                "https://yral.com/hot-or-not/{}/{}",
+                                payload.canister_id.to_text(),
+                                payload.post_id
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body.to_string(),
+                                },
+                                "sound": "default",
+                            },
+                            "url": format!("https://yral.com/hot-or-not/{}/{}", payload.canister_id.to_text(), payload.post_id)
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, payload.publisher_user_id)
+                    .await;
+            }
+            EventPayload::LikeVideo(payload) => {
+                let title = "Video Liked";
+                let body = format!("{} liked your video", payload.user_id.to_text());
+
+                let notif_payload = SendNotificationReq {
+                    notification: Some(NotificationPayload {
+                        title: Some(title.to_string()),
+                        body: Some(body.to_string()),
+                        image: Some(
+                            "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                        ),
+                    }),
+                    android: Some(AndroidConfig {
+                        notification: Some(AndroidNotification {
+                            icon: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            click_action: Some(format!(
+                                "https://yral.com/hot-or-not/{}/{}",
+                                payload.canister_id.to_text(),
+                                payload.post_id
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    webpush: Some(WebpushConfig {
+                        fcm_options: Some(WebpushFcmOptions {
+                            link: Some(format!(
+                                "https://yral.com/hot-or-not/{}/{}",
+                                payload.canister_id.to_text(),
+                                payload.post_id
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    apns: Some(ApnsConfig {
+                        fcm_options: Some(ApnsFcmOptions {
+                            image: Some(
+                                "https://yral.com/img/yral/android-chrome-384x384.png".to_string(),
+                            ),
+                            ..Default::default()
+                        }),
+                        payload: Some(json!({
+                            "aps": {
+                                "alert": {
+                                    "title": title.to_string(),
+                                    "body": body.to_string(),
+                                },
+                                "sound": "default",
+                            },
+                            "url": format!("https://yral.com/hot-or-not/{}/{}", payload.canister_id.to_text(), payload.post_id)
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                app_state
+                    .notification_client
+                    .send_notification(notif_payload, payload.publisher_user_id)
+                    .await;
+            }
+
+            _ => {}
+        }
+    }
+}
 
 pub fn deserialize_event_payload(
     event_name: &str,
