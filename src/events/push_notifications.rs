@@ -31,7 +31,7 @@ pub async fn dispatch_notif(
         }
         EventPayload::LikeVideo(payload) => {
             // send to fcm
-            
+
             app_state
                 .notification_store_ctx
                 .add(
