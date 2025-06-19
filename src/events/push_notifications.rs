@@ -1,4 +1,7 @@
-use crate::app_state::AppState;
+use crate::{
+    app_state::AppState,
+    events::types::{deserialize_event_payload, EventPayload},
+};
 use anyhow::Result;
 use candid::Principal;
 use serde_json::Value;
@@ -11,45 +14,34 @@ pub async fn dispatch_notif(
     params: Value,
     app_state: &AppState,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match event_type {
-        // LikeVideo
-        "like_video" => {
-            let target_principal = params["publisher_user_id"].as_str().unwrap();
-            let like_count = params["like_count"].as_u64().unwrap();
-            let liker_name = params["display_name"].as_str().unwrap_or("A YRAL user");
-            // Notify yral metadata
-
-            let notification_type = NotificationType::Liked(LikedPayload {
-                creator_canister_id: params["canister_id"].as_str().unwrap().to_string(),
-                by_user_principal: params["user_id"].as_str().unwrap().to_string(),
-                post_id: params["post_id"].as_u64().unwrap(),
-            });
+    let event = deserialize_event_payload(event_type, params)?;
+    match event {
+        EventPayload::VideoUploadSuccessful(payload) => {
+            // send to fcm
 
             app_state
                 .notification_store_ctx
                 .add(
-                    Principal::from_text(params["principal"].as_str().unwrap()).unwrap(),
-                    notification_type,
+                    payload.publisher_user_id,
+                    NotificationType::VideoUpload(VideoUploadPayload {
+                        video_id: payload.post_id,
+                    }),
                 )
-                .await?;
+                .await??;
         }
-        // VideoUploadSuccessful
-        "video_upload_successful" => {
-            let target_principal = params["user_id"].as_str().unwrap();
-            // Notify yral metadata
-
-            let notification_type = NotificationType::VideoUpload(VideoUploadPayload {
-                creator_canister_id: params["canister_id"].as_str().unwrap().to_string(),
-                video_id: params["video_id"].as_u64().unwrap(),
-            });
-
+        EventPayload::LikeVideo(payload) => {
+            // send to fcm
+            
             app_state
                 .notification_store_ctx
                 .add(
-                    Principal::from_text(target_principal).unwrap(),
-                    notification_type,
+                    payload.publisher_user_id,
+                    NotificationType::Liked(LikedPayload {
+                        by_user_principal: payload.user_id.to_text(),
+                        post_id: payload.post_id,
+                    }),
                 )
-                .await?;
+                .await??;
         }
         _ => {}
     }
