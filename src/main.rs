@@ -49,6 +49,7 @@ mod offchain_service;
 mod posts;
 mod qstash;
 mod types;
+mod async_backend;
 pub mod utils;
 
 use app_state::AppState;
