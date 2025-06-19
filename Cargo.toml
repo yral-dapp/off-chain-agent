@@ -96,13 +96,13 @@ spacetimedb-sdk = "1.1.1"
 
 # ===== YRAL-COMMON DEPENDENCIES =====
 # Remote (Git) - uncomment to use remote versions
-yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", rev = "ef8cf31f843a61a36738f006fa49bfb3a1a7e28b", features = [
+yral-canisters-client = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", features = [
     "full",
 ] }
-yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", rev = "ef8cf31f843a61a36738f006fa49bfb3a1a7e28b", package = "ml-feed-cache" }
-yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", rev = "ef8cf31f843a61a36738f006fa49bfb3a1a7e28b", package = "alloydb-client" }
-yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", rev = "ef8cf31f843a61a36738f006fa49bfb3a1a7e28b" }
-yral-metrics = { git = "https://github.com/yral-dapp/yral-common", rev = "ef8cf31f843a61a36738f006fa49bfb3a1a7e28b" }
+yral-ml-feed-cache = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "ml-feed-cache" }
+yral-alloydb-client = { git = "https://github.com/yral-dapp/yral-common", branch = "master", package = "alloydb-client" }
+yral-qstash-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
+yral-metrics = { git = "https://github.com/yral-dapp/yral-common", branch = "master" }
 
 # Local (Path) - uncomment to use local development versions
 # yral-canisters-client = { path = "../yral-common/canisters-client", features = [
