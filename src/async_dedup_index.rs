@@ -31,7 +31,7 @@ fn fast_hash<H: std::hash::Hash>(data: H) -> u128 {
 fn fast_hash<H: std::hash::Hash>(data: H) -> u128 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
     hasher.finish() as u128

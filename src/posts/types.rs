@@ -17,3 +17,10 @@ pub struct VideoDeleteRow {
     pub video_id: String,
     pub gcs_video_id: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPost {
+    pub canister_id: String,
+    pub post_id: u64,
+    pub video_id: String,
+}

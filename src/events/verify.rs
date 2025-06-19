@@ -12,7 +12,9 @@ use ic_agent::{identity::DelegatedIdentity, Identity};
 use serde::{Deserialize, Serialize};
 use yral_metrics::metrics::sealed_metric::SealedMetric;
 
-use crate::app_state::AppState;
+use crate::{
+    app_state::AppState, utils::delegated_identity::get_user_info_from_delegated_identity_wire,
+};
 
 use super::{types::AnalyticsEvent, EventBulkRequest, VerifiedEventBulkRequest};
 
@@ -44,42 +46,19 @@ pub async fn verify_event_bulk_request(
         }
     };
 
-    // Convert delegated identity wire to actual identity
-    let identity: DelegatedIdentity =
-        match DelegatedIdentity::try_from(event_bulk_request.delegated_identity_wire.clone()) {
-            Ok(identity) => identity,
-            Err(e) => {
-                return Err((
-                    StatusCode::UNAUTHORIZED,
-                    format!("Failed to parse delegated identity wire: {}", e),
-                ))
-            }
-        };
-
-    // Get the user principal from the identity
-    let user_principal = match identity.sender() {
-        Ok(principal) => principal,
-        Err(e) => {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                format!("Failed to parse user principal: {}", e),
-            ))
-        }
-    };
-
-    // Get the user's canister ID from metadata
-    let user_canister = match state
-        .get_individual_canister_by_user_principal(user_principal)
-        .await
-    {
-        Ok(canister_id) => canister_id,
-        Err(e) => {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                format!("Failed to get user canister: {}", e),
-            ))
-        }
-    };
+    let user_info = get_user_info_from_delegated_identity_wire(
+        &state,
+        event_bulk_request.delegated_identity_wire.clone(),
+    )
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            format!("Failed to get user info: {}", e),
+        )
+    })?;
+    let user_principal = user_info.user_principal;
+    let user_canister = user_info.user_canister;
 
     // verify all events are valid
     for event in event_bulk_request.events.clone() {

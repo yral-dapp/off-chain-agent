@@ -5,6 +5,8 @@ use yral_canisters_client::{
     user_index::UserIndex,
 };
 
+pub mod deleted_canister;
+
 #[instrument(skip(agent))]
 pub async fn get_subnet_orch_ids(agent: &Agent) -> Result<Vec<Principal>, anyhow::Error> {
     let pf_orch = PlatformOrchestrator(PLATFORM_ORCHESTRATOR_ID, agent);
