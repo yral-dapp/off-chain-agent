@@ -36,6 +36,7 @@ use crate::offchain_service::{off_chain, OffChainService};
 use error::*;
 
 mod app_state;
+mod async_backend;
 pub(crate) mod async_dedup_index;
 mod auth;
 pub mod canister;
@@ -49,7 +50,6 @@ mod offchain_service;
 mod posts;
 mod qstash;
 mod types;
-mod async_backend;
 pub mod utils;
 
 use app_state::AppState;

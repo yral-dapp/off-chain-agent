@@ -84,7 +84,7 @@ impl WrappedContext {
     pub async fn add(
         &self,
         principal: Principal,
-        payload: backend::NotificationType
+        payload: backend::NotificationType,
     ) -> anyhow::Result<ReducerResult> {
         let search_hash = fast_hash(HashData {
             video_id: video_id.to_string(),

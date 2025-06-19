@@ -1,9 +1,9 @@
+#[cfg(not(feature = "local-bin"))]
+use crate::async_backend;
 use crate::async_dedup_index;
 use crate::config::AppConfig;
 use crate::consts::{NSFW_SERVER_URL, YRAL_METADATA_URL};
 use crate::metrics::{init_metrics, CfMetricTx};
-#[cfg(not(feature = "local-bin"))]
-use crate::async_backend;
 use crate::qstash::client::QStashClient;
 use crate::qstash::QStashState;
 use crate::types::RedisPool;
