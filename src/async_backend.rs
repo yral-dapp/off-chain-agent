@@ -14,7 +14,7 @@ use crate::consts::{STDB_ACCESS_TOKEN, STDB_URL};
 pub type ReducerResult = Result<(), String>;
 
 /// (input hash, reducer result)
-type BusMessage = (u128, ReducerResult);
+type BusMessage = (Principal, backend::NotificationType, ReducerResult);
 
 /// A wrapper around the [`dedup_index::DbConnection`] with an internal message bus that allows for async operations
 #[derive(Clone)]
@@ -55,13 +55,7 @@ impl WrappedContext {
         let tx_clone = tx.clone();
 
         conn.reducers
-            .on_add(move |event, hash, video_id, timestamp| {
-                let search_hash = fast_hash(HashData {
-                    video_id: video_id.clone(),
-                    hash: hash.clone(),
-                    timestamp: *timestamp,
-                });
-
+            .on_add_notification(move |event, principal, payload| {
                 let res = match event.event.status {
                     Status::Committed => Ok(()),
                     Status::Failed(ref msg) => Err(msg.to_string()),
@@ -69,7 +63,13 @@ impl WrappedContext {
                 };
 
                 // channel must be not be closed
-                tx_clone.send((search_hash, res)).unwrap();
+                tx_clone
+                    .send((
+                        Principal::from_text(principal).unwrap(),
+                        payload.clone(),
+                        res,
+                    ))
+                    .unwrap();
             });
 
         Ok(Self { conn, tx })
@@ -86,22 +86,18 @@ impl WrappedContext {
         principal: Principal,
         payload: backend::NotificationType,
     ) -> anyhow::Result<ReducerResult> {
-        let search_hash = fast_hash(HashData {
-            video_id: video_id.to_string(),
-            hash: hash.to_string(),
-            timestamp: timestamp.into(),
-        });
         let mut rx = self.tx.subscribe();
         self.conn
             .reducers
-            .add_notification(principal.to_string(), payload)
+            .add_notification(principal.to_string(), payload.clone())
             .context("Couldn't send request to add")?;
 
         let res = loop {
-            let (recv_hash, data) = tokio::time::timeout(Duration::from_secs(5), rx.recv())
-                .await
-                .context("timeout reached before receiving result")??;
-            if recv_hash == search_hash {
+            let (recv_principal, recv_payload, data) =
+                tokio::time::timeout(Duration::from_secs(5), rx.recv())
+                    .await
+                    .context("timeout reached before receiving result")??;
+            if recv_principal == principal && recv_payload == payload {
                 break data;
             }
         };

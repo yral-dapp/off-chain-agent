@@ -79,7 +79,7 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
-            notification_store_ctx: async_backend::WrappedContext::new().aw,
+            notification_store_ctx: init_backend_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
         }
@@ -224,8 +224,8 @@ pub async fn init_dedup_index_ctx() -> async_dedup_index::WrappedContext {
     async_dedup_index::WrappedContext::new().expect("Stdb dedup index to be connected")
 }
 
-pub async fn init_backend_ctx() -> async_dedup_index::WrappedContext {
-    async_backend::WrappedContext::new().expect("Stdb dedup index to be connected")
+pub async fn init_backend_ctx() -> async_backend::WrappedContext {
+    async_backend::WrappedContext::new().expect("Stdb backend to be connected")
 }
 
 async fn init_alloydb_client() -> AlloyDbInstance {
