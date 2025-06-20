@@ -131,17 +131,17 @@ pub async fn handle_delete_user(
         })?;
 
     // 7. Add deleted canister to SpaceTimeDB
-    #[cfg(not(feature = "local-bin"))]
-    {
-        if let Err(e) = state
-            .canisters_ctx
-            .add_deleted_canister(user_canister, user_principal)
-            .await
-        {
-            log::error!("Failed to add deleted canister to SpaceTimeDB: {}", e);
-            // Don't fail the request if SpaceTimeDB call fails
-        }
-    }
+    // #[cfg(not(feature = "local-bin"))]
+    // {
+    //     if let Err(e) = state
+    //         .canisters_ctx
+    //         .add_deleted_canister(user_canister, user_principal)
+    //         .await
+    //     {
+    //         log::error!("Failed to add deleted canister to SpaceTimeDB: {}", e);
+    //         // Don't fail the request if SpaceTimeDB call fails
+    //     }
+    // }
 
     Ok((StatusCode::OK, "User deleted successfully".to_string()))
 }

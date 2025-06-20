@@ -44,12 +44,12 @@ pub struct AppState {
     pub metrics: CfMetricTx,
     #[cfg(not(feature = "local-bin"))]
     pub alloydb_client: AlloyDbInstance,
-    #[cfg(not(feature = "local-bin"))]
-    pub dedup_index_ctx: async_dedup_index::WrappedContext,
+    // #[cfg(not(feature = "local-bin"))]
+    // pub dedup_index_ctx: async_dedup_index::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
-    #[cfg(not(feature = "local-bin"))]
-    pub canisters_ctx: WrappedContextCanisters,
+    // #[cfg(not(feature = "local-bin"))]
+    // pub canisters_ctx: WrappedContextCanisters,
 }
 
 impl AppState {
@@ -74,12 +74,12 @@ impl AppState {
             metrics: init_metrics(),
             #[cfg(not(feature = "local-bin"))]
             alloydb_client: init_alloydb_client().await,
-            #[cfg(not(feature = "local-bin"))]
-            dedup_index_ctx: init_dedup_index_ctx().await,
+            // #[cfg(not(feature = "local-bin"))]
+            // dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
-            #[cfg(not(feature = "local-bin"))]
-            canisters_ctx: init_canisters_ctx().await,
+            // #[cfg(not(feature = "local-bin"))]
+            // canisters_ctx: init_canisters_ctx().await,
         }
     }
 

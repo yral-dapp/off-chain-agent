@@ -449,7 +449,7 @@ async fn video_deduplication_handler(
 
     if let Err(e) = duplication_handler
         .process_video_deduplication(
-            &state.dedup_index_ctx,
+            // &state.dedup_index_ctx,
             &state.bigquery_client,
             &req.video_id,
             &req.video_url,
