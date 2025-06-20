@@ -55,7 +55,7 @@ pub async fn dispatch_notif(
     match event {
         EventPayload::VideoUploadSuccessful(payload) => {
             app_state
-                .notification_store_ctx
+                .backend_ctx
                 .add_notification(
                     payload.publisher_user_id,
                     NotificationType::VideoUpload(VideoUploadPayload {
@@ -66,7 +66,7 @@ pub async fn dispatch_notif(
         }
         EventPayload::LikeVideo(payload) => {
             app_state
-                .notification_store_ctx
+                .backend_ctx
                 .add_notification(
                     payload.publisher_user_id,
                     NotificationType::Liked(LikedPayload {

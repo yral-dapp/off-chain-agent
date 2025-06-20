@@ -51,7 +51,7 @@ pub struct AppState {
     #[cfg(not(feature = "local-bin"))]
     pub dedup_index_ctx: async_dedup_index::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
-    pub notification_store_ctx: async_backend::WrappedContext,
+    pub backend_ctx: async_backend::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
     #[cfg(not(feature = "local-bin"))]
@@ -84,11 +84,14 @@ impl AppState {
             #[cfg(not(feature = "local-bin"))]
             dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
-            notification_store_ctx: init_backend_ctx().await,
+            backend_ctx: init_backend_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
             #[cfg(not(feature = "local-bin"))]
-            notification_client: NotificationClient::new("ADD_API_KEY_HERE".to_string()),
+            notification_client: NotificationClient::new(
+                env::var("YRAL_METADATA_NOTIFICATION_API_KEY")
+                    .expect("YRAL_METADATA_NOTIFICATION_API_KEY is required"),
+            ),
             canisters_ctx: init_canisters_ctx().await,
         }
     }

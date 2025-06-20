@@ -11,7 +11,7 @@ use yral_metrics::metrics::{
     video_duration_watched::VideoDurationWatched, video_watched::VideoWatched,
 };
 
-use crate::{app_state::AppState};
+use crate::app_state::AppState;
 
 #[derive(Serialize, Clone, Debug, ToSchema)]
 #[serde(tag = "event")]
