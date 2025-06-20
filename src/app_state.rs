@@ -48,8 +48,8 @@ pub struct AppState {
     // pub dedup_index_ctx: async_dedup_index::WrappedContext,
     #[cfg(not(feature = "local-bin"))]
     pub canister_backup_redis_pool: RedisPool,
-    #[cfg(not(feature = "local-bin"))]
-    pub canisters_ctx: WrappedContextCanisters,
+    // #[cfg(not(feature = "local-bin"))]
+    // pub canisters_ctx: WrappedContextCanisters,
 }
 
 impl AppState {
@@ -78,8 +78,8 @@ impl AppState {
             // dedup_index_ctx: init_dedup_index_ctx().await,
             #[cfg(not(feature = "local-bin"))]
             canister_backup_redis_pool: init_canister_backup_redis_pool().await,
-            #[cfg(not(feature = "local-bin"))]
-            canisters_ctx: init_canisters_ctx().await,
+            // #[cfg(not(feature = "local-bin"))]
+            // canisters_ctx: init_canisters_ctx().await,
         }
     }
 
