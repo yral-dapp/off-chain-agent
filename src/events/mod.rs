@@ -30,6 +30,7 @@ pub mod warehouse_events {
 
 pub mod event;
 pub mod nsfw;
+pub mod push_notifications;
 pub mod queries;
 pub mod types;
 pub mod verify;
