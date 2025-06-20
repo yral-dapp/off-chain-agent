@@ -75,7 +75,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alloydb-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#4cd32b237352fef9538193ef44f42dfe928c9f79"
 dependencies = [
  "google-cloud-alloydb-v1",
 ]
@@ -2838,7 +2838,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.8",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -4557,7 +4557,7 @@ dependencies = [
 [[package]]
 name = "ml-feed-cache"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#4cd32b237352fef9538193ef44f42dfe928c9f79"
 dependencies = [
  "anyhow",
  "bb8",
@@ -4768,7 +4768,7 @@ dependencies = [
  "alloydb-client",
  "anyhow",
  "async-channel",
- "axum 0.8.1",
+ "axum 0.8.4",
  "base64 0.22.1",
  "bb8",
  "bb8-redis",
@@ -8749,7 +8749,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#4cd32b237352fef9538193ef44f42dfe928c9f79"
 dependencies = [
  "anyhow",
  "candid",
@@ -8807,20 +8807,6 @@ dependencies = [
 [[package]]
 name = "yral-metadata-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-metadata?branch=master#4bf278ddcbf0aa08629b220bf160a511b3c6fb5a"
-dependencies = [
- "candid",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "utoipa",
- "utoipa-swagger-ui",
- "yral-identity",
-]
-
-[[package]]
-name = "yral-metadata-types"
-version = "0.1.0"
 source = "git+https://github.com/yral-dapp/yral-metadata.git#4bf278ddcbf0aa08629b220bf160a511b3c6fb5a"
 dependencies = [
  "candid",
@@ -8835,7 +8821,7 @@ dependencies = [
 [[package]]
 name = "yral-metrics"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#4cd32b237352fef9538193ef44f42dfe928c9f79"
 dependencies = [
  "candid",
  "log",
@@ -8850,7 +8836,7 @@ dependencies = [
 [[package]]
 name = "yral-qstash-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#4cd32b237352fef9538193ef44f42dfe928c9f79"
 dependencies = [
  "candid",
  "serde",
@@ -8860,7 +8846,7 @@ dependencies = [
 [[package]]
 name = "yral-spacetime-bindings"
 version = "0.1.0"
-source = "git+https://github.com/dolr-ai/yral-spacetime?rev=807a4affbab33516f4cfdc01e1c3ab4aa2698aa8#807a4affbab33516f4cfdc01e1c3ab4aa2698aa8"
+source = "git+https://github.com/dolr-ai/yral-spacetime?branch=main#28d4b3352b56feae04e18f52a2fd75c0e941f5f2"
 dependencies = [
  "spacetimedb-sdk",
 ]
@@ -8868,7 +8854,7 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/yral-dapp/yral-common?branch=master#5951e1ece2cf43599bf92b82e4893b709ae9b50c"
+source = "git+https://github.com/yral-dapp/yral-common?branch=master#4cd32b237352fef9538193ef44f42dfe928c9f79"
 dependencies = [
  "ic-agent",
  "k256",

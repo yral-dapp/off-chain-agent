@@ -33,6 +33,7 @@ pub mod nsfw;
 pub mod queries;
 pub mod types;
 pub mod verify;
+pub mod push_notifications;
 
 pub struct WarehouseEventsService {
     pub shared_state: Arc<AppState>,
