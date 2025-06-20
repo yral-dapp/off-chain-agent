@@ -24,7 +24,7 @@ impl WrappedContext {
     pub fn new() -> anyhow::Result<Self> {
         let conn = DbConnection::builder()
             .with_uri(STDB_URL)
-            .with_module_name("idk-man")
+            .with_module_name("yral-backend")
             .with_token(Some(STDB_ACCESS_TOKEN.as_str()))
             .build()
             .context("Couldn't connect to the db")?;
