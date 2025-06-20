@@ -11,7 +11,9 @@ use candid::Principal;
 use ic_agent::{identity::DelegatedIdentity, Identity};
 use serde::{Deserialize, Serialize};
 
-use crate::app_state::AppState;
+use crate::{
+    app_state::AppState, utils::delegated_identity::get_user_info_from_delegated_identity_wire,
+};
 
 use super::PostRequest;
 
@@ -43,27 +45,14 @@ where
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
 
-    // Convert delegated identity wire to actual identity
-    let identity: DelegatedIdentity =
-        match DelegatedIdentity::try_from(post_request.delegated_identity_wire.clone()) {
-            Ok(identity) => identity,
-            Err(_) => return Err(StatusCode::UNAUTHORIZED),
-        };
-
-    // Get the user principal from the identity
-    let user_principal = match identity.sender() {
-        Ok(principal) => principal,
-        Err(_) => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    // Get the user's canister ID from metadata
-    let user_canister = match state
-        .get_individual_canister_by_user_principal(user_principal)
-        .await
-    {
-        Ok(canister_id) => canister_id,
-        Err(_) => return Err(StatusCode::UNAUTHORIZED),
-    };
+    let user_info = get_user_info_from_delegated_identity_wire(
+        &state,
+        post_request.delegated_identity_wire.clone(),
+    )
+    .await
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let user_principal = user_info.user_principal;
+    let user_canister = user_info.user_canister;
 
     // Create a verified request with all the necessary context
     let verified_request = VerifiedPostRequest {

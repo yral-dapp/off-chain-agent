@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use super::types::VideoDeleteRow;
+use super::types::{UserPost, VideoDeleteRow};
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use chrono::Utc;
 use google_cloud_bigquery::{
     client::Client,
     http::{
         job::query::QueryRequest,
-        query::value::StructDecodable,
         tabledata::insert_all::{InsertAllRequest, Row},
     },
     query::row::Row as QueryRow,
@@ -15,11 +14,13 @@ use google_cloud_bigquery::{
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use types::PostRequest;
-use utils::get_agent_from_delegated_identity_wire;
 use verify::VerifiedPostRequest;
 use yral_canisters_client::individual_user_template::{IndividualUserTemplate, Result_};
 
-use crate::{app_state::AppState, posts::queries::get_duplicate_children_query};
+use crate::{
+    app_state::AppState, posts::queries::get_duplicate_children_query,
+    user::utils::get_agent_from_delegated_identity_wire,
+};
 
 use super::{types, utils, verify, DeletePostRequest};
 
@@ -234,40 +235,63 @@ pub async fn insert_video_delete_row_to_bigquery(
     post_id: u64,
     video_id: String,
 ) -> Result<(), anyhow::Error> {
-    let video_delete_row = VideoDeleteRow {
-        canister_id,
-        post_id,
-        video_id: video_id.clone(),
-        gcs_video_id: format!("gs://yral-videos/{}.mp4", video_id),
-    };
+    bulk_insert_video_delete_rows(
+        &state.bigquery_client,
+        vec![UserPost {
+            canister_id,
+            post_id,
+            video_id,
+        }],
+    )
+    .await?;
 
-    let bigquery_client = state.bigquery_client.clone();
-    let row = Row {
-        insert_id: None,
-        json: video_delete_row,
-    };
+    Ok(())
+}
 
-    let request = InsertAllRequest {
-        rows: vec![row],
-        ..Default::default()
-    };
+pub async fn bulk_insert_video_delete_rows(
+    bq_client: &Client,
+    posts: Vec<UserPost>,
+) -> Result<(), anyhow::Error> {
+    // Process posts in batches of 500
+    for chunk in posts.chunks(500) {
+        let rows: Vec<Row<VideoDeleteRow>> = chunk
+            .iter()
+            .map(|post| {
+                let video_delete_row = VideoDeleteRow {
+                    canister_id: post.canister_id.clone(),
+                    post_id: post.post_id,
+                    video_id: post.video_id.clone(),
+                    gcs_video_id: format!("gs://yral-videos/{}.mp4", post.video_id),
+                };
+                Row::<VideoDeleteRow> {
+                    insert_id: None,
+                    json: video_delete_row,
+                }
+            })
+            .collect();
 
-    let res = bigquery_client
-        .tabledata()
-        .insert(
-            "hot-or-not-feed-intelligence",
-            "yral_ds",
-            "video_deleted",
-            &request,
-        )
-        .await?;
+        let request = InsertAllRequest {
+            rows,
+            ..Default::default()
+        };
 
-    if let Some(errors) = res.insert_errors {
-        if errors.len() > 0 {
-            log::error!("video_deleted insert response : {:?}", errors);
-            return Err(anyhow::anyhow!(
-                "Failed to insert video deleted row to bigquery"
-            ));
+        let res = bq_client
+            .tabledata()
+            .insert(
+                "hot-or-not-feed-intelligence",
+                "yral_ds",
+                "video_deleted",
+                &request,
+            )
+            .await?;
+
+        if let Some(errors) = res.insert_errors {
+            if !errors.is_empty() {
+                log::error!("video_deleted bulk insert errors: {:?}", errors);
+                return Err(anyhow::anyhow!(
+                    "Failed to bulk insert video deleted rows to bigquery"
+                ));
+            }
         }
     }
 

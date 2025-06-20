@@ -4,6 +4,7 @@ use reqwest::Url;
 pub const STDB_URL: &str = "https://maincloud.spacetimedb.com";
 
 pub const DEDUP_INDEX_MODULE_IDENTITY: &str = "tushar-dedup-index";
+pub const DELETED_CANISTERS_MODULE_IDENTITY: &str = "yral-canisters";
 
 pub static STDB_ACCESS_TOKEN: Lazy<String> = Lazy::new(|| {
     std::env::var("DEDUP_INDEX_ACCESS_TOKEN").expect("DEDUP_INDEX_ACCESS_TOKEN to be set")
@@ -19,7 +20,7 @@ pub static BIGQUERY_INGESTION_URL: Lazy<Url> = Lazy::new(|| {
 pub const PLATFORM_ORCHESTRATOR_ID: &str = "74zq4-iqaaa-aaaam-ab53a-cai";
 
 pub static YRAL_METADATA_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://yral-metadata.fly.dev").unwrap());
+    Lazy::new(|| Url::parse("https://yral-metadata.fly.dev/").unwrap());
 
 pub const RECYCLE_THRESHOLD_SECS: u64 = 15 * 24 * 60 * 60; // 15 days
 
@@ -37,9 +38,6 @@ pub static OFF_CHAIN_AGENT_URL: Lazy<Url> = Lazy::new(|| {
 });
 
 pub const NSFW_SERVER_URL: &str = "https://prod-yral-nsfw-classification.fly.dev:443";
-
-pub const CLOUDFLARE_ML_FEED_CACHE_WORKER_URL: &str =
-    "https://yral-ml-feed-cache.go-bazzinga.workers.dev";
 
 pub const ML_FEED_SERVER_GRPC_URL: &str = "https://yral-ml-feed-server.fly.dev:443";
 
