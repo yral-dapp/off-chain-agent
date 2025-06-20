@@ -88,3 +88,14 @@ impl AnalyticsEvent {
         delegate_metric_method!(self, params, to_value)
     }
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct VideoDurationWatchedParams {
+    pub percentage_watched: f64,
+    #[serde(default)]
+    pub nsfw_probability: f64,
+    pub canister_id: Principal,
+    pub publisher_canister_id: Principal,
+    pub post_id: u64,
+    pub video_id: String,
+}
